@@ -25,11 +25,11 @@ private fun config(
         this.accessTokenFlow = accessTokenFlow
         this.refreshTokenFlow = refreshTokenFlow
     }
-    // Ensure @Body requests have Content-Type set after serialization
+    // Set Content-Type header for all requests with body.
+    // Ktor only sends this header when there is actually a body,
+    // so GET requests are not affected.
     install(DefaultRequest) {
-        if (contentLength() != 0L) {
-            header(HttpHeaders.ContentType, ContentType.Application.Json)
-        }
+        header(HttpHeaders.ContentType, ContentType.Application.Json)
     }
 }
 
