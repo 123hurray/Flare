@@ -27,17 +27,17 @@ import org.koin.core.component.inject
  */
 @Immutable
 public interface JikeLoginState {
-    val loading: Boolean
-    val error: String?
-    val smsSent: Boolean
-    val requireSmsCode: Boolean
+    public val loading: Boolean
+    public val error: String?
+    public val smsSent: Boolean
+    public val requireSmsCode: Boolean
 
-    fun sendSmsCode(phoneNumber: String)
-    fun loginWithSmsCode(
+    public fun sendSmsCode(phoneNumber: String)
+    public fun loginWithSmsCode(
         phoneNumber: String,
         smsCode: String,
     )
-    fun clear()
+    public fun clear()
 }
 
 /**
