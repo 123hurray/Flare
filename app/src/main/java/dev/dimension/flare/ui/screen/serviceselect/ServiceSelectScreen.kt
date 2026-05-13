@@ -19,6 +19,7 @@ import dev.dimension.flare.ui.screen.login.ServiceSelectionScreenContent
 internal fun ServiceSelectScreen(
     onXQT: () -> Unit,
     onVVO: () -> Unit,
+    onJike: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -42,6 +43,7 @@ internal fun ServiceSelectScreen(
         ServiceSelectionScreenContent(
             onXQT = onXQT,
             onVVO = onVVO,
+            onJike = onJike,
             contentPadding = contentPadding,
             openUri = uriHandler::openUri,
             registerDeeplinkCallback = { callback ->
