@@ -2,52 +2,65 @@ package dev.dimension.flare.data.network.jike
 
 import dev.dimension.flare.model.jikeApiHost
 import dev.dimension.flare.model.jikeWebHost
-import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpClientPlugin
+import io.ktor.client.plugins.HttpSend
+import io.ktor.client.plugins.plugin
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.util.AttributeKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 
 /**
  * Configuration for Jike authentication plugin.
  */
-internal class JikeAuthConfig {
-    var accessTokenFlow: Flow<String>? = null
-    var refreshTokenFlow: Flow<String>? = null
-}
+internal class JikeAuthPlugin(
+    private val accessTokenFlow: Flow<String>?,
+    private val refreshTokenFlow: Flow<String>?,
+) {
+    internal class Config {
+        var accessTokenFlow: Flow<String>? = null
+        var refreshTokenFlow: Flow<String>? = null
+    }
 
-/**
- * Ktor client plugin for Jike API authentication.
- *
- * Jike API requires custom headers:
- * - x-access-token: Access token for API authentication
- * - x-refresh-token: Refresh token for session renewal
- *
- * Plus device/environment headers for API compatibility.
- */
-internal val JikeAuthPlugin =
-    createClientPlugin("JikeAuthPlugin", ::JikeAuthConfig) {
-        val accessTokenFlow = pluginConfig.accessTokenFlow
-        val refreshTokenFlow = pluginConfig.refreshTokenFlow
+    companion object : HttpClientPlugin<Config, JikeAuthPlugin> {
+        override val key = AttributeKey<JikeAuthPlugin>("JikeAuthPlugin")
 
-        onRequest { request, _ ->
-            accessTokenFlow?.let { flow ->
-                val token = flow.firstOrNull()
-                if (token != null) {
-                    request.headers.append("x-access-token", token)
-                }
+        override fun prepare(block: Config.() -> Unit): JikeAuthPlugin {
+            val config = Config().apply(block)
+            return JikeAuthPlugin(
+                accessTokenFlow = config.accessTokenFlow,
+                refreshTokenFlow = config.refreshTokenFlow,
+            )
+        }
+
+        override fun install(plugin: JikeAuthPlugin, scope: HttpClient) {
+            scope.plugin(HttpSend.Plugin).intercept { request ->
+                plugin.addHeaders(request)
+                execute(request)
             }
-            refreshTokenFlow?.let { flow ->
-                val token = flow.firstOrNull()
-                if (token != null) {
-                    request.headers.append("x-refresh-token", token)
-                }
-            }
-            // Required device headers (from open-jike/jike-sdk)
-            request.headers.appendIfNotPresent("manufacturer", "Apple")
-            request.headers.appendIfNotPresent("os", "ios")
-            request.headers.appendIfNotPresent("os-version", "Version 14.7 (Build 18G5033e)")
-            request.headers.appendIfNotPresent("Referer", "https://$jikeWebHost/")
         }
     }
+
+    private suspend fun addHeaders(request: HttpRequestBuilder) {
+        accessTokenFlow?.let { flow ->
+            val token = flow.firstOrNull()
+            if (token != null) {
+                request.headers.append("x-access-token", token)
+            }
+        }
+        refreshTokenFlow?.let { flow ->
+            val token = flow.firstOrNull()
+            if (token != null) {
+                request.headers.append("x-refresh-token", token)
+            }
+        }
+        request.headers.appendIfNotPresent("manufacturer", "Apple")
+        request.headers.appendIfNotPresent("os", "ios")
+        request.headers.appendIfNotPresent("os-version", "Version 14.7 (Build 18G5033e)")
+        request.headers.appendIfNotPresent("Referer", "https://$jikeWebHost/")
+    }
+}
 
 private fun io.ktor.http.HeadersBuilder.appendIfNotPresent(
     name: String,
