@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.dimension.flare.ui.component.FlareScaffold
 import dev.dimension.flare.ui.presenter.invoke
@@ -33,12 +32,41 @@ internal fun JikeLoginScreen(toHome: () -> Unit) {
     val state by producePresenter { presenter(toHome) }
 
     FlareScaffold {
-        JikeLoginWebView(
-            modifier = Modifier.padding(it),
-            onTokensFound = { accessToken, refreshToken ->
-                state.onTokensReceived(accessToken, refreshToken)
-            },
-        )
+        if (state.loading) {
+            // Show loading spinner after tokens are found, hide WebView
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(it),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        } else if (state.error != null) {
+            // Show error message
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(it),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = state.error!!,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+        } else {
+            // Show WebView for login
+            JikeLoginWebView(
+                modifier = Modifier.padding(it),
+                onTokensFound = { accessToken, refreshToken ->
+                    state.onTokensReceived(accessToken, refreshToken)
+                },
+            )
+        }
     }
 }
 
@@ -47,7 +75,6 @@ private fun JikeLoginWebView(
     modifier: Modifier,
     onTokensFound: (String, String) -> Unit,
 ) {
-    val context = LocalContext.current
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
     // Poll localStorage for Jike tokens via JS eval

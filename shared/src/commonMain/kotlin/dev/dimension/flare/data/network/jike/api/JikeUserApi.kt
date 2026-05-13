@@ -21,9 +21,9 @@ internal interface JikeUserApi {
 
     /**
      * Get current user's profile.
-     * GET /1.0/users/self
+     * GET /1.0/users/profile (no username = current user)
      */
-    @GET("1.0/users/self")
+    @GET("1.0/users/profile")
     suspend fun getSelfProfile(): JikeResponse<JikeUser>
 
     /**

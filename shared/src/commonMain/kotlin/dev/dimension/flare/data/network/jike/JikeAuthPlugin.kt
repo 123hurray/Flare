@@ -46,13 +46,13 @@ internal class JikeAuthPlugin(
         accessTokenFlow?.let { flow ->
             val token = flow.firstOrNull()
             if (token != null) {
-                request.headers.append("x-access-token", token)
+                request.headers.append("x-jike-access-token", token)
             }
         }
         refreshTokenFlow?.let { flow ->
             val token = flow.firstOrNull()
             if (token != null) {
-                request.headers.append("x-refresh-token", token)
+                request.headers.append("x-jike-refresh-token", token)
             }
         }
         request.headers.appendIfNotPresent("manufacturer", "Apple")

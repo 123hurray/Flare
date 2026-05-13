@@ -70,9 +70,13 @@ internal data class LoginResponse(
 
 /**
  * Response body for token refresh.
+ * Tokens are returned in BOTH response headers and body.
+ * Body keys: x-jike-access-token, x-jike-refresh-token
  */
 @kotlinx.serialization.Serializable
 internal data class RefreshResponse(
-    @kotlinx.serialization.SerialName("accessToken")
+    @kotlinx.serialization.SerialName("x-jike-access-token")
     val accessToken: String? = null,
+    @kotlinx.serialization.SerialName("x-jike-refresh-token")
+    val refreshToken: String? = null,
 )
