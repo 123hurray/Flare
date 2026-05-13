@@ -50,7 +50,7 @@ public interface JikeLoginState {
  * 4. Call loginWithSmsCode() to authenticate
  * 5. On success, account is saved and toHome is called
  */
-internal class JikeLoginPresenter(
+public class JikeLoginPresenter(
     private val toHome: () -> Unit,
 ) : PresenterBase<JikeLoginState>(),
     KoinComponent {
