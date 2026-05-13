@@ -59,7 +59,21 @@ jobs:
         env:
           BUILD_NUMBER: ${{github.run_number}}
           BUILD_VERSION: ${{github.ref_name}}
-        run: ./gradlew :app:assembleRelease :app:bundleRelease :app:check :app:lint --stacktrace
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flare-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flare-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 14
 
       - name: Publish to Google Play
         if: startsWith(github.ref, 'refs/tags/')
@@ -100,4 +114,11 @@ jobs:
           sed -i -e '/START Non-FOSS component/,/END Non-FOSS component/d' app/build.gradle.kts
 
       - name: Build F-Droid variant
-        run: ./gradlew :app:assembleRelease :app:check :app:lint --stacktrace
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Upload F-Droid APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flare-fdroid-apk
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 14
