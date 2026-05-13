@@ -16,6 +16,9 @@ internal fun EntryProviderScope<NavKey>.serviceSelectEntryBuilder(
             onVVO = {
                 navigate(Route.ServiceSelect.VVOLogin)
             },
+            onJike = {
+                navigate(Route.ServiceSelect.JikeLogin)
+            },
             onBack = onBack,
         )
     }
@@ -30,6 +33,14 @@ internal fun EntryProviderScope<NavKey>.serviceSelectEntryBuilder(
 
     entry<Route.ServiceSelect.VVOLogin> {
         VVOLoginScreen(
+            toHome = {
+                onBack()
+            }
+        )
+    }
+
+    entry<Route.ServiceSelect.JikeLogin> {
+        JikeLoginScreen(
             toHome = {
                 onBack()
             }

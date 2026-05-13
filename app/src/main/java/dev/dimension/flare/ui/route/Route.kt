@@ -213,6 +213,9 @@ internal sealed interface Route : NavKey {
 
         @Serializable
         data object XQTLogin : ServiceSelect
+
+        @Serializable
+        data object JikeLogin : ServiceSelect
     }
 
     @Serializable
