@@ -8,10 +8,6 @@ import dev.dimension.flare.data.network.jike.api.createJikePostApi
 import dev.dimension.flare.data.network.jike.api.createJikeUserApi
 import dev.dimension.flare.model.jikeApiHost
 import dev.dimension.flare.data.network.ktorfit
-import io.ktor.client.plugins.DefaultRequest
-import io.ktor.client.request.header
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.flow.Flow
 
 private val baseUrl = "https://$jikeApiHost/"
@@ -24,12 +20,6 @@ private fun config(
     install(JikeAuthPlugin) {
         this.accessTokenFlow = accessTokenFlow
         this.refreshTokenFlow = refreshTokenFlow
-    }
-    // Set Content-Type header for all requests with body.
-    // Ktor only sends this header when there is actually a body,
-    // so GET requests are not affected.
-    install(DefaultRequest) {
-        header(HttpHeaders.ContentType, ContentType.Application.Json)
     }
 }
 

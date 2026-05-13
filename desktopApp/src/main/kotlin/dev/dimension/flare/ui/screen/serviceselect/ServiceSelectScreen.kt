@@ -11,6 +11,7 @@ import dev.dimension.flare.ui.presenter.login.JikeLoginPresenter
 import dev.dimension.flare.ui.presenter.login.VVOLoginPresenter
 import dev.dimension.flare.ui.presenter.login.XQTLoginPresenter
 import dev.dimension.flare.ui.screen.login.ServiceSelectionScreenContent
+import dev.dimension.flare.model.jikeWebHost
 import moe.tlaster.precompose.molecule.producePresenter
 
 @Composable
@@ -19,7 +20,6 @@ internal fun ServiceSelectScreen(
     onWebViewLogin: (url: String, cookieCallback: (cookies: String?) -> Boolean) -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
-//    val webviewBridge = koinInject<WebViewBridge>()
     val xqtLoginState by producePresenter("xqt_login_state") {
         remember {
             XQTLoginPresenter(toHome = onBack)
@@ -70,8 +70,10 @@ internal fun ServiceSelectScreen(
             )
         },
         onJike = {
-            // TODO: Jike login for desktop (SMS-based login)
-            println("Jike login not yet implemented for desktop")
+            // Jike uses localStorage (JK_ACCESS_TOKEN, JK_REFRESH_TOKEN)
+            // Desktop WebView doesn't support JS evaluation yet
+            // For now, show a placeholder
+            println("Jike desktop login requires JS evaluation support in WebView")
         },
         openUri = uriHandler::openUri,
         registerDeeplinkCallback = { callback ->
