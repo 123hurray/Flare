@@ -8,6 +8,7 @@ import dev.dimension.flare.LocalWindowPadding
 import dev.dimension.flare.common.OnDeepLink
 import dev.dimension.flare.ui.model.UiApplication
 import dev.dimension.flare.ui.presenter.login.VVOLoginPresenter
+import dev.dimension.flare.ui.presenter.login.JikeLoginPresenter
 import dev.dimension.flare.ui.presenter.login.XQTLoginPresenter
 import dev.dimension.flare.ui.screen.login.ServiceSelectionScreenContent
 import moe.tlaster.precompose.molecule.producePresenter
@@ -22,6 +23,11 @@ internal fun ServiceSelectScreen(
     val xqtLoginState by producePresenter("xqt_login_state") {
         remember {
             XQTLoginPresenter(toHome = onBack)
+        }.body()
+    }
+    val jikeLoginState by producePresenter("jike_login_state") {
+        remember {
+            JikeLoginPresenter(toHome = onBack)
         }.body()
     }
     val vvoLoginState by producePresenter("vvo_login_state") {
@@ -62,6 +68,10 @@ internal fun ServiceSelectScreen(
                     }
                 },
             )
+        },
+        onJike = {
+            // TODO: Jike login for desktop (SMS-based login)
+            println("Jike login not yet implemented for desktop")
         },
         openUri = uriHandler::openUri,
         registerDeeplinkCallback = { callback ->
