@@ -8,6 +8,10 @@ import dev.dimension.flare.data.network.jike.api.createJikePostApi
 import dev.dimension.flare.data.network.jike.api.createJikeUserApi
 import dev.dimension.flare.model.jikeApiHost
 import dev.dimension.flare.data.network.ktorfit
+import io.ktor.client.plugins.DefaultRequest
+import io.ktor.client.request.header
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.flow.Flow
 
 private val baseUrl = "https://$jikeApiHost/"
@@ -20,6 +24,12 @@ private fun config(
     install(JikeAuthPlugin) {
         this.accessTokenFlow = accessTokenFlow
         this.refreshTokenFlow = refreshTokenFlow
+    }
+    // Ensure @Body requests have Content-Type set after serialization
+    install(DefaultRequest) {
+        if (contentLength() != 0L) {
+            header(HttpHeaders.ContentType, ContentType.Application.Json)
+        }
     }
 }
 
