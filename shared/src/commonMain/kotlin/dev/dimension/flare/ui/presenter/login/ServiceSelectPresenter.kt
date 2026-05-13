@@ -155,7 +155,7 @@ public interface ServiceSelectState : NodeInfoState {
     public val blueskyOauthLoginState: BlueskyOAuthLoginPresenter.State
     public val mastodonLoginState: MastodonLoginState
     public val misskeyLoginState: MisskeyLoginState
-    internal val jikeLoginState: JikeLoginState
+    public val jikeLoginState: JikeLoginState
     public val loading: Boolean
 }
 

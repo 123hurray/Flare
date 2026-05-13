@@ -26,7 +26,7 @@ import org.koin.core.component.inject
  * Supports SMS code login.
  */
 @Immutable
-internal interface JikeLoginState {
+public interface JikeLoginState {
     val loading: Boolean
     val error: String?
     val smsSent: Boolean
