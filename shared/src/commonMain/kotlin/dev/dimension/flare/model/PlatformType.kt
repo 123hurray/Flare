@@ -17,6 +17,7 @@ public enum class PlatformType {
 
     VVo,
     Nostr,
+    Jike,
 }
 
 @Immutable
@@ -63,3 +64,11 @@ public val vvoHostLong: String =
         append(Base64.decode("d2Vp").decodeToString())
         append(Base64.decode("Ym8uY29t").decodeToString())
     }
+
+public const val jikeApiHost: String = "api.ruguoapp.com"
+public const val jikeWebHost: String = "web.okjike.com"
+
+/**
+ * Jike API endpoint identifier (from open-jike/jike-sdk)
+ */
+public const val jikeEndpointId: String = "4653BFCE-9D54-471C-809C-422AC240DA7B"

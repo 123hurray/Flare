@@ -16,6 +16,7 @@ import platform.UIKit.UIViewController
 public data class ServiceSelectControllerState(
     val onXQT: () -> Unit,
     val onVVO: () -> Unit,
+    val onJike: () -> Unit,
     val onBack: (() -> Unit),
     val openUri: (url: String, callback: (String) -> Unit) -> Unit,
 )
@@ -32,6 +33,7 @@ public fun ServiceSelectController(state: ComposeUIStateProxy<ServiceSelectContr
             contentPadding = WindowInsets.safeDrawing.asPaddingValues(),
             onXQT = state.onXQT,
             onVVO = state.onVVO,
+            onJike = state.onJike,
             openUri = {
                 state.openUri.invoke(
                     it,

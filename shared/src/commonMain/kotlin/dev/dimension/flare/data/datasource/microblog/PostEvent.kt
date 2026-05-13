@@ -429,6 +429,17 @@ internal sealed interface PostEvent {
             val accountKey: MicroBlogKey,
         ) : Nostr
     }
+
+    @Serializable
+    sealed interface Jike : PostEvent {
+        @Serializable
+        data class Like(
+            override val postKey: MicroBlogKey,
+            val liked: Boolean,
+            val count: Long = 0,
+            val accountKey: MicroBlogKey,
+        ) : Jike
+    }
 }
 
 internal interface UpdatePostActionMenuEvent : PostEvent {

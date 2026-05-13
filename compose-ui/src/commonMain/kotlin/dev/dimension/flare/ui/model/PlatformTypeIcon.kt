@@ -20,4 +20,5 @@ public val PlatformType.brandIcon: ImageVector
             PlatformType.Bluesky -> FontAwesomeIcons.Brands.Bluesky
             PlatformType.xQt -> FontAwesomeIcons.Brands.XTwitter
             PlatformType.VVo -> FontAwesomeIcons.Brands.Weibo
+            PlatformType.Jike -> FontAwesomeIcons.Brands.XTwitter // TODO: Add Jike icon
         }

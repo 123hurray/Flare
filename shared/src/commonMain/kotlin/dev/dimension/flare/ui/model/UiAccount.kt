@@ -10,6 +10,7 @@ import dev.dimension.flare.data.datasource.misskey.MisskeyDataSource
 import dev.dimension.flare.data.datasource.nostr.NostrDataSource
 import dev.dimension.flare.data.datasource.pleroma.PleromaDataSource
 import dev.dimension.flare.data.datasource.vvo.VVODataSource
+import dev.dimension.flare.data.datasource.jike.JikeDataSource
 import dev.dimension.flare.data.datasource.xqt.XQTDataSource
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
@@ -221,6 +222,22 @@ public sealed class UiAccount {
         ) : UiAccount.Credential
     }
 
+    @Immutable
+    internal data class Jike(
+        override val accountKey: MicroBlogKey,
+    ) : UiAccount() {
+        override val platformType: PlatformType
+            get() = PlatformType.Jike
+
+        @Immutable
+        @Serializable
+        @SerialName("JikeCredential")
+        data class Credential(
+            val accessToken: String,
+            val refreshToken: String,
+        ) : UiAccount.Credential
+    }
+
     internal companion object {
         fun UiAccount.createDataSource(): MicroblogDataSource =
             when (this) {
@@ -272,6 +289,12 @@ public sealed class UiAccount {
                         accountKey = accountKey,
                     )
                 }
+
+                is Jike -> {
+                    JikeDataSource(
+                        accountKey = accountKey,
+                    )
+                }
             }
 
         fun DbAccount.toUi(): UiAccount =
@@ -315,6 +338,12 @@ public sealed class UiAccount {
 
                 PlatformType.VVo -> {
                     VVo(
+                        accountKey = account_key,
+                    )
+                }
+
+                PlatformType.Jike -> {
+                    Jike(
                         accountKey = account_key,
                     )
                 }

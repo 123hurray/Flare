@@ -122,3 +122,4 @@ jobs:
           name: flare-fdroid-apk
           path: app/build/outputs/apk/release/*.apk
           retention-days: 14
+

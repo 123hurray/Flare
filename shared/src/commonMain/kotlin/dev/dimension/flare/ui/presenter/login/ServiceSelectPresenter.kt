@@ -28,13 +28,15 @@ public class ServiceSelectPresenter(
         val blueskyOauthLoginState = remember { BlueskyOAuthLoginPresenter(toHome) }.body()
         val mastodonLoginState = mastodonLoginPresenter(toHome)
         val misskeyLoginState = misskeyLoginPresenter(toHome)
+        val jikeLoginState = remember { JikeLoginPresenter(toHome) }.body()
         val loading =
             nostrLoginState.loading ||
                 blueskyLoginState.loading ||
                 mastodonLoginState.loading ||
                 mastodonLoginState.resumedState is UiState.Loading ||
                 misskeyLoginState.loading ||
-                misskeyLoginState.resumedState is UiState.Loading
+                misskeyLoginState.resumedState is UiState.Loading ||
+                jikeLoginState.loading
 
         return object : ServiceSelectState, NodeInfoState by nodeInfoState {
             override val nostrLoginState = nostrLoginState
@@ -42,6 +44,7 @@ public class ServiceSelectPresenter(
             override val blueskyOauthLoginState = blueskyOauthLoginState
             override val mastodonLoginState = mastodonLoginState
             override val misskeyLoginState = misskeyLoginState
+            override val jikeLoginState = jikeLoginState
             override val loading = loading
         }
     }
@@ -152,6 +155,7 @@ public interface ServiceSelectState : NodeInfoState {
     public val blueskyOauthLoginState: BlueskyOAuthLoginPresenter.State
     public val mastodonLoginState: MastodonLoginState
     public val misskeyLoginState: MisskeyLoginState
+    public val jikeLoginState: JikeLoginState
     public val loading: Boolean
 }
 
