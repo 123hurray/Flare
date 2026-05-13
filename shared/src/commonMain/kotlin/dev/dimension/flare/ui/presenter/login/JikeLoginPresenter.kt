@@ -72,15 +72,12 @@ public class JikeLoginPresenter(
                             accessTokenFlow = flowOf(accessToken),
                             refreshTokenFlow = flowOf(refreshToken),
                         )
-                        val profile = service.getMyProfile()
+                        val profile = service.getSelfProfile()
                         requireNotNull(profile.data) { "Profile data is null" }
 
                         val user = profile.data
                         val userId = user.id
                         require(userId.isNotEmpty()) { "User ID is empty" }
-
-                        val screenName = user.screenName.ifEmpty { user.username }
-                        val avatarUrl = user.avatarUrl
 
                         accountRepository.addAccount(
                             account =
@@ -90,8 +87,6 @@ public class JikeLoginPresenter(
                                             id = userId,
                                             host = JIKE_HOST,
                                         ),
-                                    displayName = screenName.ifEmpty { userId },
-                                    avatarUrl = avatarUrl,
                                 ),
                             credential =
                                 UiAccount.Jike.Credential(
