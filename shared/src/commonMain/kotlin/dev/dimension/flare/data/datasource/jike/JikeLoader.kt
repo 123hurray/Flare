@@ -1,101 +1,37 @@
 package dev.dimension.flare.data.datasource.jike
 
-import dev.dimension.flare.data.datasource.microblog.loader.EmojiLoader
-import dev.dimension.flare.data.datasource.microblog.loader.NotificationLoader
-import dev.dimension.flare.data.datasource.microblog.loader.PostLoader
-import dev.dimension.flare.data.datasource.microblog.loader.RelationActionType
-import dev.dimension.flare.data.datasource.microblog.loader.RelationLoader
-import dev.dimension.flare.data.datasource.microblog.loader.UserLoader
+import dev.dimension.flare.data.datasource.microblog.loader.*
 import dev.dimension.flare.data.network.jike.JikeService
-import dev.dimension.flare.data.repository.AccountRepository
-import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
-import dev.dimension.flare.ui.model.UiEmoji
-import dev.dimension.flare.ui.model.UiHandle
-import dev.dimension.flare.ui.model.UiProfile
-import dev.dimension.flare.ui.model.UiRelation
-import dev.dimension.flare.ui.model.UiTimelineV2
+import dev.dimension.flare.ui.model.*
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
-import kotlinx.collections.immutable.toImmutableList
 import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 
-/**
- * Loader for Jike API operations.
- * Implements the various loader interfaces required by Flare's architecture.
- */
 internal class JikeLoader(
     val accountKey: MicroBlogKey,
     private val service: JikeService,
-) : NotificationLoader,
-    UserLoader,
-    RelationLoader,
-    EmojiLoader,
-    PostLoader,
-    KoinComponent {
-    private val accountRepository: AccountRepository by inject()
-
+) : NotificationLoader, UserLoader, RelationLoader, EmojiLoader, PostLoader, KoinComponent {
     override val supportedTypes: Set<RelationActionType> = emptySet()
-
     override suspend fun notificationBadgeCount(): Int = 0
-
     override suspend fun userByHandleAndHost(uiHandle: UiHandle): UiProfile {
         val response = service.getUserByUsername(username = uiHandle.normalizedRaw)
-        response.data?.let { user ->
-            return UiProfile(
-                userKey = MicroBlogKey(user.id, accountKey.host),
-                displayName = user.screenName.ifEmpty { user.username },
-                handle = UiHandle(user.username, accountKey.host),
-                description = user.bio,
-                avatarUrl = user.avatarUrl,
-                followersCount = user.followersCount,
-                followingCount = user.followingCount,
-                isVerified = user.isVerified,
-            )
-        }
-        throw Exception("User not found")
+        val user = response.data ?: error("user not found")
+        val userKey = MicroBlogKey(user.id, accountKey.host)
+        return UiProfile(key = userKey, handle = UiHandle(user.username, accountKey.host), avatar = user.avatarUrl ?: "", nameInternal = UiRichText(user.screenName.ifEmpty { user.username }, persistentListOf()), platformType = PlatformType.Jike, clickEvent = ClickEvent.User(userKey), banner = null, description = user.bio?.let { UiRichText(it, persistentListOf()) }, matrices = UiProfile.Matrices(fansCount = user.followersCount.toLong(), followsCount = user.followingCount.toLong(), statusesCount = 0), mark = persistentListOf(), bottomContent = null)
     }
-
-    override suspend fun userById(id: String): UiProfile {
-        // Jike uses username-based lookup
-        return userByHandleAndHost(UiHandle(id, accountKey.host))
-    }
-
-    override suspend fun currentUser(): UiProfile {
-        val response = service.getSelfProfile()
-        response.data?.let { user ->
-            return UiProfile(
-                userKey = MicroBlogKey(user.id, accountKey.host),
-                displayName = user.screenName.ifEmpty { user.username },
-                handle = UiHandle(user.username, accountKey.host),
-                description = user.bio,
-                avatarUrl = user.avatarUrl,
-                followersCount = user.followersCount,
-                followingCount = user.followingCount,
-                isVerified = user.isVerified,
-            )
-        }
-        throw LoginExpiredException(accountKey, PlatformType.Jike)
-    }
-
-    override suspend fun relation(userKey: MicroBlogKey): UiRelation =
-        UiRelation(
-            following = false,
-            followedBy = false,
-        )
-
-    override suspend fun follow(userKey: MicroBlogKey) {
-        // TODO: Implement follow
-    }
-
-    override suspend fun unfollow(userKey: MicroBlogKey) {
-        // TODO: Implement unfollow
-    }
-
-    override suspend fun emojis(): ImmutableList<UiEmoji> = emptyList<UiEmoji>().toImmutableList()
-
-    override suspend fun customEmojis(): ImmutableMap<String, UiEmoji> = persistentMapOf()
+    override suspend fun userById(id: String): UiProfile = userByHandleAndHost(UiHandle(id, accountKey.host))
+    override suspend fun relation(userKey: MicroBlogKey): UiRelation = UiRelation(following = false)
+    override suspend fun follow(userKey: MicroBlogKey) {}
+    override suspend fun unfollow(userKey: MicroBlogKey) {}
+    override suspend fun block(userKey: MicroBlogKey) {}
+    override suspend fun unblock(userKey: MicroBlogKey) {}
+    override suspend fun mute(userKey: MicroBlogKey) {}
+    override suspend fun unmute(userKey: MicroBlogKey) {}
+    override suspend fun emojis(): ImmutableMap<String, ImmutableList<UiEmoji>> = persistentMapOf()
+    override suspend fun status(statusKey: MicroBlogKey): UiTimelineV2 = error("not implemented")
+    override suspend fun deleteStatus(statusKey: MicroBlogKey) {}
 }

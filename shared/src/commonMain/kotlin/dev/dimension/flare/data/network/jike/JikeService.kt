@@ -6,7 +6,7 @@ import dev.dimension.flare.data.network.jike.api.JikeUserApi
 import dev.dimension.flare.data.network.jike.api.createJikeAuthApi
 import dev.dimension.flare.data.network.jike.api.createJikePostApi
 import dev.dimension.flare.data.network.jike.api.createJikeUserApi
-import dev.dimension.flare.data.network.jikeApiHost
+import dev.dimension.flare.model.jikeApiHost
 import dev.dimension.flare.data.network.ktorfit
 import kotlinx.coroutines.flow.Flow
 

@@ -256,7 +256,7 @@ internal class JikeDataSource(
             media =
                 ComposeConfig.Media(
                     maxCount = 9,
-                    allowVideo = true,
+                    canSensitive = false,
                     altTextMaxLength = -1,
                     allowMediaOnly = false,
                 ),
