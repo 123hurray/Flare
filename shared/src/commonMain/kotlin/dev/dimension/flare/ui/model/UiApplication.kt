@@ -80,9 +80,9 @@ public sealed interface UiApplication {
 
                 PlatformType.VVo -> {
                     VVo
+                }
                 PlatformType.Jike -> {
                     Nostr(host = host)
-                }
                 }
             }
     }

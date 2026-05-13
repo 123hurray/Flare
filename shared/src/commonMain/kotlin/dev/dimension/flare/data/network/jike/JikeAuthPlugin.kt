@@ -1,6 +1,7 @@
 package dev.dimension.flare.data.network.jike
 
 import dev.dimension.flare.model.jikeApiHost
+import dev.dimension.flare.model.jikeWebHost
 import io.ktor.client.plugins.api.createClientPlugin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
