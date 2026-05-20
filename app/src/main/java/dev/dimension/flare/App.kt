@@ -18,18 +18,14 @@ import dev.dimension.flare.data.network.ktorClient
 import dev.dimension.flare.di.KoinHelper
 import dev.dimension.flare.di.aiModule
 import dev.dimension.flare.di.androidModule
-import org.jetbrains.compose.resources.ExperimentalResourceApi
-import org.jetbrains.compose.resources.setResourceReaderAndroidContext
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
 
 class App :
     Application(),
     SingletonImageLoader.Factory {
-    @OptIn(ExperimentalResourceApi::class)
     override fun onCreate() {
         super.onCreate()
-        setResourceReaderAndroidContext(this)
         startKoin {
             androidContext(this@App)
             modules(KoinHelper.modules() + androidModule + aiModule)
