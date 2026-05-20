@@ -32,6 +32,7 @@ import kotlin.time.Duration.Companion.seconds
 
 private const val JIKE_LOGIN_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+private const val JIKE_LOGIN_VIEWPORT_WIDTH = 960
 
 private val jikeLoginHeaders =
     mapOf(
@@ -45,6 +46,32 @@ private val jikeDesktopNavigatorScript =
     """
     (() => {
       const userAgent = "$JIKE_LOGIN_USER_AGENT";
+      const desktopWidth = $JIKE_LOGIN_VIEWPORT_WIDTH;
+      const setGetter = (target, key, value) => {
+        try {
+          Object.defineProperty(target, key, { get: () => value, configurable: true });
+        } catch (_) {}
+      };
+      const applyDesktopViewport = () => {
+        try {
+          const parent = document.head || document.getElementsByTagName("head")[0];
+          if (!parent) return false;
+          let meta = document.querySelector('meta[name="viewport"]');
+          if (!meta) {
+            meta = document.createElement("meta");
+            meta.name = "viewport";
+            parent.prepend(meta);
+          }
+          meta.content = "width=" + desktopWidth + ", initial-scale=1.0";
+          document.documentElement.style.minWidth = desktopWidth + "px";
+          if (document.body) {
+            document.body.style.minWidth = desktopWidth + "px";
+          }
+          return true;
+        } catch (_) {
+          return true;
+        }
+      };
       const userAgentData = {
         brands: [
           { brand: "Chromium", version: "126" },
@@ -68,11 +95,21 @@ private val jikeDesktopNavigatorScript =
           return Object.fromEntries(hints.map((hint) => [hint, values[hint]]));
         }
       };
+      if (!applyDesktopViewport()) {
+        const observer = new MutationObserver(() => {
+          if (applyDesktopViewport()) observer.disconnect();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+      }
       try {
-        Object.defineProperty(Navigator.prototype, "userAgent", { get: () => userAgent, configurable: true });
-        Object.defineProperty(Navigator.prototype, "platform", { get: () => "Win32", configurable: true });
-        Object.defineProperty(Navigator.prototype, "maxTouchPoints", { get: () => 0, configurable: true });
-        Object.defineProperty(Navigator.prototype, "userAgentData", { get: () => userAgentData, configurable: true });
+        setGetter(Navigator.prototype, "userAgent", userAgent);
+        setGetter(Navigator.prototype, "platform", "Win32");
+        setGetter(Navigator.prototype, "maxTouchPoints", 0);
+        setGetter(Navigator.prototype, "userAgentData", userAgentData);
+        setGetter(window, "innerWidth", desktopWidth);
+        setGetter(window, "outerWidth", desktopWidth);
+        setGetter(screen, "width", desktopWidth);
+        setGetter(screen, "availWidth", desktopWidth);
       } catch (_) {}
     })();
     """.trimIndent()
@@ -183,6 +220,7 @@ private fun JikeLoginWebView(
                 settings.userAgentString = JIKE_LOGIN_USER_AGENT
                 settings.useWideViewPort = true
                 settings.loadWithOverviewMode = true
+                setInitialScale(50)
                 settings.textZoom = 100
                 CookieManager.getInstance().removeAllCookies(null)
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
