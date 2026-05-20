@@ -1,6 +1,9 @@
-if [[ ! -z "$SIGNING_KEY" ]]; then
-    echo $GOOGLE_SERVICES > app/google-services.json
-    echo $SIGNING_KEY | base64 -d > key.jks
+if [[ -n "${GOOGLE_SERVICES:-}" ]]; then
+    printf '%s' "$GOOGLE_SERVICES" > app/google-services.json
+fi
+
+if [[ -n "${SIGNING_KEY:-}" ]]; then
+    printf '%s' "$SIGNING_KEY" | base64 -d > key.jks
     echo "storeFile=key.jks
     storePassword=$KEY_STORE_PASSWORD
     keyAlias=$ALIAS
