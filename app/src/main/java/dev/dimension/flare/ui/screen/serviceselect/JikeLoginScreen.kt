@@ -27,6 +27,9 @@ import kotlinx.coroutines.delay
 import moe.tlaster.precompose.molecule.producePresenter
 import kotlin.time.Duration.Companion.seconds
 
+private const val JIKE_LOGIN_USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
 @Composable
 internal fun JikeLoginScreen(toHome: () -> Unit) {
     val state by producePresenter { presenter(toHome) }
@@ -130,6 +133,7 @@ private fun JikeLoginWebView(
                 )
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                settings.userAgentString = JIKE_LOGIN_USER_AGENT
                 CookieManager.getInstance().removeAllCookies(null)
                 webViewClient = WebViewClient()
                 webViewRef = this
