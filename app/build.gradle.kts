@@ -4,6 +4,7 @@ import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsPlugin
 import com.google.gms.googleservices.GoogleServicesPlugin
 import dev.dimension.flare.buildlogic.flare
 import java.util.Properties
+import org.jetbrains.compose.compose
 
 plugins {
     id("dev.dimension.flare.android-application")
@@ -102,6 +103,7 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(platform(libs.compose.bom))
     implementation(libs.bundles.compose)
+    implementation(compose("org.jetbrains.compose.components:components-resources"))
     implementation(libs.bundles.kotlinx)
     implementation(platform(libs.koin.bom))
     implementation(libs.bundles.koin)
