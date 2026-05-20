@@ -11,6 +11,10 @@ import io.ktor.util.AttributeKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 
+private const val JIKE_WEB_USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+        "Chrome/126.0.0.0 Safari/537.36"
+
 /**
  * Configuration for Jike authentication plugin.
  */
@@ -55,10 +59,10 @@ internal class JikeAuthPlugin(
                 request.headers.append("x-jike-refresh-token", token)
             }
         }
-        request.headers.appendIfNotPresent("manufacturer", "Apple")
-        request.headers.appendIfNotPresent("os", "ios")
-        request.headers.appendIfNotPresent("os-version", "Version 14.7 (Build 18G5033e)")
+        request.headers.appendIfNotPresent("platform", "web")
         request.headers.appendIfNotPresent("Referer", "https://$jikeWebHost/")
+        request.headers.appendIfNotPresent("Origin", "https://$jikeWebHost")
+        request.headers.appendIfNotPresent("User-Agent", JIKE_WEB_USER_AGENT)
     }
 }
 

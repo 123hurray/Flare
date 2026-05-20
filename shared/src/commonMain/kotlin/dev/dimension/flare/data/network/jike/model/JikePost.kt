@@ -23,26 +23,42 @@ internal data class JikePost(
     val shareCount: Int = 0,
     @SerialName("isLiked")
     val isLiked: Boolean = false,
+    @SerialName("repostCount")
+    val repostCount: Int = 0,
     @SerialName("topic")
     val topic: JikeTopic? = null,
 )
 
 @Serializable
 internal data class JikePicture(
+    @SerialName("picUrl")
+    val picUrl: String? = null,
     @SerialName("url")
     val url: String = "",
     @SerialName("thumbnailUrl")
     val thumbnailUrl: String? = null,
+    @SerialName("smallPicUrl")
+    val smallPicUrl: String? = null,
+    @SerialName("middlePicUrl")
+    val middlePicUrl: String? = null,
     @SerialName("width")
     val width: Int = 0,
     @SerialName("height")
     val height: Int = 0,
-)
+) {
+    val bestUrl: String
+        get() = picUrl ?: middlePicUrl ?: smallPicUrl ?: thumbnailUrl ?: url
+}
 
 @Serializable
 internal data class JikeTopic(
     @SerialName("id")
     val id: String = "",
+    @SerialName("content")
+    val content: String? = null,
     @SerialName("title")
     val title: String = "",
-)
+) {
+    val displayName: String
+        get() = content ?: title
+}

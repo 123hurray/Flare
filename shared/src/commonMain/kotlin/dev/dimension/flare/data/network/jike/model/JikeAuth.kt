@@ -2,6 +2,7 @@ package dev.dimension.flare.data.network.jike.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Base response wrapper for Jike API responses.
@@ -12,10 +13,30 @@ internal data class JikeResponse<T>(
     val data: T? = null,
     @SerialName("user")
     val user: T? = null,
+    @SerialName("loadMoreKey")
+    val loadMoreKey: JsonObject? = null,
     @SerialName("error")
     val error: String? = null,
     @SerialName("success")
     val success: Boolean = false,
+)
+
+@Serializable
+internal data class JikeTimelineRequest(
+    @SerialName("limit")
+    val limit: Int = 20,
+    @SerialName("loadMoreKey")
+    val loadMoreKey: JsonObject? = null,
+)
+
+@Serializable
+internal data class JikeUserTimelineRequest(
+    @SerialName("username")
+    val username: String,
+    @SerialName("limit")
+    val limit: Int = 20,
+    @SerialName("loadMoreKey")
+    val loadMoreKey: JsonObject? = null,
 )
 
 /**

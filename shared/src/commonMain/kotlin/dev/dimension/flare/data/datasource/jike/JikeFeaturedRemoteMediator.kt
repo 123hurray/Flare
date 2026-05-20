@@ -5,6 +5,7 @@ import dev.dimension.flare.data.datasource.microblog.paging.CacheableRemoteLoade
 import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
 import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.network.jike.JikeService
+import dev.dimension.flare.data.network.jike.model.JikeTimelineRequest
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.model.UiTimelineV2
 
@@ -18,6 +19,31 @@ internal class JikeFeaturedRemoteMediator(
     override suspend fun load(
         pageSize: Int,
         request: PagingRequest,
-    ): PagingResult<UiTimelineV2> =
-        PagingResult(endOfPaginationReached = true)
+    ): PagingResult<UiTimelineV2> {
+        val response =
+            when (request) {
+                PagingRequest.Refresh ->
+                    service.getFeaturedTimeline(
+                        JikeTimelineRequest(limit = pageSize),
+                    )
+
+                is PagingRequest.Prepend ->
+                    return PagingResult(endOfPaginationReached = true)
+
+                is PagingRequest.Append ->
+                    service.getFeaturedTimeline(
+                        JikeTimelineRequest(
+                            limit = pageSize,
+                            loadMoreKey = request.nextKey.decodeJikeLoadMoreKey(),
+                        ),
+                    )
+            }
+
+        val data = response.data.orEmpty()
+        return PagingResult(
+            endOfPaginationReached = data.isEmpty(),
+            data = data.map { it.toUiTimeline(accountKey) },
+            nextKey = response.loadMoreKey.encodeJikeLoadMoreKey(),
+        )
+    }
 }

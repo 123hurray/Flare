@@ -5,6 +5,7 @@ import dev.dimension.flare.data.datasource.microblog.paging.CacheableRemoteLoade
 import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
 import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.network.jike.JikeService
+import dev.dimension.flare.data.network.jike.model.JikeTimelineRequest
 import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
@@ -24,7 +25,9 @@ internal class JikeHomeTimelineRemoteMediator(
         val response =
             when (request) {
                 PagingRequest.Refresh -> {
-                    service.getHomeTimeline(limit = pageSize)
+                    service.getHomeTimeline(
+                        JikeTimelineRequest(limit = pageSize),
+                    )
                 }
 
                 is PagingRequest.Prepend -> {
@@ -33,22 +36,23 @@ internal class JikeHomeTimelineRemoteMediator(
 
                 is PagingRequest.Append -> {
                     service.getHomeTimeline(
-                        limit = pageSize,
-                        loadMoreKey = request.nextKey,
+                        JikeTimelineRequest(
+                            limit = pageSize,
+                            loadMoreKey = request.nextKey.decodeJikeLoadMoreKey(),
+                        ),
                     )
                 }
             }
 
-        if (!response.success) {
+        if (response.error != null) {
             throw LoginExpiredException(accountKey, PlatformType.Jike)
         }
 
         val data = response.data.orEmpty()
-        // TODO: Map JikePost to UiTimelineV2
         return PagingResult(
             endOfPaginationReached = data.isEmpty(),
-            data = emptyList(),
-            nextKey = null,
+            data = data.map { it.toUiTimeline(accountKey) },
+            nextKey = response.loadMoreKey.encodeJikeLoadMoreKey(),
         )
     }
 }

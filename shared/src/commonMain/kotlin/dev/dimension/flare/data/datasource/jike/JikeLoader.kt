@@ -3,12 +3,9 @@ package dev.dimension.flare.data.datasource.jike
 import dev.dimension.flare.data.datasource.microblog.loader.*
 import dev.dimension.flare.data.network.jike.JikeService
 import dev.dimension.flare.model.MicroBlogKey
-import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.ui.model.*
-import dev.dimension.flare.ui.render.toUiPlainText
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
-import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import org.koin.core.component.KoinComponent
 
@@ -22,24 +19,7 @@ internal class JikeLoader(
     override suspend fun userByHandleAndHost(uiHandle: UiHandle): UiProfile {
         val response = service.getUserProfile(username = uiHandle.normalizedRaw)
         val user = response.user ?: response.data ?: error("user not found")
-        val userKey = MicroBlogKey(user.username.ifEmpty { user.id }, accountKey.host)
-        return UiProfile(
-            key = userKey,
-            handle = UiHandle(user.username, accountKey.host),
-            avatar = user.avatarUrl.orEmpty(),
-            nameInternal = user.screenName.ifEmpty { user.username }.toUiPlainText(),
-            platformType = PlatformType.Jike,
-            clickEvent = ClickEvent.Noop,
-            banner = null,
-            description = user.briefIntro?.toUiPlainText(),
-            matrices = UiProfile.Matrices(
-                fansCount = user.statsCount?.followedCount?.toLong() ?: 0L,
-                followsCount = user.statsCount?.followingCount?.toLong() ?: 0L,
-                statusesCount = 0,
-            ),
-            mark = persistentListOf(),
-            bottomContent = null,
-        )
+        return user.toUiProfile(accountKey.host)
     }
 
     override suspend fun userById(id: String): UiProfile =
@@ -57,6 +37,11 @@ internal class JikeLoader(
 
     override suspend fun emojis(): ImmutableMap<String, ImmutableList<UiEmoji>> = persistentMapOf()
 
-    override suspend fun status(statusKey: MicroBlogKey): UiTimelineV2 = error("not implemented")
+    override suspend fun status(statusKey: MicroBlogKey): UiTimelineV2 {
+        val response = service.getPost(statusKey.id)
+        val post = response.data ?: error("post not found")
+        return post.toUiTimeline(accountKey)
+    }
+
     override suspend fun deleteStatus(statusKey: MicroBlogKey) {}
 }
