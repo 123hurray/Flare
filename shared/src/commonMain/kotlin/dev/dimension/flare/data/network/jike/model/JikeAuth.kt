@@ -10,6 +10,8 @@ import kotlinx.serialization.Serializable
 internal data class JikeResponse<T>(
     @SerialName("data")
     val data: T? = null,
+    @SerialName("user")
+    val user: T? = null,
     @SerialName("error")
     val error: String? = null,
     @SerialName("success")

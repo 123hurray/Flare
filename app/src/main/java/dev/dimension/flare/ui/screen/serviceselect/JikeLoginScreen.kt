@@ -85,7 +85,14 @@ private fun JikeLoginWebView(
                 val result = kotlinx.coroutines.suspendCancellableCoroutine<String?> { cont ->
                     wv.post {
                         wv.evaluateJavascript(
-                            "(function() { var a = localStorage.getItem('JK_ACCESS_TOKEN'); var r = localStorage.getItem('JK_REFRESH_TOKEN'); if (a && r) { return '|||' + a + '|||' + r; } return ''; })()",
+                            """
+                            (function() {
+                                var a = localStorage.getItem('JK_ACCESS_TOKEN');
+                                var r = localStorage.getItem('JK_REFRESH_TOKEN') || localStorage.getItem('REFRESH_TOKEN');
+                                if (a && r) { return '|||' + a + '|||' + r; }
+                                return '';
+                            })()
+                            """.trimIndent(),
                         ) { value ->
                             cont.resume(value, null)
                         }

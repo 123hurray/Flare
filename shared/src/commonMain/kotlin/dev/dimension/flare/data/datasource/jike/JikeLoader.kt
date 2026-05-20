@@ -20,9 +20,9 @@ internal class JikeLoader(
     override suspend fun notificationBadgeCount(): Int = 0
 
     override suspend fun userByHandleAndHost(uiHandle: UiHandle): UiProfile {
-        val response = service.getUserByUsername(username = uiHandle.normalizedRaw)
-        val user = response.data ?: error("user not found")
-        val userKey = MicroBlogKey(user.id, accountKey.host)
+        val response = service.getUserProfile(username = uiHandle.normalizedRaw)
+        val user = response.user ?: response.data ?: error("user not found")
+        val userKey = MicroBlogKey(user.username.ifEmpty { user.id }, accountKey.host)
         return UiProfile(
             key = userKey,
             handle = UiHandle(user.username, accountKey.host),
