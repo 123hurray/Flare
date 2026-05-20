@@ -2,6 +2,7 @@ package dev.dimension.flare.ui.screen.serviceselect
 
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import dev.dimension.flare.ui.component.FlareScaffold
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.presenter.login.JikeLoginPresenter
@@ -29,6 +32,50 @@ import kotlin.time.Duration.Companion.seconds
 
 private const val JIKE_LOGIN_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
+private val jikeLoginHeaders =
+    mapOf(
+        "User-Agent" to JIKE_LOGIN_USER_AGENT,
+        "Sec-CH-UA" to "\"Chromium\";v=\"126\", \"Google Chrome\";v=\"126\", \"Not-A.Brand\";v=\"99\"",
+        "Sec-CH-UA-Mobile" to "?0",
+        "Sec-CH-UA-Platform" to "\"Windows\"",
+    )
+
+private val jikeDesktopNavigatorScript =
+    """
+    (() => {
+      const userAgent = "$JIKE_LOGIN_USER_AGENT";
+      const userAgentData = {
+        brands: [
+          { brand: "Chromium", version: "126" },
+          { brand: "Google Chrome", version: "126" },
+          { brand: "Not-A.Brand", version: "99" }
+        ],
+        mobile: false,
+        platform: "Windows",
+        getHighEntropyValues: async (hints) => {
+          const values = {
+            architecture: "x86",
+            bitness: "64",
+            brands: userAgentData.brands,
+            fullVersionList: userAgentData.brands.map((item) => ({ brand: item.brand, version: item.version + ".0.0.0" })),
+            mobile: false,
+            model: "",
+            platform: "Windows",
+            platformVersion: "10.0.0",
+            uaFullVersion: "126.0.0.0"
+          };
+          return Object.fromEntries(hints.map((hint) => [hint, values[hint]]));
+        }
+      };
+      try {
+        Object.defineProperty(Navigator.prototype, "userAgent", { get: () => userAgent, configurable: true });
+        Object.defineProperty(Navigator.prototype, "platform", { get: () => "Win32", configurable: true });
+        Object.defineProperty(Navigator.prototype, "maxTouchPoints", { get: () => 0, configurable: true });
+        Object.defineProperty(Navigator.prototype, "userAgentData", { get: () => userAgentData, configurable: true });
+      } catch (_) {}
+    })();
+    """.trimIndent()
 
 @Composable
 internal fun JikeLoginScreen(toHome: () -> Unit) {
@@ -134,10 +181,33 @@ private fun JikeLoginWebView(
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.userAgentString = JIKE_LOGIN_USER_AGENT
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = true
+                settings.textZoom = 100
                 CookieManager.getInstance().removeAllCookies(null)
-                webViewClient = WebViewClient()
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                    WebViewCompat.addDocumentStartJavaScript(
+                        this,
+                        jikeDesktopNavigatorScript,
+                        setOf("https://$jikeWebHost"),
+                    )
+                }
+                webViewClient =
+                    object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView,
+                            request: WebResourceRequest,
+                        ): Boolean {
+                            val uri = request.url
+                            if (uri.scheme == "jike") {
+                                view.loadUrl("https://$jikeWebHost/", jikeLoginHeaders)
+                                return true
+                            }
+                            return false
+                        }
+                    }
                 webViewRef = this
-                loadUrl("https://$jikeWebHost/")
+                loadUrl("https://$jikeWebHost/", jikeLoginHeaders)
             }
         },
         modifier = modifier.fillMaxSize(),
