@@ -2,6 +2,7 @@ package dev.dimension.flare.data.network.jike.api
 
 import de.jensklingenberg.ktorfit.http.Body
 import de.jensklingenberg.ktorfit.http.GET
+import de.jensklingenberg.ktorfit.http.Header
 import de.jensklingenberg.ktorfit.http.POST
 import de.jensklingenberg.ktorfit.http.Query
 import dev.dimension.flare.data.network.jike.model.JikePost
@@ -19,6 +20,7 @@ internal interface JikePostApi {
      */
     @POST("1.0/personalUpdate/followingUpdates")
     suspend fun getHomeTimeline(
+        @Header("Content-Type") contentType: String = "application/json",
         @Body request: JikeTimelineRequest,
     ): JikeResponse<List<JikePost>>
 
@@ -28,6 +30,7 @@ internal interface JikePostApi {
      */
     @POST("1.0/recommendFeed/list")
     suspend fun getFeaturedTimeline(
+        @Header("Content-Type") contentType: String = "application/json",
         @Body request: JikeTimelineRequest,
     ): JikeResponse<List<JikePost>>
 
@@ -46,6 +49,7 @@ internal interface JikePostApi {
      */
     @POST("1.0/personalUpdate/single")
     suspend fun getUserPosts(
+        @Header("Content-Type") contentType: String = "application/json",
         @Body request: JikeUserTimelineRequest,
     ): JikeResponse<List<JikePost>>
 }
