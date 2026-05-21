@@ -39,6 +39,20 @@ internal data class JikeUserTimelineRequest(
     val loadMoreKey: JsonObject? = null,
 )
 
+@Serializable
+internal data class JikeCommentsRequest(
+    @SerialName("targetId")
+    val targetId: String,
+    @SerialName("targetType")
+    val targetType: String,
+    @SerialName("limit")
+    val limit: Int = 20,
+    @SerialName("loadMoreKey")
+    val loadMoreKey: JsonObject? = null,
+    @SerialName("order")
+    val order: String = "LIKES",
+)
+
 /**
  * Request body for sending SMS verification code.
  */

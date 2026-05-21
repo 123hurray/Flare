@@ -8,6 +8,7 @@ import compose.icons.fontawesomeicons.brands.Mastodon
 import compose.icons.fontawesomeicons.brands.Weibo
 import compose.icons.fontawesomeicons.brands.XTwitter
 import dev.dimension.flare.model.PlatformType
+import dev.dimension.flare.ui.icons.Jike
 import dev.dimension.flare.ui.icons.Misskey
 import dev.dimension.flare.ui.icons.Nostr
 
@@ -20,5 +21,5 @@ public val PlatformType.brandIcon: ImageVector
             PlatformType.Bluesky -> FontAwesomeIcons.Brands.Bluesky
             PlatformType.xQt -> FontAwesomeIcons.Brands.XTwitter
             PlatformType.VVo -> FontAwesomeIcons.Brands.Weibo
-            PlatformType.Jike -> FontAwesomeIcons.Brands.XTwitter // TODO: Add Jike icon
+            PlatformType.Jike -> FontAwesomeIcons.Brands.Jike
         }

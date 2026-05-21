@@ -24,6 +24,7 @@ import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
 import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
 import dev.dimension.flare.data.network.jike.JikeService
+import dev.dimension.flare.data.network.jike.model.JikeCommentsRequest
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
@@ -163,10 +164,33 @@ internal class JikeDataSource(
             override suspend fun load(
                 pageSize: Int,
                 request: PagingRequest,
-            ): PagingResult<UiTimelineV2> =
-                PagingResult(
-                    endOfPaginationReached = true,
+            ): PagingResult<UiTimelineV2> {
+                if (request is PagingRequest.Prepend) {
+                    return PagingResult(endOfPaginationReached = true)
+                }
+
+                val post = service.getPost(statusKey.id).data ?: error("post not found")
+                val comments =
+                    service.getPrimaryComments(
+                        JikeCommentsRequest(
+                            targetId = post.id,
+                            targetType = post.type,
+                            limit = pageSize,
+                            loadMoreKey = (request as? PagingRequest.Append)?.nextKey.decodeJikeLoadMoreKey(),
+                        ),
+                    )
+                val renderedComments = comments.data.orEmpty().map { it.toUiTimeline(accountKey) }
+                return PagingResult(
+                    endOfPaginationReached = comments.loadMoreKey == null,
+                    data =
+                        when (request) {
+                            is PagingRequest.Append -> renderedComments
+                            PagingRequest.Refresh -> listOf(post.toUiTimeline(accountKey)) + renderedComments
+                            is PagingRequest.Prepend -> emptyList()
+                        },
+                    nextKey = comments.loadMoreKey.encodeJikeLoadMoreKey(),
                 )
+            }
         }
 
     override fun searchStatus(query: String) =

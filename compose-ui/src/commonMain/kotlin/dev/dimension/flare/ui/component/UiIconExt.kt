@@ -47,6 +47,7 @@ import compose.icons.fontawesomeicons.solid.UserPlus
 import compose.icons.fontawesomeicons.solid.UserSlash
 import compose.icons.fontawesomeicons.solid.Users
 import compose.icons.fontawesomeicons.solid.VolumeXmark
+import dev.dimension.flare.ui.icons.Jike
 import dev.dimension.flare.ui.icons.Misskey
 import dev.dimension.flare.ui.icons.Nostr
 import dev.dimension.flare.ui.model.UiIcon
@@ -101,7 +102,7 @@ public fun UiIcon.toImageVector(): ImageVector =
         UiIcon.Misskey -> FontAwesomeIcons.Brands.Misskey
         UiIcon.Bluesky -> FontAwesomeIcons.Brands.Bluesky
         UiIcon.Nostr -> FontAwesomeIcons.Brands.Nostr
-        UiIcon.Jike -> FontAwesomeIcons.Regular.CommentDots
+        UiIcon.Jike -> FontAwesomeIcons.Brands.Jike
         UiIcon.Twitter -> FontAwesomeIcons.Brands.Twitter
         UiIcon.X -> FontAwesomeIcons.Brands.XTwitter
         UiIcon.Weibo -> FontAwesomeIcons.Brands.Weibo

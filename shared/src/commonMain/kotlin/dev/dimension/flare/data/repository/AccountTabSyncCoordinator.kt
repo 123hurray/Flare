@@ -1,12 +1,18 @@
 package dev.dimension.flare.data.repository
 
+import dev.dimension.flare.data.model.HomeTimelineTabItem
+import dev.dimension.flare.data.model.IconType
 import dev.dimension.flare.data.model.MixedTimelineTabItem
 import dev.dimension.flare.data.model.TabSettings
+import dev.dimension.flare.data.model.TabMetaData
 import dev.dimension.flare.data.model.TimelineTabItem
+import dev.dimension.flare.data.model.TitleType
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.jikeWebHost
 import dev.dimension.flare.model.spec
 import dev.dimension.flare.ui.model.UiAccount
+import dev.dimension.flare.ui.model.UiIcon
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
@@ -20,6 +26,9 @@ internal class AccountTabSyncCoordinator(
     init {
         coroutineScope.launch {
             removeTabsForDeletedAccounts()
+        }
+        coroutineScope.launch {
+            normalizeJikeHomeTabs()
         }
         coroutineScope.launch {
             accountRepository.onAdded.collect { account ->
@@ -64,6 +73,31 @@ internal class AccountTabSyncCoordinator(
     private suspend fun removeTabsForAccount(accountKey: MicroBlogKey) {
         settingsRepository.updateTabSettings {
             cleanupForExistingAccounts(setOf(accountKey), retainAccounts = false).sanitizeDuplicateTabKeys()
+        }
+    }
+
+    private suspend fun normalizeJikeHomeTabs() {
+        settingsRepository.updateTabSettings {
+            val normalizedTabs =
+                mainTabs.map { tab ->
+                    val accountKey = (tab.account as? AccountType.Specific)?.accountKey
+                    if (tab is HomeTimelineTabItem && accountKey?.host == jikeWebHost) {
+                        tab.copy(
+                            metaData =
+                                TabMetaData(
+                                    title = TitleType.Text("jike"),
+                                    icon = IconType.Material(UiIcon.Jike),
+                                ),
+                        )
+                    } else {
+                        tab
+                    }
+                }.toImmutableList()
+            if (normalizedTabs == mainTabs) {
+                this
+            } else {
+                copy(mainTabs = normalizedTabs)
+            }
         }
     }
 

@@ -40,7 +40,7 @@ internal data object JikePlatformSpec : PlatformSpec {
         persistentListOf(
             HomeTimelineTabItem(
                 accountKey = accountKey,
-                title = "Jike",
+                title = "jike",
                 icon = IconType.Material(UiIcon.Jike),
             ),
         )

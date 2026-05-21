@@ -5,6 +5,8 @@ import de.jensklingenberg.ktorfit.http.GET
 import de.jensklingenberg.ktorfit.http.Header
 import de.jensklingenberg.ktorfit.http.POST
 import de.jensklingenberg.ktorfit.http.Query
+import dev.dimension.flare.data.network.jike.model.JikeComment
+import dev.dimension.flare.data.network.jike.model.JikeCommentsRequest
 import dev.dimension.flare.data.network.jike.model.JikePost
 import dev.dimension.flare.data.network.jike.model.JikeResponse
 import dev.dimension.flare.data.network.jike.model.JikeTimelineRequest
@@ -52,4 +54,14 @@ internal interface JikePostApi {
         @Body request: JikeUserTimelineRequest,
         @Header("Content-Type") contentType: String = "application/json",
     ): JikeResponse<List<JikePost>>
+
+    /**
+     * Get primary comments for a post/repost.
+     * POST /1.0/comments/listPrimary
+     */
+    @POST("1.0/comments/listPrimary")
+    suspend fun getPrimaryComments(
+        @Body request: JikeCommentsRequest,
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikeResponse<List<JikeComment>>
 }
