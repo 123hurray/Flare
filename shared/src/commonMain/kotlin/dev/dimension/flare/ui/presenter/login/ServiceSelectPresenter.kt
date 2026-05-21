@@ -28,7 +28,7 @@ public class ServiceSelectPresenter(
         val blueskyOauthLoginState = remember { BlueskyOAuthLoginPresenter(toHome) }.body()
         val mastodonLoginState = mastodonLoginPresenter(toHome)
         val misskeyLoginState = misskeyLoginPresenter(toHome)
-        val jikeLoginState = remember { JikeLoginPresenter(toHome) }.body()
+        val jikeLoginState = remember { JikeLoginPresenter(null, toHome) }.body()
         val loading =
             nostrLoginState.loading ||
                 blueskyLoginState.loading ||

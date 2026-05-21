@@ -11,9 +11,13 @@ import dev.dimension.flare.data.network.jike.JikeService
 import dev.dimension.flare.data.network.jike.model.JikeTimelineRequest
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.jikeWebHost
 import dev.dimension.flare.ui.model.UiAccount
+import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.presenter.PresenterBase
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
@@ -46,6 +50,7 @@ public interface JikeLoginState {
  * Presenter for Jike (即刻) login via WebView.
  */
 public class JikeLoginPresenter(
+    private val reloginAccountKey: MicroBlogKey?,
     private val toHome: () -> Unit,
 ) : PresenterBase<JikeLoginState>(),
     KoinComponent {
@@ -83,11 +88,23 @@ public class JikeLoginPresenter(
                             }
                         val username = user.username.ifEmpty { user.id }
                         require(username.isNotEmpty()) { "Username is empty" }
-                        val accountKey =
+                        val profileAccountKey =
                             MicroBlogKey(
                                 id = username,
                                 host = jikeWebHost,
                             )
+                        val existingJikeAccount =
+                            reloginAccountKey?.let {
+                                accountRepository.find(it)
+                            }?.takeIf { it.platformType == PlatformType.Jike }
+                                ?: (accountRepository.activeAccount.firstOrNull() as? UiState.Success)
+                                ?.data
+                                ?.takeIf { it.platformType == PlatformType.Jike }
+                                ?: accountRepository.allAccounts
+                                    .first()
+                                    .filterIsInstance<UiAccount.Jike>()
+                                    .singleOrNull()
+                        val accountKey = existingJikeAccount?.accountKey ?: profileAccountKey
                         JikeService(
                             accountKey = accountKey,
                             accessTokenFlow = flowOf(accessToken),

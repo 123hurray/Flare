@@ -17,19 +17,32 @@ import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.render.toUi
 import dev.dimension.flare.ui.render.toUiPlainText
+import dev.dimension.flare.ui.route.DeeplinkRoute
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlin.time.Instant
 
-internal fun JikeUser.toUiProfile(accountHost: String): UiProfile {
-    val handle = username.ifEmpty { id }
+internal fun JikeUser.toUiProfile(accountKey: MicroBlogKey): UiProfile {
+    val userId = username.ifBlank { id }
+    val displayHandle =
+        username
+            .takeIf { it.isNotBlank() && !it.isUuidLike() }
+            ?: screenName.takeIf { it.isNotBlank() }
+            ?: id
+    val userKey = MicroBlogKey(userId, accountKey.host)
     return UiProfile(
-        key = MicroBlogKey(handle, accountHost),
-        handle = UiHandle(handle, accountHost),
+        key = userKey,
+        handle = UiHandle(displayHandle, accountKey.host),
         avatar = avatarUrl.orEmpty(),
-        nameInternal = screenName.ifEmpty { handle }.toUiPlainText(),
+        nameInternal = screenName.ifEmpty { displayHandle }.toUiPlainText(),
         platformType = PlatformType.Jike,
-        clickEvent = ClickEvent.Noop,
+        clickEvent =
+            ClickEvent.Deeplink(
+                DeeplinkRoute.Profile.User(
+                    accountType = AccountType.Specific(accountKey),
+                    userKey = userKey,
+                ),
+            ),
         banner = null,
         description = (briefIntro ?: "").toUiPlainText(),
         matrices =
@@ -42,6 +55,13 @@ internal fun JikeUser.toUiProfile(accountHost: String): UiProfile {
         bottomContent = null,
     )
 }
+
+private fun String.isUuidLike(): Boolean =
+    length == 36 &&
+        getOrNull(8) == '-' &&
+        getOrNull(13) == '-' &&
+        getOrNull(18) == '-' &&
+        getOrNull(23) == '-'
 
 internal fun JikePost.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Post {
     val statusKey = MicroBlogKey(id, accountKey.host)
@@ -64,7 +84,7 @@ internal fun JikePost.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Post 
                 }.toPersistentList(),
         sensitive = false,
         contentWarning = null,
-        user = user?.toUiProfile(accountKey.host),
+        user = user?.toUiProfile(accountKey),
         sourceLanguages = sourceLanguages,
         quote = persistentListOf(),
         content =

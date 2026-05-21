@@ -215,7 +215,9 @@ internal sealed interface Route : NavKey {
         data object XQTLogin : ServiceSelect
 
         @Serializable
-        data object JikeLogin : ServiceSelect
+        data class JikeLogin(
+            val accountKey: MicroBlogKey? = null,
+        ) : ServiceSelect
     }
 
     @Serializable

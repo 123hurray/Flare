@@ -24,6 +24,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import dev.dimension.flare.ui.component.FlareScaffold
+import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.presenter.login.JikeLoginPresenter
 import dev.dimension.flare.model.jikeWebHost
@@ -117,8 +118,11 @@ private val jikeDesktopNavigatorScript =
     """.trimIndent()
 
 @Composable
-internal fun JikeLoginScreen(toHome: () -> Unit) {
-    val state by producePresenter { presenter(toHome) }
+internal fun JikeLoginScreen(
+    reloginAccountKey: MicroBlogKey?,
+    toHome: () -> Unit,
+) {
+    val state by producePresenter { presenter(reloginAccountKey, toHome) }
 
     FlareScaffold {
         if (state.loading) {
@@ -309,7 +313,10 @@ private fun String.redactedLengthAndHash(): String = "len=$length,fp=${hashCode(
 private fun String.redactedDeviceId(): String = "len=$length,tail=${takeLast(4)}"
 
 @Composable
-private fun presenter(toHome: () -> Unit) =
+private fun presenter(
+    reloginAccountKey: MicroBlogKey?,
+    toHome: () -> Unit,
+) =
     run {
-        remember { JikeLoginPresenter(toHome) }.invoke()
+        remember(reloginAccountKey) { JikeLoginPresenter(reloginAccountKey, toHome) }.invoke()
     }

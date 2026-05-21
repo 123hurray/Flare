@@ -8,6 +8,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
+import dev.dimension.flare.model.AccountType
+import dev.dimension.flare.model.jikeWebHost
 import dev.dimension.flare.ui.component.BottomSheetSceneStrategy
 import dev.dimension.flare.ui.route.Route
 
@@ -32,7 +34,7 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
                 openDrawer.invoke()
             },
             toLogin = {
-                navigate(Route.ServiceSelect.Selection)
+                navigate(args.accountType.reloginRoute())
             },
             toTabSettings = {
                 navigate(Route.TabSettings)
@@ -43,7 +45,7 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
         TimelineScreen(
             tabItem = args.tabItem,
             toLogin = {
-                navigate(Route.ServiceSelect.Selection)
+                navigate(args.tabItem.account.reloginRoute())
             },
             onBack = onBack,
         )
@@ -118,3 +120,15 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
         }
     }
 }
+
+private fun AccountType.reloginRoute(): Route =
+    when (this) {
+        is AccountType.Specific ->
+            if (accountKey.host == jikeWebHost) {
+                Route.ServiceSelect.JikeLogin(accountKey)
+            } else {
+                Route.ServiceSelect.Selection
+            }
+
+        else -> Route.ServiceSelect.Selection
+    }

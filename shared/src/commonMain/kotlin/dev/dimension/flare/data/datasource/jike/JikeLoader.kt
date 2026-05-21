@@ -19,7 +19,7 @@ internal class JikeLoader(
     override suspend fun userByHandleAndHost(uiHandle: UiHandle): UiProfile {
         val response = service.getUserProfile(username = uiHandle.normalizedRaw)
         val user = response.user ?: response.data ?: error("user not found")
-        return user.toUiProfile(accountKey.host)
+        return user.toUiProfile(accountKey)
     }
 
     override suspend fun userById(id: String): UiProfile =
