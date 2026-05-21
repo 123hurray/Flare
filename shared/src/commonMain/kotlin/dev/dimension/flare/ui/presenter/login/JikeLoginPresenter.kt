@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import dev.dimension.flare.data.network.jike.JikeService
+import dev.dimension.flare.data.network.jike.model.JikeTimelineRequest
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.jikeWebHost
@@ -37,7 +38,7 @@ public interface JikeLoginState {
     public fun onTokensReceived(
         accessToken: String,
         refreshToken: String,
-        deviceId: String?,
+        deviceId: String,
     )
 }
 
@@ -63,16 +64,20 @@ public class JikeLoginPresenter(
             override fun onTokensReceived(
                 accessToken: String,
                 refreshToken: String,
-                deviceId: String?,
+                deviceId: String,
             ) {
                 scope.launch {
                     loading = true
                     error = null
                     runCatching {
+                        val requiredDeviceId =
+                            requireNotNull(deviceId.takeIf { it.isNotBlank() }) {
+                                "Jike device id is missing"
+                            }
                         val service = JikeService(
                             accessTokenFlow = flowOf(accessToken),
                             refreshTokenFlow = flowOf(refreshToken),
-                            deviceIdFlow = flowOf(deviceId),
+                            deviceIdFlow = flowOf(requiredDeviceId),
                         )
                         val profile = service.getSelfProfile()
                         val user =
@@ -81,21 +86,28 @@ public class JikeLoginPresenter(
                             }
                         val username = user.username.ifEmpty { user.id }
                         require(username.isNotEmpty()) { "Username is empty" }
+                        val accountKey =
+                            MicroBlogKey(
+                                id = username,
+                                host = jikeWebHost,
+                            )
+                        JikeService(
+                            accountKey = accountKey,
+                            accessTokenFlow = flowOf(accessToken),
+                            refreshTokenFlow = flowOf(refreshToken),
+                            deviceIdFlow = flowOf(requiredDeviceId),
+                        ).getHomeTimeline(JikeTimelineRequest(limit = 1))
 
                         accountRepository.addAccount(
                             account =
                                 UiAccount.Jike(
-                                    accountKey =
-                                        MicroBlogKey(
-                                            id = username,
-                                            host = jikeWebHost,
-                                        ),
+                                    accountKey = accountKey,
                                 ),
                             credential =
                                 UiAccount.Jike.Credential(
                                     accessToken = accessToken,
                                     refreshToken = refreshToken,
-                                    deviceId = deviceId,
+                                    deviceId = requiredDeviceId,
                                 ),
                         )
 

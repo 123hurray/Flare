@@ -54,6 +54,7 @@ internal class JikeDataSource(
 
     private val service by lazy {
         JikeService(
+            accountKey = accountKey,
             accessTokenFlow =
                 accountRepository
                     .credentialFlow<UiAccount.Jike.Credential>(accountKey)
@@ -65,7 +66,9 @@ internal class JikeDataSource(
             deviceIdFlow =
                 accountRepository
                     .credentialFlow<UiAccount.Jike.Credential>(accountKey)
-                    .map { it.deviceId },
+                    .map {
+                        it.deviceId ?: throw LoginExpiredException(accountKey, PlatformType.Jike)
+                    },
         )
     }
 

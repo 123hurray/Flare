@@ -6,19 +6,22 @@ import dev.dimension.flare.data.network.jike.api.JikeUserApi
 import dev.dimension.flare.data.network.jike.api.createJikeAuthApi
 import dev.dimension.flare.data.network.jike.api.createJikePostApi
 import dev.dimension.flare.data.network.jike.api.createJikeUserApi
-import dev.dimension.flare.model.jikeApiHost
 import dev.dimension.flare.data.network.ktorfit
+import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.jikeApiHost
 import kotlinx.coroutines.flow.Flow
 
 private val baseUrl = "https://$jikeApiHost/"
 
 private fun config(
     url: String = baseUrl,
+    accountKey: MicroBlogKey? = null,
     accessTokenFlow: Flow<String>? = null,
     refreshTokenFlow: Flow<String>? = null,
     deviceIdFlow: Flow<String?>? = null,
 ) = ktorfit(url) {
     install(JikeAuthPlugin) {
+        this.accountKey = accountKey
         this.accessTokenFlow = accessTokenFlow
         this.refreshTokenFlow = refreshTokenFlow
         this.deviceIdFlow = deviceIdFlow
@@ -32,20 +35,24 @@ private fun config(
  * user management, and post/timeline operations.
  */
 internal class JikeService(
+    accountKey: MicroBlogKey? = null,
     accessTokenFlow: Flow<String>? = null,
     refreshTokenFlow: Flow<String>? = null,
     deviceIdFlow: Flow<String?>? = null,
 ) : JikeAuthApi by config(
+    accountKey = accountKey,
     accessTokenFlow = accessTokenFlow,
     refreshTokenFlow = refreshTokenFlow,
     deviceIdFlow = deviceIdFlow,
 ).createJikeAuthApi(),
     JikeUserApi by config(
+        accountKey = accountKey,
         accessTokenFlow = accessTokenFlow,
         refreshTokenFlow = refreshTokenFlow,
         deviceIdFlow = deviceIdFlow,
     ).createJikeUserApi(),
     JikePostApi by config(
+        accountKey = accountKey,
         accessTokenFlow = accessTokenFlow,
         refreshTokenFlow = refreshTokenFlow,
         deviceIdFlow = deviceIdFlow,

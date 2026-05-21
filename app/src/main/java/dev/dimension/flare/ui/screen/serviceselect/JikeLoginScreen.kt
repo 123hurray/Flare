@@ -160,11 +160,11 @@ internal fun JikeLoginScreen(toHome: () -> Unit) {
 @Composable
 private fun JikeLoginWebView(
     modifier: Modifier,
-    onTokensFound: (String, String, String?) -> Unit,
+    onTokensFound: (String, String, String) -> Unit,
 ) {
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    // Poll localStorage for Jike tokens via JS eval
+    // Poll localStorage for Jike web credentials via JS eval
     LaunchedEffect(Unit) {
         while (true) {
             val wv = webViewRef
@@ -177,7 +177,7 @@ private fun JikeLoginWebView(
                                 var a = localStorage.getItem('JK_ACCESS_TOKEN');
                                 var r = localStorage.getItem('JK_REFRESH_TOKEN') || localStorage.getItem('REFRESH_TOKEN');
                                 var d = localStorage.getItem('JK_DEVICE_ID');
-                                if (a && r) { return '|||' + a + '|||' + r + '|||' + (d || ''); }
+                                if (a && r && d) { return '|||' + a + '|||' + r + '|||' + d; }
                                 return '';
                             })()
                             """.trimIndent(),
@@ -187,7 +187,7 @@ private fun JikeLoginWebView(
                     }
                 }
                 if (!result.isNullOrEmpty() && result != "null") {
-                    // Result is a JSON string like "\"|||<access>|||<refresh>\""
+                    // Result is a JSON string like "\"|||<access>|||<refresh>|||<device>\""
                     val unquoted = result.removePrefix("\"").removeSuffix("\"")
                         .replace("\\\"", "\"")
                         .replace("\\n", "\n")
@@ -202,11 +202,15 @@ private fun JikeLoginWebView(
                                 if (deviceIdx >= 0) rest.substring(0, deviceIdx) else rest
                             val deviceId =
                                 if (deviceIdx >= 0) {
-                                    rest.substring(deviceIdx + 3).takeIf { it.isNotEmpty() }
+                                    rest.substring(deviceIdx + 3).takeIf { it.isNotBlank() }
                                 } else {
                                     null
                                 }
-                            if (accessToken.isNotEmpty() && refreshToken.isNotEmpty()) {
+                            if (
+                                accessToken.isNotEmpty() &&
+                                refreshToken.isNotEmpty() &&
+                                deviceId != null
+                            ) {
                                 onTokensFound(accessToken, refreshToken, deviceId)
                                 break
                             }
