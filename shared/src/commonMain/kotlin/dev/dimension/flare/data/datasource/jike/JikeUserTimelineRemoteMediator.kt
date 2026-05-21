@@ -47,7 +47,7 @@ internal class JikeUserTimelineRemoteMediator(
         val data = response.data.orEmpty()
         return PagingResult(
             endOfPaginationReached = data.isEmpty(),
-            data = data.map { it.toUiTimeline(accountKey) },
+            data = data.toUiTimeline(accountKey, service),
             nextKey = response.loadMoreKey.encodeJikeLoadMoreKey(),
         )
     }

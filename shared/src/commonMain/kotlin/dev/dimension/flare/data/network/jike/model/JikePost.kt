@@ -15,8 +15,18 @@ internal data class JikePost(
     val createdAt: String? = null,
     @SerialName("user")
     val user: JikeUser? = null,
+    @SerialName("target")
+    val target: JikePost? = null,
+    @SerialName("targetType")
+    val targetType: String? = null,
+    @SerialName("rootType")
+    val rootType: String? = null,
     @SerialName("pictures")
     val pictures: List<JikePicture> = emptyList(),
+    @SerialName("video")
+    val video: JikeVideo? = null,
+    @SerialName("items")
+    val items: List<JikeUser> = emptyList(),
     @SerialName("likeCount")
     val likeCount: Int = 0,
     @SerialName("commentCount")
@@ -79,6 +89,22 @@ internal data class JikePicture(
     val bestUrl: String
         get() = picUrl ?: middlePicUrl ?: smallPicUrl ?: thumbnailUrl ?: url
 }
+
+@Serializable
+internal data class JikeVideo(
+    @SerialName("type")
+    val type: String = "",
+    @SerialName("thumbnailUrl")
+    val thumbnailUrl: String = "",
+    @SerialName("duration")
+    val duration: Long = 0,
+)
+
+@Serializable
+internal data class JikeMediaMetaResponse(
+    @SerialName("url")
+    val url: String? = null,
+)
 
 @Serializable
 internal data class JikeTopic(

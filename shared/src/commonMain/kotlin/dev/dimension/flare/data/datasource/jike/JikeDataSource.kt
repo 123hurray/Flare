@@ -25,6 +25,7 @@ import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
 import dev.dimension.flare.data.network.jike.JikeService
 import dev.dimension.flare.data.network.jike.model.JikeCommentsRequest
+import dev.dimension.flare.data.network.jike.model.JikeSearchRequest
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
@@ -35,6 +36,7 @@ import dev.dimension.flare.ui.model.UiTimelineV2
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -66,6 +68,19 @@ internal class JikeDataSource(
                 accountRepository
                     .credentialFlow<UiAccount.Jike.Credential>(accountKey)
                     .map { it.deviceId },
+            onTokenRefresh = { accessToken, refreshToken ->
+                val credential =
+                    accountRepository
+                        .credentialFlow<UiAccount.Jike.Credential>(accountKey)
+                        .first()
+                accountRepository.updateCredential(
+                    accountKey,
+                    credential.copy(
+                        accessToken = accessToken,
+                        refreshToken = refreshToken,
+                    ),
+                )
+            },
         )
     }
 
@@ -169,7 +184,7 @@ internal class JikeDataSource(
                     return PagingResult(endOfPaginationReached = true)
                 }
 
-                val post = service.getPost(statusKey.id).data ?: error("post not found")
+                val post = service.getPostOrRepost(statusKey.id) ?: error("post not found")
                 val comments =
                     service.getPrimaryComments(
                         JikeCommentsRequest(
@@ -185,7 +200,7 @@ internal class JikeDataSource(
                     data =
                         when (request) {
                             is PagingRequest.Append -> renderedComments
-                            PagingRequest.Refresh -> listOf(post.toUiTimeline(accountKey)) + renderedComments
+                            PagingRequest.Refresh -> listOf(post.toUiTimeline(accountKey, service)) + renderedComments
                             is PagingRequest.Prepend -> emptyList()
                         },
                     nextKey = comments.loadMoreKey.encodeJikeLoadMoreKey(),
@@ -205,10 +220,29 @@ internal class JikeDataSource(
             override suspend fun load(
                 pageSize: Int,
                 request: PagingRequest,
-            ): PagingResult<UiProfile> =
-                PagingResult(
-                    endOfPaginationReached = true,
+            ): PagingResult<UiProfile> {
+                if (request is PagingRequest.Prepend) {
+                    return PagingResult(endOfPaginationReached = true)
+                }
+                val response =
+                    service.search(
+                        JikeSearchRequest(
+                            keyword = query,
+                            limit = pageSize,
+                            loadMoreKey = (request as? PagingRequest.Append)?.nextKey.decodeJikeLoadMoreKey(),
+                        ),
+                    )
+                val users =
+                    response.data
+                        .orEmpty()
+                        .flatMap { it.items }
+                        .map { it.toUiProfile(accountKey) }
+                return PagingResult(
+                    endOfPaginationReached = response.loadMoreKey == null,
+                    data = users,
+                    nextKey = response.loadMoreKey.encodeJikeLoadMoreKey(),
                 )
+            }
         }
 
     override fun discoverUsers(): RemoteLoader<UiProfile> =

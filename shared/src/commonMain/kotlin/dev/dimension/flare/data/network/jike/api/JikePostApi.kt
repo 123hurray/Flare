@@ -7,10 +7,14 @@ import de.jensklingenberg.ktorfit.http.POST
 import de.jensklingenberg.ktorfit.http.Query
 import dev.dimension.flare.data.network.jike.model.JikeComment
 import dev.dimension.flare.data.network.jike.model.JikeCommentsRequest
+import dev.dimension.flare.data.network.jike.model.JikeMediaMetaResponse
 import dev.dimension.flare.data.network.jike.model.JikePost
 import dev.dimension.flare.data.network.jike.model.JikeResponse
+import dev.dimension.flare.data.network.jike.model.JikeSearchRequest
 import dev.dimension.flare.data.network.jike.model.JikeTimelineRequest
 import dev.dimension.flare.data.network.jike.model.JikeUserTimelineRequest
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 
 /**
  * Jike Post/Timeline API endpoints.
@@ -46,6 +50,15 @@ internal interface JikePostApi {
     ): JikeResponse<JikePost>
 
     /**
+     * Get a single repost by ID.
+     * GET /1.0/reposts/get
+     */
+    @GET("1.0/reposts/get")
+    suspend fun getRepost(
+        @Query("id") postId: String,
+    ): JikeResponse<JikePost>
+
+    /**
      * Get user's posts.
      * POST /1.0/personalUpdate/single
      */
@@ -64,4 +77,26 @@ internal interface JikePostApi {
         @Body request: JikeCommentsRequest,
         @Header("Content-Type") contentType: String = "application/json",
     ): JikeResponse<List<JikeComment>>
+
+    /**
+     * Get a playable video URL for a post/repost with video metadata.
+     * POST /1.0/mediaMeta/interactive?id=...&type=...
+     */
+    @POST("1.0/mediaMeta/interactive")
+    suspend fun getMediaMeta(
+        @Query("id") id: String,
+        @Query("type") type: String,
+        @Body request: JsonObject = buildJsonObject { },
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikeMediaMetaResponse
+
+    /**
+     * Search across Jike resources.
+     * POST /1.0/search/integrate
+     */
+    @POST("1.0/search/integrate")
+    suspend fun search(
+        @Body request: JikeSearchRequest,
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikeResponse<List<JikePost>>
 }

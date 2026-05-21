@@ -2,6 +2,7 @@ package dev.dimension.flare.data.repository
 
 import dev.dimension.flare.data.model.HomeTimelineTabItem
 import dev.dimension.flare.data.model.IconType
+import dev.dimension.flare.data.model.Jike
 import dev.dimension.flare.data.model.MixedTimelineTabItem
 import dev.dimension.flare.data.model.TabSettings
 import dev.dimension.flare.data.model.TabMetaData
@@ -93,10 +94,32 @@ internal class AccountTabSyncCoordinator(
                         tab
                     }
                 }.toImmutableList()
+            val normalizedSecondaryItems =
+                secondaryItems?.map { tab ->
+                    val accountKey = (tab.account as? AccountType.Specific)?.accountKey
+                    if (tab is Jike.FeaturedTimelineTabItem && accountKey?.host == jikeWebHost) {
+                        tab.copy(
+                            metaData =
+                                TabMetaData(
+                                    title = TitleType.Text("广场"),
+                                    icon = IconType.Mixed(UiIcon.Featured, accountKey),
+                                ),
+                        )
+                    } else {
+                        tab
+                    }
+                }
             if (normalizedTabs == mainTabs) {
-                this
+                if (normalizedSecondaryItems == secondaryItems) {
+                    this
+                } else {
+                    copy(secondaryItems = normalizedSecondaryItems)
+                }
             } else {
-                copy(mainTabs = normalizedTabs)
+                copy(
+                    mainTabs = normalizedTabs,
+                    secondaryItems = normalizedSecondaryItems,
+                )
             }
         }
     }

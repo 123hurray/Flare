@@ -38,9 +38,8 @@ internal class JikeLoader(
     override suspend fun emojis(): ImmutableMap<String, ImmutableList<UiEmoji>> = persistentMapOf()
 
     override suspend fun status(statusKey: MicroBlogKey): UiTimelineV2 {
-        val response = service.getPost(statusKey.id)
-        val post = response.data ?: error("post not found")
-        return post.toUiTimeline(accountKey)
+        val post = service.getPostOrRepost(statusKey.id) ?: error("post not found")
+        return post.toUiTimeline(accountKey, service)
     }
 
     override suspend fun deleteStatus(statusKey: MicroBlogKey) {}

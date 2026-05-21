@@ -53,6 +53,16 @@ internal data class JikeCommentsRequest(
     val order: String = "LIKES",
 )
 
+@Serializable
+internal data class JikeSearchRequest(
+    @SerialName("keyword")
+    val keyword: String,
+    @SerialName("limit")
+    val limit: Int = 20,
+    @SerialName("loadMoreKey")
+    val loadMoreKey: JsonObject? = null,
+)
+
 /**
  * Request body for sending SMS verification code.
  */

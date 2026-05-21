@@ -23,12 +23,14 @@ private fun config(
     accessTokenFlow: Flow<String>? = null,
     refreshTokenFlow: Flow<String>? = null,
     deviceIdFlow: Flow<String?>? = null,
+    onTokenRefresh: (suspend (accessToken: String, refreshToken: String) -> Unit)? = null,
 ) = ktorfit(url) {
     install(JikeAuthPlugin) {
         this.accountKey = accountKey
         this.accessTokenFlow = accessTokenFlow
         this.refreshTokenFlow = refreshTokenFlow
         this.deviceIdFlow = deviceIdFlow
+        this.onTokenRefresh = onTokenRefresh
     }
     HttpResponseValidator {
         validateResponse { response ->
@@ -50,21 +52,25 @@ internal class JikeService(
     accessTokenFlow: Flow<String>? = null,
     refreshTokenFlow: Flow<String>? = null,
     deviceIdFlow: Flow<String?>? = null,
+    onTokenRefresh: (suspend (accessToken: String, refreshToken: String) -> Unit)? = null,
 ) : JikeAuthApi by config(
     accountKey = accountKey,
     accessTokenFlow = accessTokenFlow,
     refreshTokenFlow = refreshTokenFlow,
     deviceIdFlow = deviceIdFlow,
+    onTokenRefresh = onTokenRefresh,
 ).createJikeAuthApi(),
     JikeUserApi by config(
         accountKey = accountKey,
         accessTokenFlow = accessTokenFlow,
         refreshTokenFlow = refreshTokenFlow,
         deviceIdFlow = deviceIdFlow,
+        onTokenRefresh = onTokenRefresh,
     ).createJikeUserApi(),
     JikePostApi by config(
         accountKey = accountKey,
         accessTokenFlow = accessTokenFlow,
         refreshTokenFlow = refreshTokenFlow,
         deviceIdFlow = deviceIdFlow,
+        onTokenRefresh = onTokenRefresh,
     ).createJikePostApi()

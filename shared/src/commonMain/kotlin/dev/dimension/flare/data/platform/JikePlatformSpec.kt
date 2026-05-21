@@ -50,7 +50,7 @@ internal data object JikePlatformSpec : PlatformSpec {
             Jike.FeaturedTimelineTabItem(
                 AccountType.Specific(accountKey),
                 TabMetaData(
-                    title = TitleType.Localized(TitleType.Localized.LocalizedKey.Featured),
+                    title = TitleType.Text("广场"),
                     icon = IconType.Mixed(UiIcon.Featured, accountKey),
                 ),
             ),
