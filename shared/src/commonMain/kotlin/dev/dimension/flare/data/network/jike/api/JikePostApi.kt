@@ -20,8 +20,8 @@ internal interface JikePostApi {
      */
     @POST("1.0/personalUpdate/followingUpdates")
     suspend fun getHomeTimeline(
-        @Header("Content-Type") contentType: String = "application/json",
         @Body request: JikeTimelineRequest,
+        @Header("Content-Type") contentType: String = "application/json",
     ): JikeResponse<List<JikePost>>
 
     /**
@@ -30,8 +30,8 @@ internal interface JikePostApi {
      */
     @POST("1.0/recommendFeed/list")
     suspend fun getFeaturedTimeline(
-        @Header("Content-Type") contentType: String = "application/json",
         @Body request: JikeTimelineRequest,
+        @Header("Content-Type") contentType: String = "application/json",
     ): JikeResponse<List<JikePost>>
 
     /**
@@ -49,7 +49,7 @@ internal interface JikePostApi {
      */
     @POST("1.0/personalUpdate/single")
     suspend fun getUserPosts(
-        @Header("Content-Type") contentType: String = "application/json",
         @Body request: JikeUserTimelineRequest,
+        @Header("Content-Type") contentType: String = "application/json",
     ): JikeResponse<List<JikePost>>
 }
