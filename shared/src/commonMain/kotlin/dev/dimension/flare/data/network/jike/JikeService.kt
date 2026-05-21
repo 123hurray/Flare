@@ -7,8 +7,12 @@ import dev.dimension.flare.data.network.jike.api.createJikeAuthApi
 import dev.dimension.flare.data.network.jike.api.createJikePostApi
 import dev.dimension.flare.data.network.jike.api.createJikeUserApi
 import dev.dimension.flare.data.network.ktorfit
+import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.jikeApiHost
+import io.ktor.client.plugins.HttpResponseValidator
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.flow.Flow
 
 private val baseUrl = "https://$jikeApiHost/"
@@ -25,6 +29,13 @@ private fun config(
         this.accessTokenFlow = accessTokenFlow
         this.refreshTokenFlow = refreshTokenFlow
         this.deviceIdFlow = deviceIdFlow
+    }
+    HttpResponseValidator {
+        validateResponse { response ->
+            if (response.status == HttpStatusCode.Unauthorized && accountKey != null) {
+                throw LoginExpiredException(accountKey, PlatformType.Jike)
+            }
+        }
     }
 }
 
