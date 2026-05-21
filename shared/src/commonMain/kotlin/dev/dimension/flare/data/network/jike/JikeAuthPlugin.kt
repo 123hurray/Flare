@@ -82,12 +82,10 @@ internal class JikeAuthPlugin(
         if (!isRefreshRequest && accountKey != null && !hasDeviceId) {
             throw LoginExpiredException(accountKey, PlatformType.Jike)
         }
-        if (isRefreshRequest) {
-            refreshTokenFlow?.let { flow ->
-                val token = flow.firstOrNull()
-                if (token != null) {
-                    request.headers.append("x-jike-refresh-token", token)
-                }
+        refreshTokenFlow?.let { flow ->
+            val token = flow.firstOrNull()
+            if (token != null) {
+                request.headers.append("x-jike-refresh-token", token)
             }
         }
         request.headers.appendIfNotPresent("platform", "web")
