@@ -25,6 +25,7 @@ import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
 import dev.dimension.flare.data.network.jike.JikeService
 import dev.dimension.flare.data.network.jike.model.JikeCommentsRequest
+import dev.dimension.flare.data.network.jike.model.JikePostActionRequest
 import dev.dimension.flare.data.network.jike.model.JikeSearchRequest
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.AccountType
@@ -142,7 +143,28 @@ internal class JikeDataSource(
         updater: DatabaseUpdater,
     ) {
         require(event is PostEvent.Jike)
-        // TODO: Implement post event handling
+        when (event) {
+            is PostEvent.Jike.Like -> {
+                // TODO: Implement Jike like/unlike.
+            }
+
+            is PostEvent.Jike.Bookmark -> {
+                val request = JikePostActionRequest(event.postKey.id)
+                if (event.bookmarked) {
+                    if (event.type == "REPOST") {
+                        service.uncollectRepost(request)
+                    } else {
+                        service.uncollectPost(request)
+                    }
+                } else {
+                    if (event.type == "REPOST") {
+                        service.collectRepost(request)
+                    } else {
+                        service.collectPost(request)
+                    }
+                }
+            }
+        }
     }
 
     override fun homeTimeline() =
@@ -346,4 +368,20 @@ internal class JikeDataSource(
             service = service,
             accountKey = accountKey,
         )
+
+    fun bookmarkTimeline() =
+        JikeBookmarkRemoteMediator(
+            service = service,
+            accountKey = accountKey,
+        )
+
+    fun topicTimeline(
+        topicId: String,
+        tabType: String,
+    ) = JikeTopicTimelineRemoteMediator(
+        service = service,
+        accountKey = accountKey,
+        topicId = topicId,
+        tabType = tabType,
+    )
 }

@@ -290,10 +290,15 @@ public sealed class UiTimelineV2 {
 
         @Serializable
         @Immutable
-        public data class SourceChannel(
+        public data class SourceChannel internal constructor(
             val id: String,
             val name: String,
-        )
+            private val clickEvent: ClickEvent = ClickEvent.Noop,
+        ) {
+            val onClicked: ClickContext.() -> Unit by lazy {
+                clickEvent.onClicked
+            }
+        }
 
         @Serializable
         @Immutable

@@ -27,6 +27,8 @@ internal data class JikePost(
     val video: JikeVideo? = null,
     @SerialName("items")
     val items: List<JikeUser> = emptyList(),
+    @SerialName("collected")
+    val collected: Boolean = false,
     @SerialName("likeCount")
     val likeCount: Int = 0,
     @SerialName("commentCount")
@@ -107,6 +109,12 @@ internal data class JikeMediaMetaResponse(
 )
 
 @Serializable
+internal data class JikePostActionResponse(
+    @SerialName("success")
+    val success: Boolean = false,
+)
+
+@Serializable
 internal data class JikeTopic(
     @SerialName("id")
     val id: String = "",
@@ -114,7 +122,21 @@ internal data class JikeTopic(
     val content: String? = null,
     @SerialName("title")
     val title: String = "",
+    @SerialName("tabs")
+    val tabs: List<JikeTopicTab> = emptyList(),
+    @SerialName("briefIntro")
+    val briefIntro: String? = null,
 ) {
     val displayName: String
         get() = content ?: title
 }
+
+@Serializable
+internal data class JikeTopicTab(
+    @SerialName("name")
+    val name: String = "",
+    @SerialName("type")
+    val type: String = "",
+    @SerialName("viewType")
+    val viewType: String? = null,
+)

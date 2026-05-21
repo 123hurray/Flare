@@ -3,6 +3,7 @@ package dev.dimension.flare.data.datasource.jike
 import com.fleeksoft.ksoup.nodes.Element
 import com.fleeksoft.ksoup.nodes.TextNode
 import dev.dimension.flare.data.datasource.microblog.ActionMenu
+import dev.dimension.flare.data.datasource.microblog.PostEvent
 import dev.dimension.flare.data.network.jike.model.JikeComment
 import dev.dimension.flare.data.network.jike.model.JikePost
 import dev.dimension.flare.data.network.jike.model.JikeUser
@@ -34,7 +35,7 @@ internal fun JikeUser.toUiProfile(accountKey: MicroBlogKey): UiProfile {
     val userKey = MicroBlogKey(userId, accountKey.host)
     return UiProfile(
         key = userKey,
-        handle = UiHandle(displayHandle, accountKey.host),
+        handle = UiHandle(displayHandle, "jike"),
         avatar = avatarUrl.orEmpty(),
         nameInternal = screenName.ifEmpty { displayHandle }.toUiPlainText(),
         platformType = PlatformType.Jike,
@@ -79,8 +80,8 @@ internal fun JikePost.toUiTimeline(
                 pictures.mapNotNull { picture ->
                     picture.bestUrl.takeIf { it.isNotBlank() }?.let { url ->
                         UiMedia.Image(
-                            url = url,
-                            previewUrl = picture.thumbnailUrl ?: picture.smallPicUrl ?: url,
+                            url = url.normalizeJikeCdnUrl(),
+                            previewUrl = (picture.thumbnailUrl ?: picture.smallPicUrl ?: url).normalizeJikeCdnUrl(),
                             description = null,
                             height = picture.height.toFloat(),
                             width = picture.width.toFloat(),
@@ -124,6 +125,34 @@ internal fun JikePost.toUiTimeline(
                     ),
                     count = UiNumber(likeCount.toLong()),
                 ),
+                ActionMenu.Group(
+                    displayItem =
+                        ActionMenu.Item(
+                            icon = UiIcon.More,
+                            text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.More),
+                        ),
+                    actions =
+                        persistentListOf(
+                            ActionMenu.jikeBookmark(
+                                statusKey = statusKey,
+                                bookmarked = collected,
+                                type = type,
+                                accountKey = accountKey,
+                            ),
+                            ActionMenu.Item(
+                                icon = UiIcon.Share,
+                                text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Share),
+                                clickEvent =
+                                    ClickEvent.Deeplink(
+                                        DeeplinkRoute.Status.ShareSheet(
+                                            statusKey = statusKey,
+                                            accountType = AccountType.Specific(accountKey),
+                                            shareUrl = shareUrl(),
+                                        ),
+                                    ),
+                            ),
+                        ),
+                ),
             ),
         poll = null,
         statusKey = statusKey,
@@ -138,6 +167,14 @@ internal fun JikePost.toUiTimeline(
                 UiTimelineV2.Post.SourceChannel(
                     id = it.id,
                     name = it.displayName,
+                    clickEvent =
+                        ClickEvent.Deeplink(
+                            DeeplinkRoute.Timeline.JikeTopic(
+                                accountType = AccountType.Specific(accountKey),
+                                topicId = it.id,
+                                title = it.displayName,
+                            ),
+                        ),
                 )
             },
         clickEvent =
@@ -155,7 +192,7 @@ private fun JikeVideo?.toUiMedia(url: String?): UiMedia.Video? {
     val videoUrl = url?.takeIf { it.isNotBlank() } ?: return null
     return UiMedia.Video(
         url = videoUrl,
-        thumbnailUrl = this?.thumbnailUrl.orEmpty(),
+        thumbnailUrl = this?.thumbnailUrl.orEmpty().normalizeJikeCdnUrl(),
         description = null,
         height = 9f,
         width = 16f,
@@ -172,8 +209,8 @@ internal fun JikeComment.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Po
                 .mapNotNull { picture ->
                     picture.bestUrl.takeIf { it.isNotBlank() }?.let { url ->
                         UiMedia.Image(
-                            url = url,
-                            previewUrl = picture.thumbnailUrl ?: picture.smallPicUrl ?: url,
+                            url = url.normalizeJikeCdnUrl(),
+                            previewUrl = (picture.thumbnailUrl ?: picture.smallPicUrl ?: url).normalizeJikeCdnUrl(),
                             description = null,
                             height = picture.height.toFloat(),
                             width = picture.width.toFloat(),
@@ -222,4 +259,55 @@ internal fun JikeComment.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Po
         clickEvent = ClickEvent.Noop,
         accountType = AccountType.Specific(accountKey),
     )
+}
+
+internal fun ActionMenu.Companion.jikeBookmark(
+    statusKey: MicroBlogKey,
+    bookmarked: Boolean,
+    type: String,
+    accountKey: MicroBlogKey,
+): ActionMenu.Item =
+    ActionMenu.Item(
+        updateKey = "jike_bookmark_$statusKey",
+        icon =
+            if (bookmarked) {
+                UiIcon.Unbookmark
+            } else {
+                UiIcon.Bookmark
+            },
+        text =
+            ActionMenu.Item.Text.Localized(
+                if (bookmarked) {
+                    ActionMenu.Item.Text.Localized.Type.Unbookmark
+                } else {
+                    ActionMenu.Item.Text.Localized.Type.Bookmark
+                },
+            ),
+        clickEvent =
+            ClickEvent.event(accountKey) { accountKey ->
+                PostEvent.Jike.Bookmark(
+                    postKey = statusKey,
+                    bookmarked = bookmarked,
+                    type = type,
+                    accountKey = accountKey,
+                )
+            },
+    )
+
+private fun JikePost.shareUrl(): String {
+    val username = user?.username.orEmpty()
+    val typePath =
+        when (type) {
+            "REPOST" -> "repost"
+            else -> "post"
+        }
+    return "https://web.okjike.com/u/$username/$typePath/$id"
+}
+
+private fun String.normalizeJikeCdnUrl(): String {
+    val firstQueryIndex = indexOf('?')
+    if (firstQueryIndex < 0) {
+        return this
+    }
+    return substring(0, firstQueryIndex + 1) + substring(firstQueryIndex + 1).replace("?", "&")
 }

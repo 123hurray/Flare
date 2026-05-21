@@ -21,6 +21,14 @@ public sealed class DeeplinkRoute {
         public data class XQTDeviceFollow(
             val accountType: AccountType,
         ) : Timeline()
+
+        @Serializable
+        public data class JikeTopic(
+            val accountType: AccountType,
+            val topicId: String,
+            val title: String,
+            val tabType: String = "square",
+        ) : Timeline()
     }
 
     @Serializable

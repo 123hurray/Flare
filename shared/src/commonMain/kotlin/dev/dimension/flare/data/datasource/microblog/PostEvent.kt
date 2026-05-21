@@ -19,6 +19,7 @@ import dev.dimension.flare.ui.model.mapper.vvoLikeComment
 import dev.dimension.flare.ui.model.mapper.xqtBookmark
 import dev.dimension.flare.ui.model.mapper.xqtLike
 import dev.dimension.flare.ui.model.mapper.xqtRetweet
+import dev.dimension.flare.data.datasource.jike.jikeBookmark
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.serialization.Serializable
 
@@ -439,6 +440,23 @@ internal sealed interface PostEvent {
             val count: Long = 0,
             val accountKey: MicroBlogKey,
         ) : Jike
+
+        @Serializable
+        data class Bookmark(
+            override val postKey: MicroBlogKey,
+            val bookmarked: Boolean,
+            val type: String,
+            val accountKey: MicroBlogKey,
+        ) : Jike,
+            UpdatePostActionMenuEvent {
+            override fun nextActionMenu(): ActionMenu.Item =
+                ActionMenu.jikeBookmark(
+                    statusKey = postKey,
+                    bookmarked = !bookmarked,
+                    type = type,
+                    accountKey = accountKey,
+                )
+        }
     }
 }
 

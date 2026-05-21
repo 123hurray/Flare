@@ -29,7 +29,9 @@ import dev.dimension.flare.ui.presenter.home.rss.RssTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.rss.SubscriptionTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.vvo.VVOFavouriteTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.vvo.VVOLikeTimelinePresenter
+import dev.dimension.flare.ui.presenter.home.jike.JikeBookmarkTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.jike.JikeFeaturedTimelinePresenter
+import dev.dimension.flare.ui.presenter.home.jike.JikeTopicTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.xqt.XQTBookmarkTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.xqt.XQTDeviceFollowTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.xqt.XQTFeaturedTimelinePresenter
@@ -724,6 +726,34 @@ public object Jike {
         override val key: String = "jike_featured_$account"
 
         override fun createPresenter(): TimelinePresenter = JikeFeaturedTimelinePresenter(account)
+
+        override fun update(metaData: TabMetaData): TabItem = copy(metaData = metaData)
+    }
+
+    @Immutable
+    @Serializable
+    public data class BookmarkTimelineTabItem(
+        override val account: AccountType,
+        override val metaData: TabMetaData,
+    ) : TimelineTabItem() {
+        override val key: String = "jike_bookmark_$account"
+
+        override fun createPresenter(): TimelinePresenter = JikeBookmarkTimelinePresenter(account)
+
+        override fun update(metaData: TabMetaData): TabItem = copy(metaData = metaData)
+    }
+
+    @Immutable
+    @Serializable
+    public data class TopicTimelineTabItem(
+        override val account: AccountType,
+        val topicId: String,
+        val tabType: String = "square",
+        override val metaData: TabMetaData,
+    ) : TimelineTabItem() {
+        override val key: String = "jike_topic_${topicId}_${tabType}_$account"
+
+        override fun createPresenter(): TimelinePresenter = JikeTopicTimelinePresenter(account, topicId, tabType)
 
         override fun update(metaData: TabMetaData): TabItem = copy(metaData = metaData)
     }

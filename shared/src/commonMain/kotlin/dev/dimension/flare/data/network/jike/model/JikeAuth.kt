@@ -63,6 +63,22 @@ internal data class JikeSearchRequest(
     val loadMoreKey: JsonObject? = null,
 )
 
+@Serializable
+internal data class JikeTopicTimelineRequest(
+    @SerialName("topicId")
+    val topicId: String,
+    @SerialName("limit")
+    val limit: Int = 20,
+    @SerialName("loadMoreKey")
+    val loadMoreKey: JsonObject? = null,
+)
+
+@Serializable
+internal data class JikePostActionRequest(
+    @SerialName("id")
+    val id: String,
+)
+
 /**
  * Request body for sending SMS verification code.
  */

@@ -54,6 +54,13 @@ internal data object JikePlatformSpec : PlatformSpec {
                     icon = IconType.Mixed(UiIcon.Featured, accountKey),
                 ),
             ),
+            Jike.BookmarkTimelineTabItem(
+                AccountType.Specific(accountKey),
+                TabMetaData(
+                    title = TitleType.Localized(TitleType.Localized.LocalizedKey.Bookmark),
+                    icon = IconType.Mixed(UiIcon.Bookmark, accountKey),
+                ),
+            ),
         )
 
     override suspend fun instanceMetadata(host: String): UiInstanceMetadata =

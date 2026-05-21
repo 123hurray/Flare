@@ -231,13 +231,11 @@ public fun CommonStatusComponent(
                                 tint = PlatformTheme.colorScheme.caption,
                             )
                         }
-                        if (!isDetail) {
-                            DateTimeText(
-                                item.createdAt,
-                                style = PlatformTheme.typography.caption,
-                                color = PlatformTheme.colorScheme.caption,
-                            )
-                        }
+                        DateTimeText(
+                            item.createdAt,
+                            style = PlatformTheme.typography.caption,
+                            color = PlatformTheme.colorScheme.caption,
+                        )
                     }
                 }
                 if (showAsFullWidth) {
@@ -303,6 +301,7 @@ public fun CommonStatusComponent(
                         poll = item.poll,
                         maxLines = Int.MAX_VALUE,
                         showExpandButton = showExpandButton,
+                        onExpandClick = null,
                     )
                 }
             } else {
@@ -318,6 +317,15 @@ public fun CommonStatusComponent(
                                 appearanceSettings.lineLimit
                             },
                     showExpandButton = showExpandButton,
+                    onExpandClick = {
+                        item.onClicked.invoke(
+                            ClickContext(
+                                launcher = { url ->
+                                    uriHandler.openUri(url)
+                                },
+                            ),
+                        )
+                    },
                 )
             }
 
@@ -573,6 +581,18 @@ private fun StatusReactionComponent(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier =
+                    Modifier
+                        .pointerHoverIcon(PointerIcon.Hand)
+                        .clickable {
+                            channel.onClicked.invoke(
+                                ClickContext(
+                                    launcher = { url ->
+                                        uriHandler.openUri(url)
+                                    },
+                                ),
+                            )
+                        },
             ) {
                 FAIcon(
                     imageVector = FontAwesomeIcons.Solid.Tv,
@@ -1091,6 +1111,7 @@ private fun StatusContentComponent(
     poll: UiPoll?,
     maxLines: Int,
     showExpandButton: Boolean,
+    onExpandClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     var expanded by rememberSaveable {
@@ -1154,7 +1175,9 @@ private fun StatusContentComponent(
                     if (showSoftExpand) {
                         PlatformTextButton(
                             onClick = {
-                                expanded = true
+                                onExpandClick?.invoke() ?: run {
+                                    expanded = true
+                                }
                             },
                         ) {
                             PlatformText(

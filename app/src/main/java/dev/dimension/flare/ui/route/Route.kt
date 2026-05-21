@@ -2,11 +2,16 @@ package dev.dimension.flare.ui.route
 
 import androidx.compose.runtime.Immutable
 import androidx.navigation3.runtime.NavKey
+import dev.dimension.flare.data.model.IconType
+import dev.dimension.flare.data.model.Jike
 import dev.dimension.flare.data.model.MixedTimelineTabItem
+import dev.dimension.flare.data.model.TabMetaData
 import dev.dimension.flare.data.model.TimelineTabItem
+import dev.dimension.flare.data.model.TitleType
 import dev.dimension.flare.data.model.XQT
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.ui.model.UiIcon
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.serialization.Serializable
@@ -520,6 +525,23 @@ internal sealed interface Route : NavKey {
                         tabItem =
                             XQT.DeviceFollowTimelineTabItem(
                                 account = deeplinkRoute.accountType,
+                            ),
+                    )
+                }
+
+                is DeeplinkRoute.Timeline.JikeTopic -> {
+                    Route.Timeline(
+                        accountType = deeplinkRoute.accountType,
+                        tabItem =
+                            Jike.TopicTimelineTabItem(
+                                account = deeplinkRoute.accountType,
+                                topicId = deeplinkRoute.topicId,
+                                tabType = deeplinkRoute.tabType,
+                                metaData =
+                                    TabMetaData(
+                                        title = TitleType.Text(deeplinkRoute.title),
+                                        icon = IconType.Material(UiIcon.Channel),
+                                    ),
                             ),
                     )
                 }

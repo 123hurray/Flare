@@ -3,15 +3,20 @@ package dev.dimension.flare.data.network.jike.api
 import de.jensklingenberg.ktorfit.http.Body
 import de.jensklingenberg.ktorfit.http.GET
 import de.jensklingenberg.ktorfit.http.Header
+import de.jensklingenberg.ktorfit.http.Path
 import de.jensklingenberg.ktorfit.http.POST
 import de.jensklingenberg.ktorfit.http.Query
 import dev.dimension.flare.data.network.jike.model.JikeComment
 import dev.dimension.flare.data.network.jike.model.JikeCommentsRequest
 import dev.dimension.flare.data.network.jike.model.JikeMediaMetaResponse
 import dev.dimension.flare.data.network.jike.model.JikePost
+import dev.dimension.flare.data.network.jike.model.JikePostActionRequest
+import dev.dimension.flare.data.network.jike.model.JikePostActionResponse
 import dev.dimension.flare.data.network.jike.model.JikeResponse
 import dev.dimension.flare.data.network.jike.model.JikeSearchRequest
 import dev.dimension.flare.data.network.jike.model.JikeTimelineRequest
+import dev.dimension.flare.data.network.jike.model.JikeTopic
+import dev.dimension.flare.data.network.jike.model.JikeTopicTimelineRequest
 import dev.dimension.flare.data.network.jike.model.JikeUserTimelineRequest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -99,4 +104,46 @@ internal interface JikePostApi {
         @Body request: JikeSearchRequest,
         @Header("Content-Type") contentType: String = "application/json",
     ): JikeResponse<List<JikePost>>
+
+    @POST("1.0/collections/list")
+    suspend fun getCollections(
+        @Body request: JikeTimelineRequest,
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikeResponse<List<JikePost>>
+
+    @GET("1.0/topics/getDetail")
+    suspend fun getTopicDetail(
+        @Query("id") topicId: String,
+    ): JikeResponse<JikeTopic>
+
+    @POST("1.0/topics/tabs/{tab}/feed")
+    suspend fun getTopicFeed(
+        @Path("tab") tab: String,
+        @Body request: JikeTopicTimelineRequest,
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikeResponse<List<JikePost>>
+
+    @POST("1.0/originalPosts/collect")
+    suspend fun collectPost(
+        @Body request: JikePostActionRequest,
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikePostActionResponse
+
+    @POST("1.0/originalPosts/uncollect")
+    suspend fun uncollectPost(
+        @Body request: JikePostActionRequest,
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikePostActionResponse
+
+    @POST("1.0/reposts/collect")
+    suspend fun collectRepost(
+        @Body request: JikePostActionRequest,
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikePostActionResponse
+
+    @POST("1.0/reposts/uncollect")
+    suspend fun uncollectRepost(
+        @Body request: JikePostActionRequest,
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikePostActionResponse
 }
