@@ -16,10 +16,12 @@ private fun config(
     url: String = baseUrl,
     accessTokenFlow: Flow<String>? = null,
     refreshTokenFlow: Flow<String>? = null,
+    deviceIdFlow: Flow<String?>? = null,
 ) = ktorfit(url) {
     install(JikeAuthPlugin) {
         this.accessTokenFlow = accessTokenFlow
         this.refreshTokenFlow = refreshTokenFlow
+        this.deviceIdFlow = deviceIdFlow
     }
 }
 
@@ -32,15 +34,19 @@ private fun config(
 internal class JikeService(
     accessTokenFlow: Flow<String>? = null,
     refreshTokenFlow: Flow<String>? = null,
+    deviceIdFlow: Flow<String?>? = null,
 ) : JikeAuthApi by config(
     accessTokenFlow = accessTokenFlow,
     refreshTokenFlow = refreshTokenFlow,
+    deviceIdFlow = deviceIdFlow,
 ).createJikeAuthApi(),
     JikeUserApi by config(
         accessTokenFlow = accessTokenFlow,
         refreshTokenFlow = refreshTokenFlow,
+        deviceIdFlow = deviceIdFlow,
     ).createJikeUserApi(),
     JikePostApi by config(
         accessTokenFlow = accessTokenFlow,
         refreshTokenFlow = refreshTokenFlow,
+        deviceIdFlow = deviceIdFlow,
     ).createJikePostApi()

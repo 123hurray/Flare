@@ -235,6 +235,7 @@ public sealed class UiAccount {
         data class Credential(
             val accessToken: String,
             val refreshToken: String,
+            val deviceId: String? = null,
         ) : UiAccount.Credential
     }
 

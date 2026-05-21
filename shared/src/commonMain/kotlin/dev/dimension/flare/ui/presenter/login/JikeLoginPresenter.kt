@@ -37,6 +37,7 @@ public interface JikeLoginState {
     public fun onTokensReceived(
         accessToken: String,
         refreshToken: String,
+        deviceId: String?,
     )
 }
 
@@ -62,6 +63,7 @@ public class JikeLoginPresenter(
             override fun onTokensReceived(
                 accessToken: String,
                 refreshToken: String,
+                deviceId: String?,
             ) {
                 scope.launch {
                     loading = true
@@ -70,6 +72,7 @@ public class JikeLoginPresenter(
                         val service = JikeService(
                             accessTokenFlow = flowOf(accessToken),
                             refreshTokenFlow = flowOf(refreshToken),
+                            deviceIdFlow = flowOf(deviceId),
                         )
                         val profile = service.getSelfProfile()
                         val user =
@@ -92,6 +95,7 @@ public class JikeLoginPresenter(
                                 UiAccount.Jike.Credential(
                                     accessToken = accessToken,
                                     refreshToken = refreshToken,
+                                    deviceId = deviceId,
                                 ),
                         )
 

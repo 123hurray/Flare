@@ -147,10 +147,10 @@ internal fun JikeLoginScreen(toHome: () -> Unit) {
             }
         } else {
             // Show WebView for login
-            JikeLoginWebView(
-                modifier = Modifier.padding(it),
-                onTokensFound = { accessToken, refreshToken ->
-                    state.onTokensReceived(accessToken, refreshToken)
+                JikeLoginWebView(
+                    modifier = Modifier.padding(it),
+                onTokensFound = { accessToken, refreshToken, deviceId ->
+                    state.onTokensReceived(accessToken, refreshToken, deviceId)
                 },
             )
         }
@@ -160,7 +160,7 @@ internal fun JikeLoginScreen(toHome: () -> Unit) {
 @Composable
 private fun JikeLoginWebView(
     modifier: Modifier,
-    onTokensFound: (String, String) -> Unit,
+    onTokensFound: (String, String, String?) -> Unit,
 ) {
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
@@ -176,7 +176,8 @@ private fun JikeLoginWebView(
                             (function() {
                                 var a = localStorage.getItem('JK_ACCESS_TOKEN');
                                 var r = localStorage.getItem('JK_REFRESH_TOKEN') || localStorage.getItem('REFRESH_TOKEN');
-                                if (a && r) { return '|||' + a + '|||' + r; }
+                                var d = localStorage.getItem('JK_DEVICE_ID');
+                                if (a && r) { return '|||' + a + '|||' + r + '|||' + (d || ''); }
                                 return '';
                             })()
                             """.trimIndent(),
@@ -195,9 +196,18 @@ private fun JikeLoginWebView(
                         val idx = payload.indexOf("|||")
                         if (idx > 0) {
                             val accessToken = payload.substring(0, idx)
-                            val refreshToken = payload.substring(idx + 3)
+                            val rest = payload.substring(idx + 3)
+                            val deviceIdx = rest.indexOf("|||")
+                            val refreshToken =
+                                if (deviceIdx >= 0) rest.substring(0, deviceIdx) else rest
+                            val deviceId =
+                                if (deviceIdx >= 0) {
+                                    rest.substring(deviceIdx + 3).takeIf { it.isNotEmpty() }
+                                } else {
+                                    null
+                                }
                             if (accessToken.isNotEmpty() && refreshToken.isNotEmpty()) {
-                                onTokensFound(accessToken, refreshToken)
+                                onTokensFound(accessToken, refreshToken, deviceId)
                                 break
                             }
                         }

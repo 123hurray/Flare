@@ -62,6 +62,10 @@ internal class JikeDataSource(
                 accountRepository
                     .credentialFlow<UiAccount.Jike.Credential>(accountKey)
                     .map { it.refreshToken },
+            deviceIdFlow =
+                accountRepository
+                    .credentialFlow<UiAccount.Jike.Credential>(accountKey)
+                    .map { it.deviceId },
         )
     }
 
