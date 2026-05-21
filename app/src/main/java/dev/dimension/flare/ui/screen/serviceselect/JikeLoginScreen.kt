@@ -1,5 +1,6 @@
 package dev.dimension.flare.ui.screen.serviceselect
 
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
@@ -28,6 +29,7 @@ import dev.dimension.flare.ui.presenter.login.JikeLoginPresenter
 import dev.dimension.flare.model.jikeWebHost
 import kotlinx.coroutines.delay
 import moe.tlaster.precompose.molecule.producePresenter
+import org.json.JSONObject
 import kotlin.time.Duration.Companion.seconds
 
 private const val JIKE_LOGIN_USER_AGENT =
@@ -160,7 +162,7 @@ internal fun JikeLoginScreen(toHome: () -> Unit) {
 @Composable
 private fun JikeLoginWebView(
     modifier: Modifier,
-    onTokensFound: (String, String, String) -> Unit,
+    onTokensFound: (String, String, String?) -> Unit,
 ) {
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
@@ -177,8 +179,20 @@ private fun JikeLoginWebView(
                                 var a = localStorage.getItem('JK_ACCESS_TOKEN');
                                 var r = localStorage.getItem('JK_REFRESH_TOKEN') || localStorage.getItem('REFRESH_TOKEN');
                                 var d = localStorage.getItem('JK_DEVICE_ID');
-                                if (a && r && d) { return '|||' + a + '|||' + r + '|||' + d; }
-                                return '';
+                                var keys = [];
+                                for (var i = 0; i < localStorage.length; i++) {
+                                  keys.push(localStorage.key(i));
+                                }
+                                return JSON.stringify({
+                                  href: location.href,
+                                  keys: keys.filter(function(k) {
+                                    return /TOKEN|DEVICE|JK_/i.test(k);
+                                  }),
+                                  accessLength: a ? a.length : 0,
+                                  refreshLength: r ? r.length : 0,
+                                  deviceLength: d ? d.length : 0,
+                                  payload: (a && r) ? ('|||' + a + '|||' + r + '|||' + (d || '')) : ''
+                                });
                             })()
                             """.trimIndent(),
                         ) { value ->
@@ -187,11 +201,21 @@ private fun JikeLoginWebView(
                     }
                 }
                 if (!result.isNullOrEmpty() && result != "null") {
-                    // Result is a JSON string like "\"|||<access>|||<refresh>|||<device>\""
-                    val unquoted = result.removePrefix("\"").removeSuffix("\"")
-                        .replace("\\\"", "\"")
-                        .replace("\\n", "\n")
+                    val jsonText = result.decodeJavascriptStringResult()
+                    val json = runCatching { JSONObject(jsonText) }.getOrNull()
+                    if (json != null) {
+                        Log.i(
+                            "JikeLogin",
+                            "poll href=${json.optString("href")} " +
+                                "keys=${json.optJSONArray("keys")} " +
+                                "accessLength=${json.optInt("accessLength")} " +
+                                "refreshLength=${json.optInt("refreshLength")} " +
+                                "deviceLength=${json.optInt("deviceLength")}",
+                        )
+                    }
+                    val unquoted = json?.optString("payload").orEmpty()
                     if (unquoted.startsWith("|||")) {
+                        // Payload is "|||<access>|||<refresh>|||<device>".
                         val payload = unquoted.substring(3)
                         val idx = payload.indexOf("|||")
                         if (idx > 0) {
@@ -206,11 +230,13 @@ private fun JikeLoginWebView(
                                 } else {
                                     null
                                 }
-                            if (
-                                accessToken.isNotEmpty() &&
-                                refreshToken.isNotEmpty() &&
-                                deviceId != null
-                            ) {
+                            if (accessToken.isNotEmpty() && refreshToken.isNotEmpty()) {
+                                Log.i(
+                                    "JikeLogin",
+                                    "credentials ready access=${accessToken.redactedLengthAndHash()} " +
+                                        "refresh=${refreshToken.redactedLengthAndHash()} " +
+                                        "device=${deviceId?.redactedDeviceId() ?: "missing"}",
+                                )
                                 onTokensFound(accessToken, refreshToken, deviceId)
                                 break
                             }
@@ -270,6 +296,17 @@ private fun JikeLoginWebView(
         },
     )
 }
+
+private fun String.decodeJavascriptStringResult(): String =
+    removePrefix("\"")
+        .removeSuffix("\"")
+        .replace("\\\\", "\\")
+        .replace("\\\"", "\"")
+        .replace("\\n", "\n")
+
+private fun String.redactedLengthAndHash(): String = "len=$length,fp=${hashCode().toUInt().toString(16)}"
+
+private fun String.redactedDeviceId(): String = "len=$length,tail=${takeLast(4)}"
 
 @Composable
 private fun presenter(toHome: () -> Unit) =

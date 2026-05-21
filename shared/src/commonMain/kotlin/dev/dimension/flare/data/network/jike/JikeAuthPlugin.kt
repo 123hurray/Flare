@@ -1,6 +1,5 @@
 package dev.dimension.flare.data.network.jike
 
-import dev.dimension.flare.common.BuildConfig
 import dev.dimension.flare.data.repository.DebugRepository
 import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.model.MicroBlogKey
@@ -81,25 +80,21 @@ internal class JikeAuthPlugin(
             }
         }
         var deviceIdLog = "missing"
-        var hasDeviceId = false
         deviceIdFlow?.let { flow ->
             val deviceId = flow.firstOrNull()
             if (!deviceId.isNullOrBlank()) {
                 request.headers.append("x-jike-device-id", deviceId)
                 deviceIdLog = deviceId.redactedDeviceIdLog()
-                hasDeviceId = true
             }
         }
-        if (!isRefreshRequest && accountKey != null && !hasDeviceId) {
-            logJikeAuth("missing device id path=${request.url.encodedPath}")
-            throw LoginExpiredException(accountKey, PlatformType.Jike)
-        }
         var refreshTokenLog = "missing"
-        refreshTokenFlow?.let { flow ->
-            val token = flow.firstOrNull()
-            if (token != null) {
-                request.headers.append("x-jike-refresh-token", token)
-                refreshTokenLog = token.redactedTokenLog()
+        if (isRefreshRequest) {
+            refreshTokenFlow?.let { flow ->
+                val token = flow.firstOrNull()
+                if (token != null) {
+                    request.headers.append("x-jike-refresh-token", token)
+                    refreshTokenLog = token.redactedTokenLog()
+                }
             }
         }
         request.headers.appendIfNotPresent("platform", "web")
@@ -132,7 +127,6 @@ private fun String.redactedDeviceIdLog(): String {
 }
 
 private fun logJikeAuth(message: String) {
-    if (!BuildConfig.debug) return
     val line = "JikeAuth: $message"
     println(line)
     DebugRepository.log(line)

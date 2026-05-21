@@ -25,10 +25,8 @@ import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
 import dev.dimension.flare.data.network.jike.JikeService
 import dev.dimension.flare.data.repository.AccountRepository
-import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
-import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.ui.model.UiAccount
 import dev.dimension.flare.ui.model.UiHashtag
 import dev.dimension.flare.ui.model.UiProfile
@@ -66,9 +64,7 @@ internal class JikeDataSource(
             deviceIdFlow =
                 accountRepository
                     .credentialFlow<UiAccount.Jike.Credential>(accountKey)
-                    .map {
-                        it.deviceId ?: throw LoginExpiredException(accountKey, PlatformType.Jike)
-                    },
+                    .map { it.deviceId },
         )
     }
 

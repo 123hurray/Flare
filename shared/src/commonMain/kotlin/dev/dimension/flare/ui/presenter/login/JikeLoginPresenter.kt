@@ -38,7 +38,7 @@ public interface JikeLoginState {
     public fun onTokensReceived(
         accessToken: String,
         refreshToken: String,
-        deviceId: String,
+        deviceId: String?,
     )
 }
 
@@ -64,20 +64,17 @@ public class JikeLoginPresenter(
             override fun onTokensReceived(
                 accessToken: String,
                 refreshToken: String,
-                deviceId: String,
+                deviceId: String?,
             ) {
                 scope.launch {
                     loading = true
                     error = null
                     runCatching {
-                        val requiredDeviceId =
-                            requireNotNull(deviceId.takeIf { it.isNotBlank() }) {
-                                "Jike device id is missing"
-                            }
+                        val optionalDeviceId = deviceId?.takeIf { it.isNotBlank() }
                         val service = JikeService(
                             accessTokenFlow = flowOf(accessToken),
                             refreshTokenFlow = flowOf(refreshToken),
-                            deviceIdFlow = flowOf(requiredDeviceId),
+                            deviceIdFlow = flowOf(optionalDeviceId),
                         )
                         val profile = service.getSelfProfile()
                         val user =
@@ -95,7 +92,7 @@ public class JikeLoginPresenter(
                             accountKey = accountKey,
                             accessTokenFlow = flowOf(accessToken),
                             refreshTokenFlow = flowOf(refreshToken),
-                            deviceIdFlow = flowOf(requiredDeviceId),
+                            deviceIdFlow = flowOf(optionalDeviceId),
                         ).getHomeTimeline(JikeTimelineRequest(limit = 1))
 
                         accountRepository.addAccount(
@@ -107,7 +104,7 @@ public class JikeLoginPresenter(
                                 UiAccount.Jike.Credential(
                                     accessToken = accessToken,
                                     refreshToken = refreshToken,
-                                    deviceId = requiredDeviceId,
+                                    deviceId = optionalDeviceId,
                                 ),
                         )
 
