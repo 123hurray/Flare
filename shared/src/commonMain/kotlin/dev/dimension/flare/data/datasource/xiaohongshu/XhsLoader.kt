@@ -19,11 +19,14 @@ internal class XhsLoader(
     override suspend fun userByHandleAndHost(uiHandle: UiHandle): UiProfile = userById(uiHandle.normalizedRaw)
 
     override suspend fun userById(id: String): UiProfile {
-        if (id == accountKey.id) {
-            return requireNotNull(service.me().data) { "Xiaohongshu profile is empty" }.toUiProfile(accountKey)
-        }
-        return requireNotNull(service.userInfo(id).data) { "Xiaohongshu profile is empty" }
-            .toUiProfile(accountKey, requestedUserId = id)
+        val profile =
+            if (id == accountKey.id) {
+                requireNotNull(service.me().data) { "Xiaohongshu profile is empty" }.toUiProfile(accountKey)
+            } else {
+                requireNotNull(service.userInfo(id).data) { "Xiaohongshu profile is empty" }
+                    .toUiProfile(accountKey, requestedUserId = id)
+            }
+        return profile.withUserPostedCountFallback(id)
     }
 
     override suspend fun relation(userKey: MicroBlogKey): UiRelation {
@@ -49,6 +52,41 @@ internal class XhsLoader(
     override suspend fun mute(userKey: MicroBlogKey) {}
 
     override suspend fun unmute(userKey: MicroBlogKey) {}
+
+    private suspend fun UiProfile.withUserPostedCountFallback(userId: String): UiProfile {
+        if (matrices.statusesCount > 0L) return this
+        val posted = runCatching { service.userPosted(userId).data }.getOrNull() ?: return this
+        val count =
+            firstPositiveCount(
+                posted.total.toXhsCount(),
+                posted.totalCount.toXhsCount(),
+                posted.noteCount.toXhsCount(),
+                posted.notesCount.toXhsCount(),
+                posted.notes.size.toLong(),
+            )
+        if (count <= 0L) return this
+        return copy(
+            matrices =
+                matrices.copy(
+                    statusesCount = count,
+                ),
+        )
+    }
 }
 
 private val xhsFollowingStatuses = setOf("follows", "followed", "both", "same")
+
+private fun firstPositiveCount(vararg values: Long): Long =
+    values.firstOrNull { it > 0L } ?: 0L
+
+private fun String?.toXhsCount(): Long {
+    val raw = this?.trim()?.takeIf { it.isNotBlank() } ?: return 0L
+    val normalized = raw.replace(",", "")
+    if (normalized.endsWith("万+")) {
+        return (normalized.removeSuffix("万+").toDoubleOrNull() ?: return 0L).times(10_000).toLong()
+    }
+    if (normalized.endsWith("万")) {
+        return (normalized.removeSuffix("万").toDoubleOrNull() ?: return 0L).times(10_000).toLong()
+    }
+    return normalized.filter { it.isDigit() }.toLongOrNull() ?: 0L
+}

@@ -117,6 +117,31 @@ internal class XhsService(
         }
     }
 
+    suspend fun subComments(
+        noteId: String,
+        rootCommentId: String,
+        cursor: String = "",
+        num: Int = 30,
+    ): XhsCommentPageResponse {
+        val path =
+            buildPathWithQuery(
+                "/api/sns/web/v2/comment/sub/page",
+                listOf(
+                    "note_id" to noteId,
+                    "root_comment_id" to rootCommentId,
+                    "num" to num.toString(),
+                    "cursor" to cursor,
+                ),
+            )
+        requireVerifiedMainApiSigning(path)
+        return getApi(
+            path = path,
+            decode = { JSON.decodeFromString<XhsCommentPageResponse>(it) },
+        ).also { response ->
+            XhsErrorMapper.map(accountKey, response.code, response.msg)?.let { throw it }
+        }
+    }
+
     suspend fun userInfo(
         userId: String,
         mapLoginExpired: Boolean = true,
@@ -124,7 +149,7 @@ internal class XhsService(
         val path =
             buildPathWithQuery(
                 "/api/sns/web/v1/user/otherinfo",
-                listOf("targetUserId" to userId),
+                listOf("target_user_id" to userId),
             )
         return getApi(
             path = path,
@@ -346,7 +371,7 @@ internal class XhsService(
                 path = path,
                 body =
                     buildJsonObject {
-                        put("targetUserId", userId)
+                        put("target_user_id", userId)
                     }.toString(),
                 decode = { JSON.decodeFromString<XhsFollowResponse>(it) },
                 mapLoginExpired = false,

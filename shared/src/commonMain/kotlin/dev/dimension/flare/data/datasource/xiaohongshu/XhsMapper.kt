@@ -410,6 +410,12 @@ internal fun XhsComment.toUiTimeline(
             }
             append(content)
         }
+    val detailStatusKey =
+        if (subCommentCount.toCount() > 0L) {
+            statusKey
+        } else {
+            MicroBlogKey(noteId, accountKey.host)
+        }
     return UiTimelineV2.Post(
         platformType = PlatformType.Xiaohongshu,
         images = media().toPersistentList(),
@@ -441,12 +447,15 @@ internal fun XhsComment.toUiTimeline(
             ClickEvent.Deeplink(
                 DeeplinkRoute.Status.Detail(
                     accountType = AccountType.Specific(accountKey),
-                    statusKey = MicroBlogKey(noteId, accountKey.host),
+                    statusKey = detailStatusKey,
                 ),
             ),
         accountType = AccountType.Specific(accountKey),
     )
 }
+
+internal fun XhsComment.flattenWithInlineSubComments(): List<XhsComment> =
+    listOf(this) + subComments
 
 private fun XhsUser.toUiProfile(accountKey: MicroBlogKey): UiProfile {
     val name = displayName()

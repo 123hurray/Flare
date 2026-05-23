@@ -91,6 +91,14 @@ internal class XiaohongshuDataSource(
                 pageSize: Int,
                 request: PagingRequest,
             ): PagingResult<UiTimelineV2> {
+                statusKey.id.xhsCommentTarget()?.let { target ->
+                    return loadCommentContext(
+                        noteId = target.noteId,
+                        rootCommentId = target.commentId,
+                        pageSize = pageSize,
+                        request = request,
+                    )
+                }
                 if (request is PagingRequest.Prepend) {
                     return PagingResult(endOfPaginationReached = true)
                 }
@@ -108,7 +116,12 @@ internal class XiaohongshuDataSource(
                         }?.data
                     return PagingResult(
                         endOfPaginationReached = comments?.hasMore != true || comments.cursor.isNullOrBlank(),
-                        data = comments?.comments.orEmpty().map { it.toUiTimeline(accountKey, statusKey.id) },
+                        data =
+                            comments
+                                ?.comments
+                                .orEmpty()
+                                .flatMap { it.flattenWithInlineSubComments() }
+                                .map { it.toUiTimeline(accountKey, statusKey.id) },
                         nextKey = comments?.cursor,
                     )
                 }
@@ -123,7 +136,12 @@ internal class XiaohongshuDataSource(
                             )
                         }.getOrNull()
                     }?.data
-                val renderedComments = comments?.comments.orEmpty().map { it.toUiTimeline(accountKey, statusKey.id) }
+                val renderedComments =
+                    comments
+                        ?.comments
+                        .orEmpty()
+                        .flatMap { it.flattenWithInlineSubComments() }
+                        .map { it.toUiTimeline(accountKey, statusKey.id) }
                 return PagingResult(
                     endOfPaginationReached = comments?.hasMore != true || comments.cursor.isNullOrBlank(),
                     data = listOfNotNull(post) + renderedComments,
@@ -131,6 +149,60 @@ internal class XiaohongshuDataSource(
                 )
             }
         }
+
+    private suspend fun loadCommentContext(
+        noteId: String,
+        rootCommentId: String,
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val commentContext = XhsNoteContextCache.get(noteId)
+            ?: return PagingResult(endOfPaginationReached = true)
+        if (request is PagingRequest.Append) {
+            val page =
+                service
+                    .subComments(
+                        noteId = noteId,
+                        rootCommentId = rootCommentId,
+                        cursor = request.nextKey,
+                        num = pageSize.coerceIn(1, 30),
+                    ).data
+            return PagingResult(
+                endOfPaginationReached = page?.hasMore != true || page.cursor.isNullOrBlank(),
+                data = page?.comments.orEmpty().map { it.toUiTimeline(accountKey, noteId) },
+                nextKey = page?.cursor,
+            )
+        }
+        val rootComment =
+            runCatching {
+                service
+                    .comments(
+                        noteId = noteId,
+                        xsecToken = commentContext.xsecToken,
+                        topCommentId = rootCommentId,
+                    ).data
+                    ?.comments
+                    .orEmpty()
+                    .firstOrNull { it.commentIdentity() == rootCommentId }
+            }.getOrNull()
+        val replies =
+            service
+                .subComments(
+                    noteId = noteId,
+                    rootCommentId = rootCommentId,
+                    num = pageSize.coerceIn(1, 30),
+                ).data
+        return PagingResult(
+            endOfPaginationReached = replies?.hasMore != true || replies.cursor.isNullOrBlank(),
+            data =
+                listOfNotNull(rootComment?.toUiTimeline(accountKey, noteId)) +
+                    replies?.comments.orEmpty().map { it.toUiTimeline(accountKey, noteId) },
+            nextKey = replies?.cursor,
+        )
+    }
 
     private suspend fun loadPost(statusKey: MicroBlogKey): UiTimelineV2.Post? {
         val cached = XhsNoteContextCache.get(statusKey.id)
@@ -310,3 +382,20 @@ private fun emptyProfileLoader(): RemoteLoader<UiProfile> =
             request: PagingRequest,
         ): PagingResult<UiProfile> = PagingResult(endOfPaginationReached = true)
     }
+
+private data class XhsCommentTarget(
+    val noteId: String,
+    val commentId: String,
+)
+
+private fun String.xhsCommentTarget(): XhsCommentTarget? {
+    val marker = ":comment:"
+    val index = indexOf(marker)
+    if (index <= 0) return null
+    val noteId = substring(0, index).takeIf { it.isNotBlank() } ?: return null
+    val commentId = substring(index + marker.length).takeIf { it.isNotBlank() } ?: return null
+    return XhsCommentTarget(noteId, commentId)
+}
+
+private fun dev.dimension.flare.data.network.xiaohongshu.model.XhsComment.commentIdentity(): String =
+    commentId?.takeIf { it.isNotBlank() } ?: id

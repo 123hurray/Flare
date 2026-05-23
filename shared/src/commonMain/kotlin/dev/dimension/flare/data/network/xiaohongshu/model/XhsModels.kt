@@ -533,6 +533,18 @@ internal data class XhsUserPostedData(
     val cursor: String? = null,
     @SerialName("has_more")
     val hasMore: Boolean = false,
+    @SerialName("total")
+    @Serializable(with = XhsFlexibleNullableStringSerializer::class)
+    val total: String? = null,
+    @SerialName("total_count")
+    @Serializable(with = XhsFlexibleNullableStringSerializer::class)
+    val totalCount: String? = null,
+    @SerialName("note_count")
+    @Serializable(with = XhsFlexibleNullableStringSerializer::class)
+    val noteCount: String? = null,
+    @SerialName("notes_count")
+    @Serializable(with = XhsFlexibleNullableStringSerializer::class)
+    val notesCount: String? = null,
 )
 
 @Serializable
