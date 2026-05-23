@@ -5,10 +5,15 @@ import dev.dimension.flare.data.datasource.microblog.AuthenticatedMicroblogDataS
 import dev.dimension.flare.data.datasource.microblog.ComposeConfig
 import dev.dimension.flare.data.datasource.microblog.ComposeData
 import dev.dimension.flare.data.datasource.microblog.ComposeType
+import dev.dimension.flare.data.datasource.microblog.DatabaseUpdater
 import dev.dimension.flare.data.datasource.microblog.NotificationFilter
+import dev.dimension.flare.data.datasource.microblog.PostEvent
 import dev.dimension.flare.data.datasource.microblog.ProfileTab
+import dev.dimension.flare.data.datasource.microblog.datasource.PostDataSource
 import dev.dimension.flare.data.datasource.microblog.datasource.RelationDataSource
 import dev.dimension.flare.data.datasource.microblog.datasource.UserDataSource
+import dev.dimension.flare.data.datasource.microblog.handler.PostEventHandler
+import dev.dimension.flare.data.datasource.microblog.handler.PostHandler
 import dev.dimension.flare.data.datasource.microblog.handler.RelationHandler
 import dev.dimension.flare.data.datasource.microblog.handler.UserHandler
 import dev.dimension.flare.data.datasource.microblog.loader.RelationActionType
@@ -35,6 +40,8 @@ internal class InstagramDataSource(
 ) : AuthenticatedMicroblogDataSource,
     UserDataSource,
     RelationDataSource,
+    PostDataSource,
+    PostEventHandler.Handler,
     KoinComponent {
     private val accountRepository: AccountRepository by inject()
 
@@ -48,10 +55,18 @@ internal class InstagramDataSource(
         )
     }
 
+    private val profileResolver by lazy {
+        InstagramProfileResolver(
+            accountKey = accountKey,
+            service = service,
+        )
+    }
+
     private val loader by lazy {
         InstagramLoader(
             accountKey = accountKey,
             service = service,
+            profileResolver = profileResolver,
         )
     }
 
@@ -69,6 +84,25 @@ internal class InstagramDataSource(
         )
     }
 
+    override val postHandler by lazy {
+        PostHandler(
+            accountType = AccountType.Specific(accountKey),
+            loader = loader,
+        )
+    }
+
+    override val postEventHandler by lazy {
+        PostEventHandler(
+            accountType = AccountType.Specific(accountKey),
+            handler = this,
+        )
+    }
+
+    override suspend fun handle(
+        event: PostEvent,
+        updater: DatabaseUpdater,
+    ) = Unit
+
     override val supportedRelationTypes: Set<RelationActionType>
         get() = loader.supportedTypes
 
@@ -81,12 +115,17 @@ internal class InstagramDataSource(
     ): RemoteLoader<UiTimelineV2> =
         InstagramUserTimelineRemoteLoader(
             service = service,
+            profileResolver = profileResolver,
             accountKey = accountKey,
             userKey = userKey,
             mediaOnly = mediaOnly,
         )
 
-    override fun context(statusKey: MicroBlogKey): RemoteLoader<UiTimelineV2> = emptyTimelineLoader()
+    override fun context(statusKey: MicroBlogKey): RemoteLoader<UiTimelineV2> =
+        InstagramStatusContextRemoteLoader(
+            loader = loader,
+            statusKey = statusKey,
+        )
 
     override fun searchStatus(query: String): RemoteLoader<UiTimelineV2> = emptyTimelineLoader()
 
@@ -162,6 +201,7 @@ private class InstagramHomeTimelineRemoteLoader(
 @OptIn(ExperimentalPagingApi::class)
 private class InstagramUserTimelineRemoteLoader(
     private val service: InstagramService,
+    private val profileResolver: InstagramProfileResolver,
     private val accountKey: MicroBlogKey,
     private val userKey: MicroBlogKey,
     private val mediaOnly: Boolean,
@@ -176,11 +216,30 @@ private class InstagramUserTimelineRemoteLoader(
             return PagingResult(endOfPaginationReached = true)
         }
         val page = service.userFeed(userKey.id, (request as? PagingRequest.Append)?.nextKey)
-        val items = page.items.map { it.toUiTimeline(accountKey) }
+        val profile = profileResolver.userById(userKey.id)
+        val items = page.items.map { it.toUiTimeline(accountKey, userOverride = profile) }
         return PagingResult(
             endOfPaginationReached = !page.moreAvailable || page.nextMaxId.isNullOrBlank() || items.isEmpty(),
             data = items,
             nextKey = page.nextMaxId,
+        )
+    }
+}
+
+private class InstagramStatusContextRemoteLoader(
+    private val loader: InstagramLoader,
+    private val statusKey: MicroBlogKey,
+) : RemoteLoader<UiTimelineV2> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request !is PagingRequest.Refresh) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        return PagingResult(
+            endOfPaginationReached = true,
+            data = listOf(loader.status(statusKey)),
         )
     }
 }

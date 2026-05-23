@@ -95,6 +95,20 @@ internal class InstagramService(
         return root.toTimelinePage()
     }
 
+    suspend fun mediaInfo(mediaId: String): InstagramMedia {
+        val root =
+            requestJson("https://www.instagram.com/api/v1/media/$mediaId/info/") {
+                parameter("entry_point", "profile")
+            }.objectOrNull()
+                ?: throw IllegalStateException("Instagram media response is not an object")
+        return root["items"]
+            .arrayOrEmpty()
+            .firstOrNull()
+            .objectOrNull()
+            ?.toInstagramMedia()
+            ?: throw IllegalStateException("Instagram media is empty")
+    }
+
     private fun JsonObject.toTimelinePage(): InstagramTimelinePage {
         val feedItems =
             this["items"].arrayOrNull()

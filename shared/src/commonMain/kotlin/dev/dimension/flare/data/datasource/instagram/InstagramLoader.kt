@@ -1,5 +1,6 @@
 package dev.dimension.flare.data.datasource.instagram
 
+import dev.dimension.flare.data.datasource.microblog.loader.PostLoader
 import dev.dimension.flare.data.datasource.microblog.loader.RelationActionType
 import dev.dimension.flare.data.datasource.microblog.loader.RelationLoader
 import dev.dimension.flare.data.datasource.microblog.loader.UserLoader
@@ -8,24 +9,23 @@ import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.model.UiHandle
 import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiRelation
+import dev.dimension.flare.ui.model.UiTimelineV2
 
 internal class InstagramLoader(
     private val accountKey: MicroBlogKey,
     private val service: InstagramService,
+    private val profileResolver: InstagramProfileResolver,
 ) : UserLoader,
-    RelationLoader {
+    RelationLoader,
+    PostLoader {
     override val supportedTypes: Set<RelationActionType> = emptySet()
 
     override suspend fun userByHandleAndHost(uiHandle: UiHandle): UiProfile {
-        return service.userByUsername(uiHandle.normalizedRaw).toUiProfile(accountKey)
+        return profileResolver.userByUsername(uiHandle.normalizedRaw)
     }
 
     override suspend fun userById(id: String): UiProfile {
-        return if (id == accountKey.id) {
-            service.me().toUiProfile(accountKey)
-        } else {
-            service.userInfo(id).toUiProfile(accountKey)
-        }
+        return profileResolver.userById(id)
     }
 
     override suspend fun relation(userKey: MicroBlogKey): UiRelation = UiRelation()
@@ -41,4 +41,16 @@ internal class InstagramLoader(
     override suspend fun mute(userKey: MicroBlogKey) = Unit
 
     override suspend fun unmute(userKey: MicroBlogKey) = Unit
+
+    override suspend fun status(statusKey: MicroBlogKey): UiTimelineV2 {
+        val media = service.mediaInfo(statusKey.id)
+        val userOverride =
+            media.user
+                ?.id
+                ?.takeIf { it.isNotBlank() }
+                ?.let { profileResolver.userById(it) }
+        return media.toUiTimeline(accountKey, userOverride = userOverride)
+    }
+
+    override suspend fun deleteStatus(statusKey: MicroBlogKey) = Unit
 }

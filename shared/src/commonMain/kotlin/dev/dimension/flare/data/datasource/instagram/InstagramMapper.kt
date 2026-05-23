@@ -44,7 +44,7 @@ internal fun InstagramUser.toUiProfile(accountKey: MicroBlogKey): UiProfile {
                 ),
             ),
         banner = null,
-        description = biography.toUiPlainText(),
+        description = biography.takeIf { it.isNotBlank() }?.toUiPlainText(),
         matrices =
             UiProfile.Matrices(
                 fansCount = followerCount,
@@ -61,26 +61,30 @@ internal fun InstagramUser.toUiProfile(accountKey: MicroBlogKey): UiProfile {
     )
 }
 
-internal fun InstagramMedia.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Post {
+internal fun InstagramMedia.toUiTimeline(
+    accountKey: MicroBlogKey,
+    userOverride: UiProfile? = null,
+): UiTimelineV2.Post {
     val statusKey = MicroBlogKey(id, instagramWebHost)
-    val url =
-        code
-            .takeIf { it.isNotBlank() }
-            ?.let { "https://$instagramWebHost/p/$it/" }
-            ?: "https://$instagramWebHost/"
     return UiTimelineV2.Post(
         platformType = PlatformType.Instagram,
         images = images.map { it.toUiMedia() }.toImmutableList(),
         sensitive = false,
         contentWarning = null,
-        user = user?.toUiProfile(accountKey),
+        user = userOverride ?: user?.toUiProfile(accountKey),
         content = caption.toUiPlainText(),
         actions = persistentListOf<ActionMenu>(),
         poll = null,
         statusKey = statusKey,
         card = null,
         createdAt = UiDateTime(Instant.fromEpochMilliseconds(takenAt.coerceAtLeast(0L) * 1000L)),
-        clickEvent = ClickEvent.Deeplink(DeeplinkRoute.OpenLinkDirectly(url)),
+        clickEvent =
+            ClickEvent.Deeplink(
+                DeeplinkRoute.Status.Detail(
+                    accountType = AccountType.Specific(accountKey),
+                    statusKey = statusKey,
+                ),
+            ),
         accountType = AccountType.Specific(accountKey),
     )
 }
