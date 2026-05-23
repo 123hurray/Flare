@@ -7,14 +7,18 @@ import dev.dimension.flare.data.datasource.microblog.ComposeData
 import dev.dimension.flare.data.datasource.microblog.ComposeType
 import dev.dimension.flare.data.datasource.microblog.NotificationFilter
 import dev.dimension.flare.data.datasource.microblog.ProfileTab
+import dev.dimension.flare.data.datasource.microblog.datasource.RelationDataSource
 import dev.dimension.flare.data.datasource.microblog.datasource.UserDataSource
+import dev.dimension.flare.data.datasource.microblog.handler.RelationHandler
 import dev.dimension.flare.data.datasource.microblog.handler.UserHandler
+import dev.dimension.flare.data.datasource.microblog.loader.RelationActionType
 import dev.dimension.flare.data.datasource.microblog.paging.CacheableRemoteLoader
 import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
 import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
 import dev.dimension.flare.data.network.instagram.InstagramService
 import dev.dimension.flare.data.repository.AccountRepository
+import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.model.UiAccount
 import dev.dimension.flare.ui.model.UiHashtag
@@ -30,6 +34,7 @@ internal class InstagramDataSource(
     override val accountKey: MicroBlogKey,
 ) : AuthenticatedMicroblogDataSource,
     UserDataSource,
+    RelationDataSource,
     KoinComponent {
     private val accountRepository: AccountRepository by inject()
 
@@ -56,6 +61,16 @@ internal class InstagramDataSource(
             loader = loader,
         )
     }
+
+    override val relationHandler by lazy {
+        RelationHandler(
+            accountType = AccountType.Specific(accountKey),
+            dataSource = loader,
+        )
+    }
+
+    override val supportedRelationTypes: Set<RelationActionType>
+        get() = loader.supportedTypes
 
     override fun homeTimeline(): RemoteLoader<UiTimelineV2> =
         InstagramHomeTimelineRemoteLoader(service, accountKey)
