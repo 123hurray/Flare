@@ -38,16 +38,19 @@ kotlin {
 }
 
 android {
+    val fastRelease = providers.gradleProperty("flare.devFastRelease").map { it.toBoolean() }.getOrElse(false)
     val fdroid = rootProject.file("fdroid.properties")
     val fdroidProp = Properties()
     fdroidProp.load(fdroid.inputStream())
 
     defaultConfig {
+        val buildNumber = providers.gradleProperty("flare.buildNumber").orNull ?: System.getenv("BUILD_NUMBER")
+        val buildVersion = providers.gradleProperty("flare.buildVersion").orNull ?: System.getenv("BUILD_VERSION")
         versionCode =
-            System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: fdroidProp.getProperty("versionCode")
+            buildNumber?.toIntOrNull() ?: fdroidProp.getProperty("versionCode")
                 ?.toIntOrNull() ?: 1
         versionName =
-            System.getenv("BUILD_VERSION") ?: fdroidProp.getProperty("versionName") ?: "0.0.0"
+            buildVersion ?: fdroidProp.getProperty("versionName") ?: "0.0.0"
     }
 
     val file = rootProject.file("signing.properties")
@@ -73,7 +76,8 @@ android {
             }
         }
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = !fastRelease
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

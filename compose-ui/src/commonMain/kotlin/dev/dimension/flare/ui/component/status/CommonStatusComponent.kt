@@ -24,10 +24,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -103,7 +105,9 @@ import dev.dimension.flare.compose.ui.user_unblock
 import dev.dimension.flare.compose.ui.user_unmute
 import dev.dimension.flare.compose.ui.vote
 import dev.dimension.flare.data.datasource.microblog.ActionMenu
+import dev.dimension.flare.data.datasource.xiaohongshu.XhsStatusMediaLazyResolver
 import dev.dimension.flare.data.model.PostActionStyle
+import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.ui.component.AdaptiveGrid
 import dev.dimension.flare.ui.component.AvatarComponent
 import dev.dimension.flare.ui.component.DateTimeText
@@ -127,6 +131,7 @@ import dev.dimension.flare.ui.component.platform.PlatformTextButton
 import dev.dimension.flare.ui.component.platform.PlatformTextStyle
 import dev.dimension.flare.ui.component.toImageVector
 import dev.dimension.flare.ui.model.ClickContext
+import dev.dimension.flare.ui.model.StatusMediaRouteCache
 import dev.dimension.flare.ui.model.TranslationDisplayState
 import dev.dimension.flare.ui.model.UiCard
 import dev.dimension.flare.ui.model.UiMedia
@@ -143,9 +148,11 @@ import dev.dimension.flare.ui.theme.PlatformContentColor
 import dev.dimension.flare.ui.theme.PlatformTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.launch
 import moe.tlaster.precompose.molecule.producePresenter
 import org.jetbrains.compose.resources.stringResource
 import kotlin.native.HiddenFromObjC
+import kotlin.time.Instant
 
 @HiddenFromObjC
 @Composable
@@ -159,6 +166,11 @@ public fun CommonStatusComponent(
     showExpandButton: Boolean = true,
 ) {
     val uriHandler = LocalUriHandler.current
+    LaunchedEffect(item.platformType, item.statusKey, item.content.raw, item.images) {
+        if (item.platformType == PlatformType.Xiaohongshu) {
+            StatusMediaRouteCache.put(item)
+        }
+    }
     val appearanceSettings = LocalComponentAppearance.current
     val showAsFullWidth = !appearanceSettings.fullWidthPost && !isQuote && !isDetail
     Row(
@@ -231,11 +243,13 @@ public fun CommonStatusComponent(
                                 tint = PlatformTheme.colorScheme.caption,
                             )
                         }
-                        DateTimeText(
-                            item.createdAt,
-                            style = PlatformTheme.typography.caption,
-                            color = PlatformTheme.colorScheme.caption,
-                        )
+                        if (item.hasKnownCreatedAt()) {
+                            DateTimeText(
+                                item.createdAt,
+                                style = PlatformTheme.typography.caption,
+                                color = PlatformTheme.colorScheme.caption,
+                            )
+                        }
                     }
                 }
                 if (showAsFullWidth) {
@@ -345,6 +359,17 @@ public fun CommonStatusComponent(
                     item,
                     isQuote = isQuote,
                     onMediaClick = { media ->
+                        if (media is UiMedia.Video && media.url.isBlank()) {
+                            item.onClicked.invoke(
+                                ClickContext(
+                                    launcher = { url ->
+                                        uriHandler.openUri(url)
+                                    },
+                                ),
+                            )
+                            return@StatusMediasComponent
+                        }
+                        StatusMediaRouteCache.put(item)
                         val index = item.images.indexOf(media)
                         val link =
                             DeeplinkRoute.Media.StatusMedia(
@@ -408,7 +433,7 @@ public fun CommonStatusComponent(
                 )
             }
 
-            if (isDetail) {
+            if (isDetail && item.hasKnownCreatedAt()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 DateTimeText(
                     item.createdAt,
@@ -449,6 +474,8 @@ public fun CommonStatusComponent(
     }
 }
 
+private fun UiTimelineV2.Post.hasKnownCreatedAt(): Boolean = createdAt.value != Instant.fromEpochMilliseconds(0L)
+
 @Composable
 internal fun StatusMediasComponent(
     item: UiTimelineV2.Post,
@@ -456,7 +483,12 @@ internal fun StatusMediasComponent(
     onMediaClick: (UiMedia) -> Unit,
 ) {
     val appearanceSettings = LocalComponentAppearance.current
+    val uriHandler = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
     var showMedia by remember { mutableStateOf(false) }
+    var resolvingKeys by remember(item.statusKey, item.images) {
+        mutableStateOf(emptySet<String>())
+    }
     if (appearanceSettings.showMedia || showMedia) {
         if (!appearanceSettings.showMedia) {
             Row(
@@ -486,7 +518,49 @@ internal fun StatusMediasComponent(
         }
         StatusMediaComponent(
             data = item.images,
-            onMediaClick = onMediaClick,
+            onMediaClick = { media ->
+                if (item.platformType == PlatformType.Xiaohongshu && media is UiMedia.Video) {
+                    if (media.url.isNotBlank()) {
+                        StatusMediaRouteCache.put(item)
+                        openStatusMedia(
+                            item = item,
+                            media = media,
+                            index = item.images.indexOf(media),
+                            uriHandler = uriHandler,
+                        )
+                    } else {
+                        val key = media.playbackKey()
+                        if (key !in resolvingKeys) {
+                            resolvingKeys = resolvingKeys + key
+                            val mediaIndex = item.images.indexOf(media)
+                            scope.launch {
+                                val resolved =
+                                    runCatching {
+                                        XhsStatusMediaLazyResolver.resolve(item)
+                                    }.getOrNull()
+                                val resolvedMedia = resolved?.images.orEmpty()
+                                val resolvedVideo =
+                                    resolvedMedia.getOrNull(mediaIndex) as? UiMedia.Video
+                                        ?: resolvedMedia.filterIsInstance<UiMedia.Video>().firstOrNull()
+                                if (resolved != null && resolvedMedia.isNotEmpty() && resolvedVideo?.url?.isNotBlank() == true) {
+                                    StatusMediaRouteCache.put(resolved)
+                                    openStatusMedia(
+                                        item = resolved,
+                                        media = resolvedVideo,
+                                        index = resolvedMedia.indexOf(resolvedVideo).takeIf { it >= 0 } ?: mediaIndex,
+                                        uriHandler = uriHandler,
+                                    )
+                                } else {
+                                    onMediaClick(media)
+                                }
+                                resolvingKeys = resolvingKeys - key
+                            }
+                        }
+                    }
+                } else {
+                    onMediaClick(media)
+                }
+            },
             sensitive = item.sensitive,
             modifier =
                 Modifier.clip(
@@ -523,6 +597,28 @@ internal fun StatusMediasComponent(
             )
         }
     }
+}
+
+private fun openStatusMedia(
+    item: UiTimelineV2.Post,
+    media: UiMedia,
+    index: Int,
+    uriHandler: UriHandler,
+) {
+    val link =
+        DeeplinkRoute.Media.StatusMedia(
+            statusKey = item.statusKey,
+            accountType = item.accountType,
+            index = index,
+            preview =
+                when (media) {
+                    is UiMedia.Image -> media.previewUrl
+                    is UiMedia.Video -> media.thumbnailUrl
+                    is UiMedia.Gif -> media.previewUrl
+                    is UiMedia.Audio -> null
+                },
+        )
+    uriHandler.openUri(link.toUri())
 }
 
 @Composable

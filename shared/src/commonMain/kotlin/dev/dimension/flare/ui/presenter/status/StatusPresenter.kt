@@ -33,7 +33,7 @@ public class StatusPresenter(
                     (service as PostDataSource).postHandler.post(statusKey)
                 }.collectAsState().toUi()
             }
-        remember { LogStatusHistoryPresenter(accountType = accountType, statusKey = statusKey) }.body()
+        remember(statusKey, accountType) { LogStatusHistoryPresenter(accountType = accountType, statusKey = statusKey) }.body()
 
         return object : StatusState {
             override val status: UiState<UiTimelineV2> = accountServiceState

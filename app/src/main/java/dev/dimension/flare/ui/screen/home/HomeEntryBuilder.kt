@@ -10,6 +10,7 @@ import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.jikeWebHost
+import dev.dimension.flare.model.xiaohongshuWebHost
 import dev.dimension.flare.ui.component.BottomSheetSceneStrategy
 import dev.dimension.flare.ui.route.Route
 
@@ -55,6 +56,9 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
             onUserClick = { accountType, userKey ->
                 navigate(Route.Profile.User(accountType, userKey))
             },
+            onStatusUrlClick = { accountType, statusKey ->
+                navigate(Route.Status.Detail(statusKey = statusKey, accountType = accountType))
+            },
         )
     }
     entry<Route.Notification> {
@@ -66,6 +70,9 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
             accountType = args.accountType,
             onUserClick = { accountType, userKey ->
                 navigate(Route.Profile.User(accountType, userKey))
+            },
+            onStatusUrlClick = { accountType, statusKey ->
+                navigate(Route.Status.Detail(statusKey = statusKey, accountType = accountType))
             },
         )
     }
@@ -124,10 +131,10 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
 private fun AccountType.reloginRoute(): Route =
     when (this) {
         is AccountType.Specific ->
-            if (accountKey.host == jikeWebHost) {
-                Route.ServiceSelect.JikeLogin(accountKey)
-            } else {
-                Route.ServiceSelect.Selection
+            when (accountKey.host) {
+                jikeWebHost -> Route.ServiceSelect.JikeLogin(accountKey)
+                xiaohongshuWebHost -> Route.ServiceSelect.XiaohongshuLogin(accountKey)
+                else -> Route.ServiceSelect.Selection
             }
 
         else -> Route.ServiceSelect.Selection

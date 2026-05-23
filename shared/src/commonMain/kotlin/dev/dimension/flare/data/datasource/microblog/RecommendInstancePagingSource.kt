@@ -145,6 +145,15 @@ internal class RecommendInstancePagingSource : BasePagingSource<Int, UiInstance>
                     bannerUrl = null,
                     usersCount = 0,
                 ),
+                UiInstance(
+                    name = "Xiaohongshu",
+                    description = "小红书 - 生活方式社区",
+                    iconUrl = null,
+                    domain = "www.xiaohongshu.com",
+                    type = PlatformType.Xiaohongshu,
+                    bannerUrl = null,
+                    usersCount = 0,
+                ),
             )
         return LoadResult.Page(
             data = extra + (instances.sortedByDescending { it.usersCount }.filter { it !in extra }),

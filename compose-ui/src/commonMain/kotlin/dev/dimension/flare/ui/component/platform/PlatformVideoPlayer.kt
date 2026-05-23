@@ -20,6 +20,7 @@ internal expect fun PlatformVideoPlayer(
     uri: String,
     previewUri: String?,
     contentDescription: String?,
+    customHeaders: Map<String, String>? = null,
     modifier: Modifier = Modifier,
     muted: Boolean = false,
     showControls: Boolean = false,

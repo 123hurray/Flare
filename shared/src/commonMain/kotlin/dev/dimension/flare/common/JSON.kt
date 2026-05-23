@@ -31,6 +31,8 @@ internal val JSON_WITH_ENCODE_DEFAULT get() = jsonWithEncodeDefault
 
 internal inline fun <reified T> T.encodeJson(): String = JSON.encodeToString(this)
 
+internal inline fun <reified T> T.encodeJsonWithDefaults(): String = JSON_WITH_ENCODE_DEFAULT.encodeToString(this)
+
 @OptIn(ExperimentalObjCRefinement::class)
 @HiddenFromObjC
 public fun <T> T.encodeJson(serializer: KSerializer<T>): String = JSON.encodeToString(serializer, this)

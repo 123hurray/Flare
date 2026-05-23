@@ -14,6 +14,7 @@ import dev.dimension.flare.data.platform.MisskeyPlatformSpec
 import dev.dimension.flare.data.platform.NostrPlatformSpec
 import dev.dimension.flare.data.platform.VvoPlatformSpec
 import dev.dimension.flare.data.platform.XqtPlatformSpec
+import dev.dimension.flare.data.platform.XiaohongshuPlatformSpec
 import dev.dimension.flare.ui.model.UiIcon
 import dev.dimension.flare.ui.model.UiInstanceMetadata
 import kotlinx.collections.immutable.ImmutableList
@@ -58,4 +59,5 @@ internal val PlatformType.spec: PlatformSpec
             PlatformType.xQt -> XqtPlatformSpec
             PlatformType.VVo -> VvoPlatformSpec
             PlatformType.Jike -> JikePlatformSpec
+            PlatformType.Xiaohongshu -> XiaohongshuPlatformSpec
         }

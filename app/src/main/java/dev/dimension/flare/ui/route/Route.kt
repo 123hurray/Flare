@@ -223,6 +223,11 @@ internal sealed interface Route : NavKey {
         data class JikeLogin(
             val accountKey: MicroBlogKey? = null,
         ) : ServiceSelect
+
+        @Serializable
+        data class XiaohongshuLogin(
+            val accountKey: MicroBlogKey? = null,
+        ) : ServiceSelect
     }
 
     @Serializable

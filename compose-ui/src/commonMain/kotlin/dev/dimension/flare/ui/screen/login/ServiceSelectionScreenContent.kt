@@ -113,6 +113,7 @@ public fun ServiceSelectionScreenContent(
     onXQT: () -> Unit,
     onVVO: () -> Unit,
     onJike: () -> Unit,
+    onXiaohongshu: () -> Unit = {},
     onBack: (() -> Unit),
     openUri: (String) -> Unit,
     registerDeeplinkCallback: @Composable ((url: String) -> Unit) -> Unit,
@@ -549,6 +550,20 @@ public fun ServiceSelectionScreenContent(
                                     PlatformFilledTonalButton(
                                         onClick = {
                                             onJike.invoke()
+                                        },
+                                        modifier = Modifier.width(300.dp),
+                                        content = {
+                                            PlatformText(
+                                                text = stringResource(Res.string.service_select_next_button),
+                                            )
+                                        },
+                                    )
+                                }
+
+                                PlatformType.Xiaohongshu -> {
+                                    PlatformFilledTonalButton(
+                                        onClick = {
+                                            onXiaohongshu.invoke()
                                         },
                                         modifier = Modifier.width(300.dp),
                                         content = {

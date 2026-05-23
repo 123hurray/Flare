@@ -30,6 +30,7 @@ import dev.dimension.flare.ui.component.RichText
 import dev.dimension.flare.ui.component.placeholder
 import dev.dimension.flare.ui.component.platform.PlatformText
 import dev.dimension.flare.ui.model.ClickContext
+import dev.dimension.flare.ui.model.StatusMediaRouteCache
 import dev.dimension.flare.ui.model.UiMedia
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.route.DeeplinkRoute
@@ -106,6 +107,7 @@ private fun GalleryPostTile(
                         Modifier
                             .fillMaxWidth()
                             .clickable {
+                                StatusMediaRouteCache.put(post)
                                 val link =
                                     DeeplinkRoute.Media.StatusMedia(
                                         statusKey = post.statusKey,

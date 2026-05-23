@@ -12,7 +12,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.aspectRatio
@@ -38,6 +40,10 @@ import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onLayoutRectChanged
 import androidx.compose.ui.layout.onVisibilityChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.core.content.getSystemService
@@ -47,7 +53,9 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.modifiers.resizeWithContentScale
 import androidx.media3.ui.compose.state.rememberPresentationState
@@ -57,6 +65,7 @@ import compose.icons.fontawesomeicons.solid.CirclePlay
 import dev.dimension.flare.ui.component.status.LocalIsScrollingInProgress
 import dev.dimension.flare.ui.theme.PlatformTheme
 import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.compose.koinInject
 
 private val audioAttributes by lazy {
@@ -73,6 +82,7 @@ public fun VideoPlayer(
     uri: String,
     previewUri: String?,
     contentDescription: String?,
+    customHeaders: Map<String, String>? = null,
     modifier: Modifier = Modifier,
     muted: Boolean = false,
     showControls: Boolean = false,
@@ -169,8 +179,11 @@ public fun VideoPlayer(
     var isLoaded by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
     var currentRect by remember { mutableStateOf(IntRect.Zero) }
-    val binding = rememberSurfaceBinding(uri)
+    val binding = rememberSurfaceBinding(uri, customHeaders)
     val player = binding.first
+    val viewConfiguration = LocalViewConfiguration.current
+    val density = LocalDensity.current
+    val speedLockDistancePx = with(density) { 56.dp.toPx() }
 
     LaunchedEffect(binding.second, currentRect, visible) {
         binding.second.update(currentRect, visible)
@@ -237,16 +250,12 @@ public fun VideoPlayer(
                             .resizeWithContentScale(
                                 contentScale = contentScale,
                                 sourceSizeDp = playerState.videoSizeDp,
+                            ).videoSpeedGesture(
+                                player = player,
+                                longPressTimeoutMillis = viewConfiguration.longPressTimeoutMillis,
+                                speedLockDistancePx = speedLockDistancePx,
+                                onClick = onClick,
                             ).let {
-                                if (onClick != null) {
-                                    it.combinedClickable(
-                                        onClick = onClick,
-                                        onLongClick = onLongClick,
-                                    )
-                                } else {
-                                    it
-                                }
-                            }.let {
                                 if (keepScreenOn) {
                                     it.keepScreenOn()
                                 } else {
@@ -261,13 +270,16 @@ public fun VideoPlayer(
                             }
                     DisposableEffect(Unit) {
                         onDispose {
+                            player.setPlaybackSpeed(1f)
                             player.clearVideoSurface()
                         }
                     }
-                    Box {
+                    Box(
+                        modifier = playerModifier,
+                    ) {
                         PlayerSurface(
                             player = player,
-                            modifier = playerModifier,
+                            modifier = Modifier.fillMaxSize(),
                         )
                         remainingTimeContent?.invoke(this, remainingTime)
                     }
@@ -281,13 +293,58 @@ public fun VideoPlayer(
     }
 }
 
+private fun Modifier.videoSpeedGesture(
+    player: ExoPlayer,
+    longPressTimeoutMillis: Long,
+    speedLockDistancePx: Float,
+    onClick: (() -> Unit)?,
+): Modifier =
+    pointerInput(player, longPressTimeoutMillis, speedLockDistancePx, onClick) {
+        awaitEachGesture {
+            val down = awaitFirstDown()
+            val upBeforeLongPress =
+                withTimeoutOrNull(longPressTimeoutMillis) {
+                    waitForUpOrCancellation()
+                }
+            if (upBeforeLongPress != null) {
+                onClick?.invoke()
+                return@awaitEachGesture
+            }
+
+            var locked = false
+            var dragY = 0f
+            player.setPlaybackSpeed(2f)
+
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == down.id } ?: continue
+                if (!change.pressed) {
+                    break
+                }
+                dragY += change.positionChange().y
+                if (dragY <= -speedLockDistancePx) {
+                    locked = true
+                }
+                change.consume()
+            }
+
+            if (!locked) {
+                player.setPlaybackSpeed(1f)
+            }
+        }
+    }
+
 @Composable
-private fun rememberSurfaceBinding(uri: String): Pair<ExoPlayer?, SurfaceBindingManager.Binding> {
+private fun rememberSurfaceBinding(
+    uri: String,
+    customHeaders: Map<String, String>?,
+): Pair<ExoPlayer?, SurfaceBindingManager.Binding> {
     val manager: SurfaceBindingManager = koinInject()
+    val headers = customHeaders.orEmpty()
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
     val binding =
-        remember(uri, manager) {
-            manager.register(uri) { exoPlayer ->
+        remember(uri, headers, manager) {
+            manager.register(uri, headers) { exoPlayer ->
                 player = exoPlayer
             }
         }
@@ -328,6 +385,7 @@ public class SurfaceBindingManager(
     private data class Candidate(
         val binding: Binding,
         val uri: String,
+        val customHeaders: Map<String, String>,
         val rect: IntRect,
         val isVisible: Boolean,
         val callback: (ExoPlayer?) -> Unit,
@@ -338,6 +396,7 @@ public class SurfaceBindingManager(
 
     internal fun register(
         uri: String,
+        customHeaders: Map<String, String>,
         onActiveChanged: (ExoPlayer?) -> Unit,
     ): Binding =
         object : Binding {
@@ -345,7 +404,7 @@ public class SurfaceBindingManager(
                 rect: IntRect,
                 isVisible: Boolean,
             ) {
-                candidates[this] = Candidate(this, uri, rect, isVisible, onActiveChanged)
+                candidates[this] = Candidate(this, uri, customHeaders, rect, isVisible, onActiveChanged)
                 recalculateActiveItem()
             }
 
@@ -388,24 +447,20 @@ public class SurfaceBindingManager(
             if (best != null) {
                 // Check if we are switching to a candidate with the SAME URI
                 val oldCandidate = candidates[oldBinding]
-                val sameUri = oldCandidate?.uri == best.uri
+                val sameUri = oldCandidate?.uri == best.uri && oldCandidate.customHeaders == best.customHeaders
 
                 if (!sameUri) {
-                    // Different URI: Prepare player
-                    val currentUri =
-                        player.currentMediaItem
-                            ?.localConfiguration
-                            ?.uri
-                            ?.toString()
-                    if (currentUri != best.uri) {
-                        player.setMediaItem(MediaItem.fromUri(best.uri))
-                        player.prepare()
-                        player.play()
-                    } else {
-                        if (!player.isPlaying) {
-                            player.play()
-                        }
-                    }
+                    val dataSourceFactory =
+                        DefaultHttpDataSource
+                            .Factory()
+                            .setDefaultRequestProperties(best.customHeaders)
+                    val mediaSource =
+                        DefaultMediaSourceFactory(dataSourceFactory)
+                            .createMediaSource(MediaItem.fromUri(best.uri))
+                    player.setMediaSource(mediaSource)
+                    player.setPlaybackSpeed(1f)
+                    player.prepare()
+                    player.play()
                     // Notify bindings
                 } else {
                     // Same URI: Seamless handover

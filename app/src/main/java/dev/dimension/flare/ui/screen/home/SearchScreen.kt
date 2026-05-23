@@ -17,8 +17,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.dimension.flare.common.isRefreshing
+import dev.dimension.flare.data.datasource.xiaohongshu.cacheXhsNoteContext
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.xiaohongshuWebHost
 import dev.dimension.flare.ui.component.AvatarComponent
 import dev.dimension.flare.ui.component.FlareScaffold
 import dev.dimension.flare.ui.component.RefreshContainer
@@ -28,6 +30,7 @@ import dev.dimension.flare.ui.component.searchBarPresenter
 import dev.dimension.flare.ui.component.searchContent
 import dev.dimension.flare.ui.component.status.LazyStatusVerticalStaggeredGrid
 import dev.dimension.flare.ui.model.onSuccess
+import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.presenter.home.SearchPresenter
 import dev.dimension.flare.ui.presenter.invoke
 import moe.tlaster.precompose.molecule.producePresenter
@@ -37,8 +40,11 @@ internal fun SearchScreen(
     initialQuery: String,
     accountType: AccountType,
     onUserClick: (AccountType, MicroBlogKey) -> Unit,
+    onStatusUrlClick: (AccountType, MicroBlogKey) -> Unit,
 ) {
-    val state by producePresenter("search_${accountType}_$initialQuery") { presenter(accountType, initialQuery) }
+    val state by producePresenter("search_${accountType}_$initialQuery") {
+        presenter(accountType, initialQuery, onStatusUrlClick)
+    }
     val lazyListState = rememberLazyStaggeredGridState()
     RegisterTabCallback(
         lazyListState = lazyListState,
@@ -125,6 +131,7 @@ internal fun SearchScreen(
 private fun presenter(
     accountType: AccountType,
     initialQuery: String,
+    onStatusUrlClick: (AccountType, MicroBlogKey) -> Unit,
 ) = run {
     val searchBarState = searchBarPresenter(initialQuery)
     val searchState =
@@ -144,6 +151,27 @@ private fun presenter(
         }
 
         fun commitSearch(new: String) {
+            xiaohongshuNoteFromUrl(new)?.let { noteUrl ->
+                val targetAccountType =
+                    searchState.selectedAccount?.let { AccountType.Specific(it.key) }
+                        ?: searchState.accounts
+                            .takeSuccess()
+                            ?.firstOrNull { it.key.host == xiaohongshuWebHost }
+                            ?.let { AccountType.Specific(it.key) }
+                        ?: accountType
+                val targetAccountKey = (targetAccountType as? AccountType.Specific)?.accountKey
+                if (targetAccountKey?.host == xiaohongshuWebHost) {
+                    cacheXhsNoteContext(
+                        noteId = noteUrl.noteId,
+                        xsecToken = noteUrl.xsecToken,
+                        xsecSource = noteUrl.xsecSource,
+                    )
+                    searchBarState.setQuery(new)
+                    searchBarState.addSearchHistory(new)
+                    onStatusUrlClick(targetAccountType, MicroBlogKey(noteUrl.noteId, targetAccountKey.host))
+                    return
+                }
+            }
             searchBarState.setQuery(new)
             searchBarState.addSearchHistory(new)
             searchState.search(new)

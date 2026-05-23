@@ -114,16 +114,14 @@ import dev.dimension.flare.ui.component.VideoPlayer
 import dev.dimension.flare.ui.component.placeholder
 import dev.dimension.flare.ui.component.status.CommonStatusComponent
 import dev.dimension.flare.ui.humanizer.humanize
+import dev.dimension.flare.ui.model.StatusMediaRouteCache
 import dev.dimension.flare.ui.model.UiMedia
 import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.getFileName
-import dev.dimension.flare.ui.model.isSuccess
 import dev.dimension.flare.ui.model.onLoading
 import dev.dimension.flare.ui.model.onSuccess
 import dev.dimension.flare.ui.model.takeSuccess
-import dev.dimension.flare.ui.presenter.invoke
-import dev.dimension.flare.ui.presenter.status.StatusPresenter
 import dev.dimension.flare.ui.theme.FlareTheme
 import dev.dimension.flare.ui.theme.screenHorizontalPadding
 import kotlinx.collections.immutable.ImmutableList
@@ -296,6 +294,7 @@ internal fun StatusMediaScreen(
                                                     uri = media.url,
                                                     previewUri = media.thumbnailUrl,
                                                     contentDescription = media.description,
+                                                    customHeaders = media.customHeaders,
                                                     aspectRatio = media.aspectRatio,
                                                     autoPlay = true,
                                                     onClick = {
@@ -902,33 +901,27 @@ private fun statusMediaPresenter(
     var lockPager by remember {
         mutableStateOf(false)
     }
-    val state =
-        remember(statusKey) {
-            StatusPresenter(accountType = accountType, statusKey = statusKey)
-        }.invoke()
-    var medias: UiState<ImmutableList<UiMedia>> by remember {
-        mutableStateOf(UiState.Loading())
-    }
-    // prevent media change when medias is loaded
-    if (!medias.isSuccess) {
-        LaunchedEffect(state) {
-            state.status
-                .onSuccess {
-                    medias =
-                        UiState.Success(
-                            (it as? UiTimelineV2.Post)
-                                ?.images
-                                .orEmpty()
-                                .toImmutableList(),
-                        )
-                }
+    val cachedStatus =
+        remember(statusKey, accountType) {
+            StatusMediaRouteCache.get(statusKey, accountType)
         }
+    var medias: UiState<ImmutableList<UiMedia>> by remember(statusKey) {
+        mutableStateOf(
+            cachedStatus
+                ?.images
+                ?.let { UiState.Success(it.toImmutableList()) }
+                ?: UiState.Loading(),
+        )
     }
-    var currentPage by remember {
+    var currentPage by remember(statusKey, initialIndex) {
         mutableIntStateOf(initialIndex)
     }
+    val statusState: UiState<UiTimelineV2> =
+        cachedStatus
+            ?.let { UiState.Success(it) }
+            ?: UiState.Loading()
     object {
-        val status = state.status
+        val status = statusState
         val medias = medias
         val showUi = showUi
         val currentPage = currentPage
@@ -954,7 +947,7 @@ private fun statusMediaPresenter(
         }
 
         fun save(data: UiMedia) {
-            val status = (state.status.takeSuccess() as? UiTimelineV2.Post)
+            val status = statusState.takeSuccess() as? UiTimelineV2.Post
             if (status != null) {
                 val statusKeyString = statusKey.toString()
                 val userHandle = status.user?.handle?.canonical ?: "unknown"
@@ -983,7 +976,7 @@ private fun statusMediaPresenter(
                     scope.launch {
                         context.imageLoader.diskCache?.openSnapshot(data.url)?.use {
                             val originFile = it.data.toFile()
-                            val status = state.status.takeSuccess() as? UiTimelineV2.Post
+                            val status = statusState.takeSuccess() as? UiTimelineV2.Post
                             val statusKeyString = statusKey.toString()
                             val userHandle = status?.user?.handle?.canonical ?: "unknown"
                             val targetFile =

@@ -19,6 +19,9 @@ internal fun EntryProviderScope<NavKey>.serviceSelectEntryBuilder(
             onJike = {
                 navigate(Route.ServiceSelect.JikeLogin())
             },
+            onXiaohongshu = {
+                navigate(Route.ServiceSelect.XiaohongshuLogin())
+            },
             onBack = onBack,
         )
     }
@@ -41,6 +44,15 @@ internal fun EntryProviderScope<NavKey>.serviceSelectEntryBuilder(
 
     entry<Route.ServiceSelect.JikeLogin> { args ->
         JikeLoginScreen(
+            reloginAccountKey = args.accountKey,
+            toHome = {
+                onBack()
+            }
+        )
+    }
+
+    entry<Route.ServiceSelect.XiaohongshuLogin> { args ->
+        XiaohongshuLoginScreen(
             reloginAccountKey = args.accountKey,
             toHome = {
                 onBack()

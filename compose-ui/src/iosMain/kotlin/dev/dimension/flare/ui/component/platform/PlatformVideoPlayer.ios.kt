@@ -10,6 +10,7 @@ internal actual fun PlatformVideoPlayer(
     uri: String,
     previewUri: String?,
     contentDescription: String?,
+    customHeaders: Map<String, String>?,
     modifier: Modifier,
     muted: Boolean,
     showControls: Boolean,

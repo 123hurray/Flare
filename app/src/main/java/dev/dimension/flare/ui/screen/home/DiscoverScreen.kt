@@ -35,8 +35,10 @@ import dev.dimension.flare.common.isRefreshing
 import dev.dimension.flare.common.isSuccess
 import dev.dimension.flare.common.onLoading
 import dev.dimension.flare.common.onSuccess
+import dev.dimension.flare.data.datasource.xiaohongshu.cacheXhsNoteContext
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.xiaohongshuWebHost
 import dev.dimension.flare.ui.common.items
 import dev.dimension.flare.ui.component.AvatarComponent
 import dev.dimension.flare.ui.component.FlareScaffold
@@ -52,6 +54,7 @@ import dev.dimension.flare.ui.component.status.LazyStatusVerticalStaggeredGrid
 import dev.dimension.flare.ui.component.status.UserPlaceholder
 import dev.dimension.flare.ui.component.status.status
 import dev.dimension.flare.ui.model.onSuccess
+import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.presenter.home.DiscoverPresenter
 import dev.dimension.flare.ui.presenter.home.DiscoverState
 import dev.dimension.flare.ui.presenter.home.SearchPresenter
@@ -61,8 +64,11 @@ import moe.tlaster.precompose.molecule.producePresenter
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun DiscoverScreen(onUserClick: (AccountType, MicroBlogKey) -> Unit) {
-    val state by producePresenter("discover") { discoverPresenter() }
+internal fun DiscoverScreen(
+    onUserClick: (AccountType, MicroBlogKey) -> Unit,
+    onStatusUrlClick: (AccountType, MicroBlogKey) -> Unit,
+) {
+    val state by producePresenter("discover") { discoverPresenter(onStatusUrlClick) }
     val lazyListState = rememberLazyStaggeredGridState()
     RegisterTabCallback(
         lazyListState = lazyListState,
@@ -309,7 +315,7 @@ internal fun DiscoverScreen(onUserClick: (AccountType, MicroBlogKey) -> Unit) {
 }
 
 @Composable
-private fun discoverPresenter() =
+private fun discoverPresenter(onStatusUrlClick: (AccountType, MicroBlogKey) -> Unit) =
     run {
         val scope = rememberCoroutineScope()
         val state = remember { DiscoverPresenter() }.invoke()
@@ -357,6 +363,27 @@ private fun discoverPresenter() =
             }
 
             fun commitSearch(new: String) {
+                xiaohongshuNoteFromUrl(new)?.let { noteUrl ->
+                    val targetAccountType =
+                        state.selectedAccount?.let { AccountType.Specific(it.key) }
+                            ?: state.accounts
+                                .takeSuccess()
+                                ?.firstOrNull { it.key.host == xiaohongshuWebHost }
+                                ?.let { AccountType.Specific(it.key) }
+                            ?: state.selectedAccountType
+                    val targetAccountKey = (targetAccountType as? AccountType.Specific)?.accountKey
+                    if (targetAccountKey?.host == xiaohongshuWebHost) {
+                        cacheXhsNoteContext(
+                            noteId = noteUrl.noteId,
+                            xsecToken = noteUrl.xsecToken,
+                            xsecSource = noteUrl.xsecSource,
+                        )
+                        searchBarState.setQuery(new)
+                        searchBarState.addSearchHistory(new)
+                        onStatusUrlClick(targetAccountType, MicroBlogKey(noteUrl.noteId, targetAccountKey.host))
+                        return
+                    }
+                }
                 searchBarState.setQuery(new)
                 searchBarState.addSearchHistory(new)
                 searchState.search(new)

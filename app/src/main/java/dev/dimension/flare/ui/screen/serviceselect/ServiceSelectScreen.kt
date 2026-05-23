@@ -20,6 +20,7 @@ internal fun ServiceSelectScreen(
     onXQT: () -> Unit,
     onVVO: () -> Unit,
     onJike: () -> Unit,
+    onXiaohongshu: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -44,6 +45,7 @@ internal fun ServiceSelectScreen(
             onXQT = onXQT,
             onVVO = onVVO,
             onJike = onJike,
+            onXiaohongshu = onXiaohongshu,
             contentPadding = contentPadding,
             openUri = uriHandler::openUri,
             registerDeeplinkCallback = { callback ->

@@ -245,6 +245,7 @@ public fun MediaItem(
     modifier: Modifier = Modifier,
     keepAspectRatio: Boolean = true,
     showCountdown: Boolean = true,
+    forcePlay: Boolean = false,
     contentScale: ContentScale = ContentScale.Crop,
 ) {
     val appearanceSettings = LocalComponentAppearance.current
@@ -272,9 +273,56 @@ public fun MediaItem(
         }
 
         is UiMedia.Video -> {
+            if (media.url.isBlank()) {
+                Box(
+                    modifier = modifier,
+                ) {
+                    NetworkImage(
+                        contentScale = contentScale,
+                        model = media.thumbnailUrl,
+                        customHeaders = media.customHeaders,
+                        contentDescription = media.description,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .let {
+                                    if (keepAspectRatio) {
+                                        it.aspectRatio(
+                                            media.aspectRatio,
+                                            matchHeightConstraintsFirst = media.aspectRatio > 1f,
+                                        )
+                                    } else {
+                                        it
+                                    }
+                                },
+                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .padding(16.dp)
+                                .background(
+                                    Color.Black.copy(alpha = 0.5f),
+                                    shape = PlatformTheme.shapes.medium,
+                                ).padding(horizontal = 8.dp, vertical = 4.dp)
+                                .align(Alignment.BottomStart),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        FAIcon(
+                            FontAwesomeIcons.Solid.CirclePlay,
+                            contentDescription = null,
+                            modifier =
+                                Modifier
+                                    .size(16.dp),
+                            tint = Color.White,
+                        )
+                    }
+                }
+                return
+            }
             val wifiState = LocalWifiState.current
             val shouldPlay =
-                remember(appearanceSettings.videoAutoplay, wifiState) {
+                remember(forcePlay, appearanceSettings.videoAutoplay, wifiState) {
+                    forcePlay ||
                     appearanceSettings.videoAutoplay == ComponentAppearance.VideoAutoplay.ALWAYS ||
                         (appearanceSettings.videoAutoplay == ComponentAppearance.VideoAutoplay.WIFI && wifiState)
                 }
@@ -285,6 +333,7 @@ public fun MediaItem(
                     muted = true,
                     previewUri = media.thumbnailUrl,
                     contentDescription = media.description,
+                    customHeaders = media.customHeaders,
                     modifier =
                         modifier
                             .fillMaxWidth()
@@ -478,3 +527,11 @@ public fun MediaItem(
         }
     }
 }
+
+internal fun UiMedia.playbackKey(): String =
+    when (this) {
+        is UiMedia.Image -> previewUrl
+        is UiMedia.Video -> url.ifBlank { thumbnailUrl }
+        is UiMedia.Gif -> url
+        is UiMedia.Audio -> url
+    }

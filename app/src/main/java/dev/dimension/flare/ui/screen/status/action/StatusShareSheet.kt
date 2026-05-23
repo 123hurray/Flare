@@ -63,14 +63,19 @@ import compose.icons.fontawesomeicons.solid.Link
 import dev.dimension.flare.R
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.ui.component.ComponentAppearance
 import dev.dimension.flare.ui.component.FAIcon
 import dev.dimension.flare.ui.component.LocalComponentAppearance
 import dev.dimension.flare.ui.component.ViewBox
 import dev.dimension.flare.ui.component.status.StatusItem
+import dev.dimension.flare.ui.model.StatusMediaRouteCache
+import dev.dimension.flare.ui.model.UiState
+import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.presenter.status.StatusPresenter
+import dev.dimension.flare.ui.presenter.status.StatusState
 import dev.dimension.flare.ui.screen.media.saveByteArrayToDownloads
 import dev.dimension.flare.ui.theme.FlareTheme
 import dev.dimension.flare.ui.theme.screenHorizontalPadding
@@ -103,7 +108,14 @@ internal fun StatusShareSheet(
     var captureRequested by remember { mutableStateOf(false) }
     var previewTheme by remember { mutableStateOf(SharePreviewTheme.Light) }
     val state by producePresenter("status_share_sheet_${statusKey}_$shareUrl") {
-        StatusPresenter(accountType = accountType, statusKey = statusKey).invoke()
+        val cached = StatusMediaRouteCache.get(statusKey, accountType)
+        if (cached?.platformType == PlatformType.Xiaohongshu) {
+            object : StatusState {
+                override val status: UiState<UiTimelineV2> = UiState.Success(cached)
+            }
+        } else {
+            StatusPresenter(accountType = accountType, statusKey = statusKey).invoke()
+        }
     }
     Column(
         modifier =

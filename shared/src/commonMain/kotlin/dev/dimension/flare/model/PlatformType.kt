@@ -18,6 +18,7 @@ public enum class PlatformType {
     VVo,
     Nostr,
     Jike,
+    Xiaohongshu,
 }
 
 @Immutable
@@ -67,6 +68,11 @@ public val vvoHostLong: String =
 
 public const val jikeApiHost: String = "api.ruguoapp.com"
 public const val jikeWebHost: String = "web.okjike.com"
+
+public const val xiaohongshuApiHost: String = "edith.xiaohongshu.com"
+public const val xiaohongshuWebHost: String = "www.xiaohongshu.com"
+public const val xiaohongshuExploreUrl: String = "https://www.xiaohongshu.com/explore"
+public const val xiaohongshuLoginUrl: String = "https://www.xiaohongshu.com/login"
 
 /**
  * Jike API endpoint identifier (from open-jike/jike-sdk)

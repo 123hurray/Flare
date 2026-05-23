@@ -84,6 +84,9 @@ public sealed interface UiApplication {
                 PlatformType.Jike -> {
                     Nostr(host = host)
                 }
+                PlatformType.Xiaohongshu -> {
+                    Nostr(host = host)
+                }
             }
     }
 }
