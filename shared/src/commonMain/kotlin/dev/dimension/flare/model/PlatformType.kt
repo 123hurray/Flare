@@ -19,6 +19,7 @@ public enum class PlatformType {
     Nostr,
     Jike,
     Xiaohongshu,
+    Instagram,
 }
 
 @Immutable
@@ -73,6 +74,10 @@ public const val xiaohongshuApiHost: String = "edith.xiaohongshu.com"
 public const val xiaohongshuWebHost: String = "www.xiaohongshu.com"
 public const val xiaohongshuExploreUrl: String = "https://www.xiaohongshu.com/explore"
 public const val xiaohongshuLoginUrl: String = "https://www.xiaohongshu.com/login"
+
+public const val instagramWebHost: String = "www.instagram.com"
+public const val instagramWebUrl: String = "https://www.instagram.com/"
+public const val instagramApiHost: String = "i.instagram.com"
 
 /**
  * Jike API endpoint identifier (from open-jike/jike-sdk)

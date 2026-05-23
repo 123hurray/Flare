@@ -114,6 +114,7 @@ public fun ServiceSelectionScreenContent(
     onVVO: () -> Unit,
     onJike: () -> Unit,
     onXiaohongshu: () -> Unit = {},
+    onInstagram: () -> Unit = {},
     onBack: (() -> Unit),
     openUri: (String) -> Unit,
     registerDeeplinkCallback: @Composable ((url: String) -> Unit) -> Unit,
@@ -564,6 +565,20 @@ public fun ServiceSelectionScreenContent(
                                     PlatformFilledTonalButton(
                                         onClick = {
                                             onXiaohongshu.invoke()
+                                        },
+                                        modifier = Modifier.width(300.dp),
+                                        content = {
+                                            PlatformText(
+                                                text = stringResource(Res.string.service_select_next_button),
+                                            )
+                                        },
+                                    )
+                                }
+
+                                PlatformType.Instagram -> {
+                                    PlatformFilledTonalButton(
+                                        onClick = {
+                                            onInstagram.invoke()
                                         },
                                         modifier = Modifier.width(300.dp),
                                         content = {

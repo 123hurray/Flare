@@ -87,6 +87,9 @@ public sealed interface UiApplication {
                 PlatformType.Xiaohongshu -> {
                     Nostr(host = host)
                 }
+                PlatformType.Instagram -> {
+                    Nostr(host = host)
+                }
             }
     }
 }

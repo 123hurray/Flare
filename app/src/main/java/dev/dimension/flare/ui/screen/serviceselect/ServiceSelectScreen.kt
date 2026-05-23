@@ -21,6 +21,7 @@ internal fun ServiceSelectScreen(
     onVVO: () -> Unit,
     onJike: () -> Unit,
     onXiaohongshu: () -> Unit,
+    onInstagram: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -46,6 +47,7 @@ internal fun ServiceSelectScreen(
             onVVO = onVVO,
             onJike = onJike,
             onXiaohongshu = onXiaohongshu,
+            onInstagram = onInstagram,
             contentPadding = contentPadding,
             openUri = uriHandler::openUri,
             registerDeeplinkCallback = { callback ->

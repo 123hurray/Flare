@@ -154,6 +154,15 @@ internal class RecommendInstancePagingSource : BasePagingSource<Int, UiInstance>
                     bannerUrl = null,
                     usersCount = 0,
                 ),
+                UiInstance(
+                    name = "Instagram",
+                    description = "Instagram - photos, reels, and stories",
+                    iconUrl = null,
+                    domain = "www.instagram.com",
+                    type = PlatformType.Instagram,
+                    bannerUrl = null,
+                    usersCount = 0,
+                ),
             )
         return LoadResult.Page(
             data = extra + (instances.sortedByDescending { it.usersCount }.filter { it !in extra }),

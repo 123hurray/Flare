@@ -9,6 +9,7 @@ import dev.dimension.flare.data.model.TimelineTabItem
 import dev.dimension.flare.data.network.nodeinfo.PlatformDetector
 import dev.dimension.flare.data.platform.BlueskyPlatformSpec
 import dev.dimension.flare.data.platform.JikePlatformSpec
+import dev.dimension.flare.data.platform.InstagramPlatformSpec
 import dev.dimension.flare.data.platform.MastodonPlatformSpec
 import dev.dimension.flare.data.platform.MisskeyPlatformSpec
 import dev.dimension.flare.data.platform.NostrPlatformSpec
@@ -60,4 +61,5 @@ internal val PlatformType.spec: PlatformSpec
             PlatformType.VVo -> VvoPlatformSpec
             PlatformType.Jike -> JikePlatformSpec
             PlatformType.Xiaohongshu -> XiaohongshuPlatformSpec
+            PlatformType.Instagram -> InstagramPlatformSpec
         }

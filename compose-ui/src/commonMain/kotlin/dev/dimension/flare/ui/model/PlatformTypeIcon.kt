@@ -5,6 +5,7 @@ import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
 import compose.icons.fontawesomeicons.Solid
 import compose.icons.fontawesomeicons.brands.Bluesky
+import compose.icons.fontawesomeicons.brands.Instagram
 import compose.icons.fontawesomeicons.brands.Mastodon
 import compose.icons.fontawesomeicons.brands.Weibo
 import compose.icons.fontawesomeicons.brands.XTwitter
@@ -25,4 +26,5 @@ public val PlatformType.brandIcon: ImageVector
             PlatformType.VVo -> FontAwesomeIcons.Brands.Weibo
             PlatformType.Jike -> FontAwesomeIcons.Brands.Jike
             PlatformType.Xiaohongshu -> FontAwesomeIcons.Solid.BookOpen
+            PlatformType.Instagram -> FontAwesomeIcons.Brands.Instagram
         }

@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.UriHandler
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import dev.dimension.flare.model.AccountType
+import dev.dimension.flare.model.instagramWebHost
 import dev.dimension.flare.model.jikeWebHost
 import dev.dimension.flare.model.xiaohongshuWebHost
 import dev.dimension.flare.ui.component.BottomSheetSceneStrategy
@@ -134,6 +135,7 @@ private fun AccountType.reloginRoute(): Route =
             when (accountKey.host) {
                 jikeWebHost -> Route.ServiceSelect.JikeLogin(accountKey)
                 xiaohongshuWebHost -> Route.ServiceSelect.XiaohongshuLogin(accountKey)
+                instagramWebHost -> Route.ServiceSelect.InstagramLogin(accountKey)
                 else -> Route.ServiceSelect.Selection
             }
 

@@ -11,6 +11,7 @@ import dev.dimension.flare.data.datasource.nostr.NostrDataSource
 import dev.dimension.flare.data.datasource.pleroma.PleromaDataSource
 import dev.dimension.flare.data.datasource.vvo.VVODataSource
 import dev.dimension.flare.data.datasource.jike.JikeDataSource
+import dev.dimension.flare.data.datasource.instagram.InstagramDataSource
 import dev.dimension.flare.data.datasource.xiaohongshu.XiaohongshuDataSource
 import dev.dimension.flare.data.datasource.xqt.XQTDataSource
 import dev.dimension.flare.model.MicroBlogKey
@@ -257,6 +258,23 @@ public sealed class UiAccount {
         ) : UiAccount.Credential
     }
 
+    @Immutable
+    internal data class Instagram(
+        override val accountKey: MicroBlogKey,
+    ) : UiAccount() {
+        override val platformType: PlatformType
+            get() = PlatformType.Instagram
+
+        @Immutable
+        @Serializable
+        @SerialName("InstagramCredential")
+        data class Credential(
+            val cookies: Map<String, String>,
+            val savedAt: Long = 0L,
+            val userAgent: String = "web-windows-chrome-126",
+        ) : UiAccount.Credential
+    }
+
     internal companion object {
         fun UiAccount.createDataSource(): MicroblogDataSource =
             when (this) {
@@ -320,6 +338,12 @@ public sealed class UiAccount {
                         accountKey = accountKey,
                     )
                 }
+
+                is Instagram -> {
+                    InstagramDataSource(
+                        accountKey = accountKey,
+                    )
+                }
             }
 
         fun DbAccount.toUi(): UiAccount =
@@ -375,6 +399,12 @@ public sealed class UiAccount {
 
                 PlatformType.Xiaohongshu -> {
                     Xiaohongshu(
+                        accountKey = account_key,
+                    )
+                }
+
+                PlatformType.Instagram -> {
+                    Instagram(
                         accountKey = account_key,
                     )
                 }

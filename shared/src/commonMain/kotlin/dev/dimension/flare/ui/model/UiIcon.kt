@@ -58,6 +58,7 @@ public enum class UiIcon {
     Nostr,
     X,
     Jike,
+    Instagram,
     Translate,
     UnFavourite,
 }

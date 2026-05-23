@@ -22,6 +22,9 @@ internal fun EntryProviderScope<NavKey>.serviceSelectEntryBuilder(
             onXiaohongshu = {
                 navigate(Route.ServiceSelect.XiaohongshuLogin())
             },
+            onInstagram = {
+                navigate(Route.ServiceSelect.InstagramLogin())
+            },
             onBack = onBack,
         )
     }
@@ -53,6 +56,15 @@ internal fun EntryProviderScope<NavKey>.serviceSelectEntryBuilder(
 
     entry<Route.ServiceSelect.XiaohongshuLogin> { args ->
         XiaohongshuLoginScreen(
+            reloginAccountKey = args.accountKey,
+            toHome = {
+                onBack()
+            }
+        )
+    }
+
+    entry<Route.ServiceSelect.InstagramLogin> { args ->
+        InstagramLoginScreen(
             reloginAccountKey = args.accountKey,
             toHome = {
                 onBack()
