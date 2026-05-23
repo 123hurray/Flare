@@ -40,11 +40,31 @@ internal class InstagramService(
         val userId = requireNotNull(cookies["ds_user_id"]?.takeIf { it.isNotBlank() }) {
             "Missing ds_user_id cookie"
         }
+        return userInfo(userId)
+    }
+
+    suspend fun userInfo(userId: String): InstagramUser {
         val root =
-            requestJson("https://www.instagram.com/api/v1/users/$userId/info/")
+            requestJson("https://www.instagram.com/api/v1/users/$userId/info/") {
+                parameter("entry_point", "profile")
+            }
                 .objectOrNull()
                 ?: throw IllegalStateException("Instagram profile response is not an object")
         return root["user"].objectOrNull()?.toInstagramUser()
+            ?: throw IllegalStateException("Instagram profile is empty")
+    }
+
+    suspend fun userByUsername(username: String): InstagramUser {
+        val root =
+            requestJson("https://www.instagram.com/api/v1/users/web_profile_info/") {
+                parameter("username", username.trim().removePrefix("@"))
+            }.objectOrNull()
+                ?: throw IllegalStateException("Instagram profile response is not an object")
+        return root["data"]
+            .objectOrNull()
+            ?.get("user")
+            .objectOrNull()
+            ?.toInstagramUser()
             ?: throw IllegalStateException("Instagram profile is empty")
     }
 
@@ -57,9 +77,28 @@ internal class InstagramService(
                 }
             }.objectOrNull()
                 ?: throw IllegalStateException("Instagram timeline response is not an object")
+        return root.toTimelinePage()
+    }
+
+    suspend fun userFeed(
+        userId: String,
+        maxId: String? = null,
+    ): InstagramTimelinePage {
+        val root =
+            requestJson("https://www.instagram.com/api/v1/feed/user/$userId/") {
+                parameter("count", 12)
+                if (!maxId.isNullOrBlank()) {
+                    parameter("max_id", maxId)
+                }
+            }.objectOrNull()
+                ?: throw IllegalStateException("Instagram user timeline response is not an object")
+        return root.toTimelinePage()
+    }
+
+    private fun JsonObject.toTimelinePage(): InstagramTimelinePage {
         val feedItems =
-            root["items"].arrayOrNull()
-                ?: root["feed_items"].arrayOrNull()
+            this["items"].arrayOrNull()
+                ?: this["feed_items"].arrayOrNull()
                 ?: emptyList()
         val items =
             feedItems
@@ -71,8 +110,8 @@ internal class InstagramService(
                 }.mapNotNull { it.toInstagramMedia() }
         return InstagramTimelinePage(
             items = items,
-            nextMaxId = root.string("next_max_id"),
-            moreAvailable = root.boolean("more_available"),
+            nextMaxId = string("next_max_id"),
+            moreAvailable = boolean("more_available"),
         )
     }
 

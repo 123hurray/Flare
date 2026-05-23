@@ -63,7 +63,13 @@ internal class InstagramDataSource(
     override fun userTimeline(
         userKey: MicroBlogKey,
         mediaOnly: Boolean,
-    ): RemoteLoader<UiTimelineV2> = emptyTimelineLoader()
+    ): RemoteLoader<UiTimelineV2> =
+        InstagramUserTimelineRemoteLoader(
+            service = service,
+            accountKey = accountKey,
+            userKey = userKey,
+            mediaOnly = mediaOnly,
+        )
 
     override fun context(statusKey: MicroBlogKey): RemoteLoader<UiTimelineV2> = emptyTimelineLoader()
 
@@ -129,6 +135,32 @@ private class InstagramHomeTimelineRemoteLoader(
             return PagingResult(endOfPaginationReached = true)
         }
         val page = service.homeFeed((request as? PagingRequest.Append)?.nextKey)
+        val items = page.items.map { it.toUiTimeline(accountKey) }
+        return PagingResult(
+            endOfPaginationReached = !page.moreAvailable || page.nextMaxId.isNullOrBlank() || items.isEmpty(),
+            data = items,
+            nextKey = page.nextMaxId,
+        )
+    }
+}
+
+@OptIn(ExperimentalPagingApi::class)
+private class InstagramUserTimelineRemoteLoader(
+    private val service: InstagramService,
+    private val accountKey: MicroBlogKey,
+    private val userKey: MicroBlogKey,
+    private val mediaOnly: Boolean,
+) : CacheableRemoteLoader<UiTimelineV2> {
+    override val pagingKey: String = "instagram_user_${userKey}_media_$mediaOnly"
+
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val page = service.userFeed(userKey.id, (request as? PagingRequest.Append)?.nextKey)
         val items = page.items.map { it.toUiTimeline(accountKey) }
         return PagingResult(
             endOfPaginationReached = !page.moreAvailable || page.nextMaxId.isNullOrBlank() || items.isEmpty(),

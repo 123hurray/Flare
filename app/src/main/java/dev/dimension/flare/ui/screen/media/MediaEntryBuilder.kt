@@ -44,6 +44,10 @@ internal fun EntryProviderScope<NavKey>.mediaEntryBuilder(
             index = args.index,
             preview = args.preview,
             onDismiss = onBack,
+            toStatusDetail = {
+                onBack()
+                navigate(Route.Status.Detail(args.statusKey, args.accountType))
+            },
             toAltText = { media ->
                 media.description?.let { navigate(Route.Status.AltText(it)) }
             },

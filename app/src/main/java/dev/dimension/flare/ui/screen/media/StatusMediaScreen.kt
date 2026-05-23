@@ -157,6 +157,7 @@ internal fun StatusMediaScreen(
     index: Int,
     preview: String?,
     onDismiss: () -> Unit,
+    toStatusDetail: () -> Unit,
     toAltText: (UiMedia) -> Unit,
     uriHandler: UriHandler,
     surfaceBindingManager: SurfaceBindingManager = koinInject(),
@@ -551,10 +552,12 @@ internal fun StatusMediaScreen(
                                                                     WindowInsets.systemBars.only(
                                                                         WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
                                                                     ),
-                                                                ),
+                                                                ).clickable {
+                                                                    toStatusDetail()
+                                                                },
                                                         maxLines = 3,
                                                         showExpandButton = false,
-                                                        isQuote = true,
+                                                        isDetail = true,
                                                     )
                                                 }
                                             }

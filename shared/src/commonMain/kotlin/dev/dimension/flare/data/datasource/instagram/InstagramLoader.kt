@@ -11,21 +11,14 @@ internal class InstagramLoader(
     private val service: InstagramService,
 ) : UserLoader {
     override suspend fun userByHandleAndHost(uiHandle: UiHandle): UiProfile {
-        val currentUser = service.me().toUiProfile(accountKey)
-        if (
-            uiHandle.normalizedRaw == currentUser.handle.normalizedRaw ||
-            uiHandle.normalizedRaw == currentUser.key.id
-        ) {
-            return currentUser
-        }
-        throw UnsupportedOperationException("Instagram profile lookup is not supported in v1")
+        return service.userByUsername(uiHandle.normalizedRaw).toUiProfile(accountKey)
     }
 
     override suspend fun userById(id: String): UiProfile {
-        val currentUser = service.me().toUiProfile(accountKey)
-        if (id == accountKey.id || id == currentUser.key.id || id == currentUser.handle.normalizedRaw) {
-            return currentUser
+        return if (id == accountKey.id) {
+            service.me().toUiProfile(accountKey)
+        } else {
+            service.userInfo(id).toUiProfile(accountKey)
         }
-        throw UnsupportedOperationException("Instagram profile lookup is not supported in v1")
     }
 }
