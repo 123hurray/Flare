@@ -43,6 +43,7 @@ public data class AppearanceSettings(
     val absoluteTimestamp: Boolean = false,
     val showPlatformLogo: Boolean = true,
     val timelineDisplayMode: TimelineDisplayMode = TimelineDisplayMode.Card,
+    val hideMediaPostInfoByDefault: Boolean = false,
 ) {
     public companion object {
         // for iOS

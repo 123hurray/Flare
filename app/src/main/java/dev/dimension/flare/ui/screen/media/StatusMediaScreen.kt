@@ -104,6 +104,7 @@ import compose.icons.fontawesomeicons.solid.ShareNodes
 import compose.icons.fontawesomeicons.solid.Xmark
 import dev.dimension.flare.R
 import dev.dimension.flare.common.VideoDownloadHelper
+import dev.dimension.flare.data.model.LocalAppearanceSettings
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.component.FAIcon
@@ -167,6 +168,7 @@ internal fun StatusMediaScreen(
     val isBigScreen = currentWindowAdaptiveInfoV2().windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND)
     val hapticFeedback = LocalHapticFeedback.current
     val context = LocalContext.current
+    val appearanceSettings = LocalAppearanceSettings.current
     val permissionState =
         rememberPermissionState(
             Manifest.permission.WRITE_EXTERNAL_STORAGE,
@@ -175,6 +177,7 @@ internal fun StatusMediaScreen(
         statusMediaPresenter(
             statusKey = statusKey,
             initialIndex = index,
+            initialShowUi = !appearanceSettings.hideMediaPostInfoByDefault,
             context = context,
             accountType = accountType,
         )
@@ -277,10 +280,12 @@ internal fun StatusMediaScreen(
                                                     },
                                                     setLockPager = {
                                                         if (pagerState.currentPage == index) {
-                                                            if (!isBigScreen) {
-                                                                state.setShowUi(!it)
+                                                            if (state.lockPager != it) {
+                                                                if (!isBigScreen) {
+                                                                    state.setShowUi(!it)
+                                                                }
+                                                                state.setLockPager(it)
                                                             }
-                                                            state.setLockPager(it)
                                                         }
                                                     },
                                                     onLongClick = {
@@ -337,10 +342,12 @@ internal fun StatusMediaScreen(
                                                     description = null,
                                                     onClick = { /*TODO*/ },
                                                     setLockPager = {
-                                                        if (!isBigScreen) {
-                                                            state.setShowUi(!it)
+                                                        if (state.lockPager != it) {
+                                                            if (!isBigScreen) {
+                                                                state.setShowUi(!it)
+                                                            }
+                                                            state.setLockPager(it)
                                                         }
-                                                        state.setLockPager(it)
                                                     },
                                                     modifier =
                                                         Modifier
@@ -890,6 +897,7 @@ private fun ImageItem(
 private fun statusMediaPresenter(
     statusKey: MicroBlogKey,
     initialIndex: Int,
+    initialShowUi: Boolean,
     context: Context,
     accountType: AccountType,
     scope: CoroutineScope = koinInject(),
@@ -899,7 +907,7 @@ private fun statusMediaPresenter(
         mutableStateOf(false)
     }
     var showUi by remember {
-        mutableStateOf(true)
+        mutableStateOf(initialShowUi)
     }
     var lockPager by remember {
         mutableStateOf(false)

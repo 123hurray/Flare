@@ -229,6 +229,8 @@
     <string name="settings_appearance_show_cw_img_description">Always show sensitive content in the post</string>
     <string name="settings_appearance_expand_media">Expand media to full size</string>
     <string name="settings_appearance_expand_media_description">Keep the aspectradio of the media in timeline</string>
+    <string name="settings_appearance_hide_media_post_info_by_default">Hide post info in media viewer by default</string>
+    <string name="settings_appearance_hide_media_post_info_by_default_description">Start image and video detail screens with the post overlay hidden</string>
     <string name="settings_appearance_video_autoplay">Video autoplay</string>
     <string name="settings_appearance_video_autoplay_description">Automatically play videos in the post</string>
     <string name="settings_appearance_video_autoplay_wifi">Wi-Fi only</string>

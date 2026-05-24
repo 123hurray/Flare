@@ -204,6 +204,8 @@
     <string name="settings_appearance_show_cw_img_description">总是在帖子中显示敏感内容</string>
     <string name="settings_appearance_expand_media">将媒体扩展到完整大小</string>
     <string name="settings_appearance_expand_media_description">保持时间轴中媒体的纵横比</string>
+    <string name="settings_appearance_hide_media_post_info_by_default">默认隐藏媒体页帖子信息</string>
+    <string name="settings_appearance_hide_media_post_info_by_default_description">进入图片或视频详情页时默认隐藏帖子覆盖层</string>
     <string name="settings_appearance_video_autoplay">视频自动播放</string>
     <string name="settings_appearance_video_autoplay_description">在帖子中自动播放视频</string>
     <string name="settings_appearance_video_autoplay_wifi">仅在 Wi-Fi 上</string>

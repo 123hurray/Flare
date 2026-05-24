@@ -166,6 +166,32 @@ internal fun AppearanceMediaScreen(onBack: () -> Unit) {
                 )
             }
             AnimatedVisibility(appearanceSettings.showMedia) {
+                SegmentedListItem(
+                    onClick = {
+                        state.updateSettings {
+                            copy(hideMediaPostInfoByDefault = !hideMediaPostInfoByDefault)
+                        }
+                    },
+                    shapes = ListItemDefaults.item(),
+                    content = {
+                        Text(text = stringResource(id = R.string.settings_appearance_hide_media_post_info_by_default))
+                    },
+                    supportingContent = {
+                        Text(text = stringResource(id = R.string.settings_appearance_hide_media_post_info_by_default_description))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = appearanceSettings.hideMediaPostInfoByDefault,
+                            onCheckedChange = {
+                                state.updateSettings {
+                                    copy(hideMediaPostInfoByDefault = it)
+                                }
+                            },
+                        )
+                    },
+                )
+            }
+            AnimatedVisibility(appearanceSettings.showMedia) {
                 SingleChoiceSettingsItem(
                     headline = { Text(text = stringResource(id = R.string.settings_appearance_video_autoplay)) },
                     supporting = { Text(text = stringResource(id = R.string.settings_appearance_video_autoplay_description)) },
