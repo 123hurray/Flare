@@ -16,6 +16,8 @@ import dev.dimension.flare.ui.presenter.home.MixedTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.TimelinePresenter
 import dev.dimension.flare.ui.presenter.home.bluesky.BlueskyBookmarkTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.bluesky.BlueskyFeedTimelinePresenter
+import dev.dimension.flare.ui.presenter.home.instagram.InstagramFollowingTimelinePresenter
+import dev.dimension.flare.ui.presenter.home.instagram.InstagramRecommendedTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.mastodon.MastodonBookmarkTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.mastodon.MastodonFavouriteTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.mastodon.MastodonLocalTimelinePresenter
@@ -754,6 +756,34 @@ public object Jike {
         override val key: String = "jike_topic_${topicId}_${tabType}_$account"
 
         override fun createPresenter(): TimelinePresenter = JikeTopicTimelinePresenter(account, topicId, tabType)
+
+        override fun update(metaData: TabMetaData): TabItem = copy(metaData = metaData)
+    }
+}
+
+public object Instagram {
+    @Immutable
+    @Serializable
+    public data class FollowingTimelineTabItem(
+        override val account: AccountType,
+        override val metaData: TabMetaData,
+    ) : TimelineTabItem() {
+        override val key: String = "instagram_following_$account"
+
+        override fun createPresenter(): TimelinePresenter = InstagramFollowingTimelinePresenter(account)
+
+        override fun update(metaData: TabMetaData): TabItem = copy(metaData = metaData)
+    }
+
+    @Immutable
+    @Serializable
+    public data class RecommendedTimelineTabItem(
+        override val account: AccountType,
+        override val metaData: TabMetaData,
+    ) : TimelineTabItem() {
+        override val key: String = "instagram_recommended_$account"
+
+        override fun createPresenter(): TimelinePresenter = InstagramRecommendedTimelinePresenter(account)
 
         override fun update(metaData: TabMetaData): TabItem = copy(metaData = metaData)
     }

@@ -107,7 +107,21 @@ internal class InstagramDataSource(
         get() = loader.supportedTypes
 
     override fun homeTimeline(): RemoteLoader<UiTimelineV2> =
-        InstagramHomeTimelineRemoteLoader(service, accountKey)
+        followingTimeline()
+
+    fun followingTimeline(): RemoteLoader<UiTimelineV2> =
+        InstagramHomeTimelineRemoteLoader(
+            service = service,
+            accountKey = accountKey,
+            type = InstagramHomeTimelineType.Following,
+        )
+
+    fun recommendedTimeline(): RemoteLoader<UiTimelineV2> =
+        InstagramHomeTimelineRemoteLoader(
+            service = service,
+            accountKey = accountKey,
+            type = InstagramHomeTimelineType.Recommended,
+        )
 
     override fun userTimeline(
         userKey: MicroBlogKey,
@@ -178,8 +192,13 @@ internal class InstagramDataSource(
 private class InstagramHomeTimelineRemoteLoader(
     private val service: InstagramService,
     private val accountKey: MicroBlogKey,
+    private val type: InstagramHomeTimelineType,
 ) : CacheableRemoteLoader<UiTimelineV2> {
-    override val pagingKey: String = "instagram_following_web_$accountKey"
+    override val pagingKey: String =
+        when (type) {
+            InstagramHomeTimelineType.Following -> "instagram_following_web_$accountKey"
+            InstagramHomeTimelineType.Recommended -> "instagram_recommended_$accountKey"
+        }
 
     override suspend fun load(
         pageSize: Int,
@@ -188,7 +207,11 @@ private class InstagramHomeTimelineRemoteLoader(
         if (request is PagingRequest.Prepend) {
             return PagingResult(endOfPaginationReached = true)
         }
-        val page = service.homeFeed((request as? PagingRequest.Append)?.nextKey)
+        val page =
+            when (type) {
+                InstagramHomeTimelineType.Following -> service.followingFeed((request as? PagingRequest.Append)?.nextKey)
+                InstagramHomeTimelineType.Recommended -> service.recommendedFeed((request as? PagingRequest.Append)?.nextKey)
+            }
         val items = page.items.map { it.toUiTimeline(accountKey) }
         return PagingResult(
             endOfPaginationReached = !page.moreAvailable || page.nextMaxId.isNullOrBlank() || items.isEmpty(),
@@ -196,6 +219,11 @@ private class InstagramHomeTimelineRemoteLoader(
             nextKey = page.nextMaxId,
         )
     }
+}
+
+private enum class InstagramHomeTimelineType {
+    Following,
+    Recommended,
 }
 
 @OptIn(ExperimentalPagingApi::class)

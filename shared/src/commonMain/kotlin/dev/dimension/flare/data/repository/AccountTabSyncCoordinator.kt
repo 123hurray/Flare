@@ -2,6 +2,7 @@ package dev.dimension.flare.data.repository
 
 import dev.dimension.flare.data.model.HomeTimelineTabItem
 import dev.dimension.flare.data.model.IconType
+import dev.dimension.flare.data.model.Instagram
 import dev.dimension.flare.data.model.Jike
 import dev.dimension.flare.data.model.MixedTimelineTabItem
 import dev.dimension.flare.data.model.TabSettings
@@ -10,6 +11,7 @@ import dev.dimension.flare.data.model.TimelineTabItem
 import dev.dimension.flare.data.model.TitleType
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.instagramWebHost
 import dev.dimension.flare.model.jikeWebHost
 import dev.dimension.flare.model.spec
 import dev.dimension.flare.ui.model.UiAccount
@@ -30,6 +32,9 @@ internal class AccountTabSyncCoordinator(
         }
         coroutineScope.launch {
             normalizeJikeHomeTabs()
+        }
+        coroutineScope.launch {
+            normalizeInstagramHomeTabs()
         }
         coroutineScope.launch {
             accountRepository.onAdded.collect { account ->
@@ -124,6 +129,21 @@ internal class AccountTabSyncCoordinator(
         }
     }
 
+    private suspend fun normalizeInstagramHomeTabs() {
+        settingsRepository.updateTabSettings {
+            val normalizedTabs =
+                mainTabs
+                    .flatMap { it.normalizeInstagramHomeTab() }
+                    .distinctBy { it.key }
+                    .toImmutableList()
+            if (normalizedTabs == mainTabs) {
+                this
+            } else {
+                copy(mainTabs = normalizedTabs)
+            }
+        }
+    }
+
     private fun TabSettings.cleanupForExistingAccounts(
         accountKeys: Set<MicroBlogKey>,
         retainAccounts: Boolean = true,
@@ -170,8 +190,54 @@ internal class AccountTabSyncCoordinator(
                     null
                 }
             }
-        }
+    }
 }
+
+private fun TimelineTabItem.normalizeInstagramHomeTab(): List<TimelineTabItem> =
+    when (this) {
+        is MixedTimelineTabItem -> {
+            listOf(
+                copy(
+                    subTimelineTabItem =
+                        subTimelineTabItem
+                            .flatMap { it.normalizeInstagramHomeTab() }
+                            .distinctBy { it.key }
+                            .toImmutableList(),
+                ),
+            )
+        }
+
+        is HomeTimelineTabItem -> {
+            val accountKey = (account as? AccountType.Specific)?.accountKey
+            if (accountKey?.host == instagramWebHost) {
+                accountKey.instagramDefaultTimelineTabs()
+            } else {
+                listOf(this)
+            }
+        }
+
+        else -> listOf(this)
+    }
+
+private fun MicroBlogKey.instagramDefaultTimelineTabs(): List<TimelineTabItem> =
+    listOf(
+        Instagram.FollowingTimelineTabItem(
+            account = AccountType.Specific(this),
+            metaData =
+                TabMetaData(
+                    title = TitleType.Text("关注"),
+                    icon = IconType.Material(UiIcon.Instagram),
+                ),
+        ),
+        Instagram.RecommendedTimelineTabItem(
+            account = AccountType.Specific(this),
+            metaData =
+                TabMetaData(
+                    title = TitleType.Text("推荐"),
+                    icon = IconType.Material(UiIcon.Home),
+                ),
+        ),
+    )
 
 internal fun TabSettings.sanitizeDuplicateTabKeys(): TabSettings {
     val sanitizedTabs =

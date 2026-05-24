@@ -3,12 +3,15 @@ package dev.dimension.flare.data.platform
 import dev.dimension.flare.common.deeplink.DeepLinkMapping
 import dev.dimension.flare.common.deeplink.DeepLinkPattern
 import dev.dimension.flare.data.datasource.microblog.MicroblogDataSource
-import dev.dimension.flare.data.model.HomeTimelineTabItem
 import dev.dimension.flare.data.model.IconType
+import dev.dimension.flare.data.model.Instagram
 import dev.dimension.flare.data.model.TabItem
+import dev.dimension.flare.data.model.TabMetaData
 import dev.dimension.flare.data.model.TimelineTabItem
+import dev.dimension.flare.data.model.TitleType
 import dev.dimension.flare.data.network.instagram.InstagramPlatformDetector
 import dev.dimension.flare.data.network.nodeinfo.PlatformDetector
+import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformSpec
 import dev.dimension.flare.model.PlatformType
@@ -39,10 +42,21 @@ internal data object InstagramPlatformSpec : PlatformSpec {
 
     override fun defaultTimelineTabs(accountKey: MicroBlogKey): ImmutableList<TimelineTabItem> =
         persistentListOf(
-            HomeTimelineTabItem(
-                accountKey = accountKey,
-                title = "Instagram",
-                icon = IconType.Material(UiIcon.Instagram),
+            Instagram.FollowingTimelineTabItem(
+                account = AccountType.Specific(accountKey),
+                metaData =
+                    TabMetaData(
+                        title = TitleType.Text("关注"),
+                        icon = IconType.Material(UiIcon.Instagram),
+                    ),
+            ),
+            Instagram.RecommendedTimelineTabItem(
+                account = AccountType.Specific(accountKey),
+                metaData =
+                    TabMetaData(
+                        title = TitleType.Text("推荐"),
+                        icon = IconType.Material(UiIcon.Home),
+                    ),
             ),
         )
 

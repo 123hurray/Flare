@@ -77,6 +77,10 @@ internal class InstagramService(
     }
 
     suspend fun homeFeed(maxId: String? = null): InstagramTimelinePage {
+        return followingFeed(maxId)
+    }
+
+    suspend fun followingFeed(maxId: String? = null): InstagramTimelinePage {
         val cookies = cookiesFlow.first()
         val root =
             requestGraphql(
@@ -87,6 +91,18 @@ internal class InstagramService(
             ).objectOrNull()
                 ?: throw IllegalStateException("Instagram timeline response is not an object")
         return root.toGraphqlTimelinePage()
+    }
+
+    suspend fun recommendedFeed(maxId: String? = null): InstagramTimelinePage {
+        val root =
+            requestJson("https://www.instagram.com/api/v1/feed/timeline/") {
+                parameter("count", 12)
+                if (!maxId.isNullOrBlank()) {
+                    parameter("max_id", maxId)
+                }
+            }.objectOrNull()
+                ?: throw IllegalStateException("Instagram timeline response is not an object")
+        return root.toTimelinePage()
     }
 
     suspend fun userFeed(
