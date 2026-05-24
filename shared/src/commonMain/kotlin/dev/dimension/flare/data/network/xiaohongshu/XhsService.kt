@@ -377,14 +377,34 @@ internal class XhsService(
                 mapLoginExpired = false,
             )
         XhsErrorMapper.map(null, response.code, response.msg)?.let { throw it }
-        if (!response.success || response.code != 0) {
-            throw XhsHttpException(
-                status = HttpStatusCode.OK.value,
-                code = response.code,
-                message = response.msg ?: "Xiaohongshu follow request failed",
-            )
+        if (response.success) {
+            logRelationResponse(path, response)
+            return response
         }
-        return response
+        throw XhsHttpException(
+            status = HttpStatusCode.OK.value,
+            code = response.code,
+            message = response.msg ?: "Xiaohongshu follow request failed",
+        )
+    }
+
+    private fun logRelationResponse(
+        path: String,
+        response: XhsFollowResponse,
+    ) {
+        val line =
+            buildString {
+                append("XhsService: relation path=")
+                append(path)
+                append(" success=")
+                append(response.success)
+                append(" code=")
+                append(response.code)
+                append(" fstatus=")
+                append(response.data?.followStatus.orEmpty())
+            }
+        println(line)
+        DebugRepository.log(line)
     }
 
     private suspend fun executeWithBackoff(block: suspend () -> HttpResponse): HttpResponse {
@@ -482,6 +502,7 @@ internal class XhsService(
                 logDiagnostic(
                     "XhsService: userInfoSummary dataKeys=${data.keys.sorted()} " +
                         "basicKeys=${basic?.keys?.sorted().orEmpty()} " +
+                        "fstatus=${data.valueForLog("fstatus")} basicFstatus=${basic?.valueForLog("fstatus").orEmpty()} " +
                         "direct=${data.profileCountFields()} basic=${basic?.profileCountFields().orEmpty()} " +
                         "interactions=$interactions",
                 )

@@ -327,6 +327,8 @@ internal data class InstagramMedia(
     val code: String,
     val caption: String,
     val takenAt: Long,
+    val likeCount: Long,
+    val commentCount: Long,
     val user: InstagramUser?,
     val attachments: List<InstagramAttachment>,
 )
@@ -373,6 +375,8 @@ private fun JsonObject.toInstagramMedia(): InstagramMedia? {
         code = string("code").orEmpty(),
         caption = captionText(),
         takenAt = number("taken_at") ?: number("taken_at_timestamp") ?: 0L,
+        likeCount = number("like_count") ?: 0L,
+        commentCount = number("comment_count") ?: number("comments_count") ?: 0L,
         user = this["user"].objectOrNull()?.toInstagramUser(),
         attachments = attachments,
     )

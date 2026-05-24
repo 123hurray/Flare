@@ -61,6 +61,7 @@ import compose.icons.fontawesomeicons.solid.Download
 import compose.icons.fontawesomeicons.solid.Image
 import compose.icons.fontawesomeicons.solid.Link
 import dev.dimension.flare.R
+import dev.dimension.flare.data.model.LocalAppearanceSettings
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
@@ -107,6 +108,7 @@ internal fun StatusShareSheet(
     val previewGraphicsLayer = rememberGraphicsLayer()
     var captureRequested by remember { mutableStateOf(false) }
     var previewTheme by remember { mutableStateOf(SharePreviewTheme.Light) }
+    val appearanceSettings = LocalAppearanceSettings.current
     val state by producePresenter("status_share_sheet_${statusKey}_$shareUrl") {
         val cached = StatusMediaRouteCache.get(statusKey, accountType)
         if (cached?.platformType == PlatformType.Xiaohongshu) {
@@ -163,6 +165,9 @@ internal fun StatusShareSheet(
                                         LocalComponentAppearance.current.copy(
                                             showTranslateButton = false,
                                             videoAutoplay = ComponentAppearance.VideoAutoplay.NEVER,
+                                            expandMediaSize =
+                                                LocalComponentAppearance.current.expandMediaSize ||
+                                                    appearanceSettings.shareImageExpandMediaSize,
                                         ),
                                 ) {
                                     StatusItem(

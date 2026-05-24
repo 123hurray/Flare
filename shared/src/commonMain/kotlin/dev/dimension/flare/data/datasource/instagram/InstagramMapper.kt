@@ -13,7 +13,9 @@ import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.instagramWebHost
 import dev.dimension.flare.ui.model.ClickEvent
 import dev.dimension.flare.ui.model.UiHandle
+import dev.dimension.flare.ui.model.UiIcon
 import dev.dimension.flare.ui.model.UiMedia
+import dev.dimension.flare.ui.model.UiNumber
 import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.render.UiDateTime
@@ -68,6 +70,7 @@ internal fun InstagramMedia.toUiTimeline(
     userOverride: UiProfile? = null,
 ): UiTimelineV2.Post {
     val statusKey = MicroBlogKey(id, instagramWebHost)
+    val accountType = AccountType.Specific(accountKey)
     return UiTimelineV2.Post(
         platformType = PlatformType.Instagram,
         images = attachments.map { it.toUiMedia() }.toImmutableList(),
@@ -75,7 +78,48 @@ internal fun InstagramMedia.toUiTimeline(
         contentWarning = null,
         user = userOverride ?: user?.toUiProfile(accountKey),
         content = caption.toUiPlainText(),
-        actions = persistentListOf<ActionMenu>(),
+        actions =
+            persistentListOf(
+                ActionMenu.Item(
+                    icon = UiIcon.Comment,
+                    text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Comment),
+                    count = UiNumber(commentCount),
+                    clickEvent =
+                        ClickEvent.Deeplink(
+                            DeeplinkRoute.Status.Detail(
+                                accountType = accountType,
+                                statusKey = statusKey,
+                            ),
+                        ),
+                ),
+                ActionMenu.Item(
+                    icon = UiIcon.Like,
+                    text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Like),
+                    count = UiNumber(likeCount),
+                ),
+                ActionMenu.Group(
+                    displayItem =
+                        ActionMenu.Item(
+                            icon = UiIcon.More,
+                            text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.More),
+                        ),
+                    actions =
+                        persistentListOf(
+                            ActionMenu.Item(
+                                icon = UiIcon.Share,
+                                text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Share),
+                                clickEvent =
+                                    ClickEvent.Deeplink(
+                                        DeeplinkRoute.Status.ShareSheet(
+                                            statusKey = statusKey,
+                                            accountType = accountType,
+                                            shareUrl = shareUrl(),
+                                        ),
+                                    ),
+                            ),
+                        ),
+                ),
+            ),
         poll = null,
         statusKey = statusKey,
         card = null,
@@ -83,13 +127,20 @@ internal fun InstagramMedia.toUiTimeline(
         clickEvent =
             ClickEvent.Deeplink(
                 DeeplinkRoute.Status.Detail(
-                    accountType = AccountType.Specific(accountKey),
+                    accountType = accountType,
                     statusKey = statusKey,
                 ),
             ),
-        accountType = AccountType.Specific(accountKey),
+        accountType = accountType,
     )
 }
+
+private fun InstagramMedia.shareUrl(): String =
+    if (code.isNotBlank()) {
+        "https://$instagramWebHost/p/$code/"
+    } else {
+        "https://$instagramWebHost/p/$id/"
+    }
 
 private fun InstagramAttachment.toUiMedia(): UiMedia =
     when (this) {

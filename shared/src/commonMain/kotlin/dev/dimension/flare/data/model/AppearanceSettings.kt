@@ -44,6 +44,7 @@ public data class AppearanceSettings(
     val showPlatformLogo: Boolean = true,
     val timelineDisplayMode: TimelineDisplayMode = TimelineDisplayMode.Card,
     val hideMediaPostInfoByDefault: Boolean = false,
+    val shareImageExpandMediaSize: Boolean = false,
 ) {
     public companion object {
         // for iOS

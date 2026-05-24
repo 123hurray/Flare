@@ -192,6 +192,32 @@ internal fun AppearanceMediaScreen(onBack: () -> Unit) {
                 )
             }
             AnimatedVisibility(appearanceSettings.showMedia) {
+                SegmentedListItem(
+                    onClick = {
+                        state.updateSettings {
+                            copy(shareImageExpandMediaSize = !shareImageExpandMediaSize)
+                        }
+                    },
+                    shapes = ListItemDefaults.item(),
+                    content = {
+                        Text(text = stringResource(id = R.string.settings_appearance_share_image_expand_media))
+                    },
+                    supportingContent = {
+                        Text(text = stringResource(id = R.string.settings_appearance_share_image_expand_media_description))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = appearanceSettings.shareImageExpandMediaSize,
+                            onCheckedChange = {
+                                state.updateSettings {
+                                    copy(shareImageExpandMediaSize = it)
+                                }
+                            },
+                        )
+                    },
+                )
+            }
+            AnimatedVisibility(appearanceSettings.showMedia) {
                 SingleChoiceSettingsItem(
                     headline = { Text(text = stringResource(id = R.string.settings_appearance_video_autoplay)) },
                     supporting = { Text(text = stringResource(id = R.string.settings_appearance_video_autoplay_description)) },
