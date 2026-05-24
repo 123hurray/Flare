@@ -8,21 +8,29 @@ import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.instagramWebHost
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Parameters
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 
 internal class InstagramService(
     private val accountKey: MicroBlogKey? = null,
@@ -69,15 +77,16 @@ internal class InstagramService(
     }
 
     suspend fun homeFeed(maxId: String? = null): InstagramTimelinePage {
+        val cookies = cookiesFlow.first()
         val root =
-            requestJson("https://www.instagram.com/api/v1/feed/timeline/") {
-                parameter("count", 12)
-                if (!maxId.isNullOrBlank()) {
-                    parameter("max_id", maxId)
-                }
-            }.objectOrNull()
+            requestGraphql(
+                cookies = cookies,
+                docId = INSTAGRAM_FOLLOWING_FEED_DOC_ID,
+                friendlyName = INSTAGRAM_FOLLOWING_FEED_FRIENDLY_NAME,
+                variables = followingFeedVariables(cookies = cookies, after = maxId),
+            ).objectOrNull()
                 ?: throw IllegalStateException("Instagram timeline response is not an object")
-        return root.toTimelinePage()
+        return root.toGraphqlTimelinePage()
     }
 
     suspend fun userFeed(
@@ -129,6 +138,59 @@ internal class InstagramService(
         )
     }
 
+    private fun JsonObject.toGraphqlTimelinePage(): InstagramTimelinePage {
+        val connection =
+            this["data"]
+                .objectOrNull()
+                ?.get("xdt_api__v1__feed__timeline__connection")
+                .objectOrNull()
+                ?: throw IllegalStateException("Instagram timeline connection is empty")
+        val items =
+            connection["edges"]
+                .arrayOrEmpty()
+                .mapNotNull { edge ->
+                    val node = edge.objectOrNull()?.get("node").objectOrNull() ?: return@mapNotNull null
+                    node["media"].objectOrNull()
+                        ?: node["explore_story"].objectOrNull()?.get("media").objectOrNull()
+                        ?: node
+                }.mapNotNull { it.toInstagramMedia() }
+        val pageInfo = connection["page_info"].objectOrNull()
+        return InstagramTimelinePage(
+            items = items,
+            nextMaxId = pageInfo?.string("end_cursor"),
+            moreAvailable = pageInfo?.boolean("has_next_page") == true,
+        )
+    }
+
+    private fun followingFeedVariables(
+        cookies: Map<String, String>,
+        after: String?,
+    ): JsonObject =
+        buildJsonObject {
+            if (!after.isNullOrBlank()) {
+                put("after", after)
+            }
+            put("before", JsonNull)
+            put(
+                "data",
+                buildJsonObject {
+                    put("device_id", cookies["ig_did"]?.takeIf { it.isNotBlank() } ?: deviceId())
+                    put("is_async_ads_double_request", "0")
+                    put("is_async_ads_in_headload_enabled", "0")
+                    put("is_async_ads_rti", "0")
+                    put("rti_delivery_backend", "0")
+                    put("pagination_source", "following")
+                },
+            )
+            put("first", 12)
+            put("last", JsonNull)
+            put("variant", "following")
+            put("__relay_internal__pv__PolarisImmersiveFeedChainingEnabledrelayprovider", true)
+            put("__relay_internal__pv__PolarisAIGMAccountLabelEnabledrelayprovider", false)
+        }
+
+    private fun deviceId(): String = "web_${accountKey?.id.orEmpty()}"
+
     private suspend fun requestJson(
         url: String,
         block: io.ktor.client.request.HttpRequestBuilder.() -> Unit = {},
@@ -144,11 +206,47 @@ internal class InstagramService(
         return JSON.parseToJsonElement(body)
     }
 
-    private fun io.ktor.client.request.HttpRequestBuilder.instagramHeaders(cookies: Map<String, String>) {
+    private suspend fun requestGraphql(
+        cookies: Map<String, String>,
+        docId: String,
+        friendlyName: String,
+        variables: JsonObject,
+    ): JsonElement {
+        val url = "https://www.instagram.com/graphql/query"
+        val response =
+            client.post(url) {
+                instagramHeaders(
+                    cookies = cookies,
+                    referer = "https://$instagramWebHost/?variant=following",
+                )
+                header(HttpHeaders.ContentType, ContentType.Application.FormUrlEncoded.toString())
+                header("X-FB-Friendly-Name", friendlyName)
+                setBody(
+                    FormDataContent(
+                        Parameters.build {
+                            append("doc_id", docId)
+                            append("variables", variables.toString())
+                            append("fb_api_caller_class", "RelayModern")
+                            append("fb_api_req_friendly_name", friendlyName)
+                            append("server_timestamps", "true")
+                        },
+                    ),
+                )
+            }
+        val body = response.bodyAsText()
+        logRawResponse(url = url, response = response, body = body)
+        validate(response)
+        return JSON.parseToJsonElement(body)
+    }
+
+    private fun io.ktor.client.request.HttpRequestBuilder.instagramHeaders(
+        cookies: Map<String, String>,
+        referer: String = "https://$instagramWebHost/",
+    ) {
         header(HttpHeaders.UserAgent, INSTAGRAM_WEB_USER_AGENT)
         header(HttpHeaders.Accept, "*/*")
         header(HttpHeaders.AcceptLanguage, "en-US,en;q=0.9")
-        header("Referer", "https://$instagramWebHost/")
+        header("Referer", referer)
         header("Origin", "https://$instagramWebHost")
         header("X-ASBD-ID", "129477")
         header("X-IG-App-ID", INSTAGRAM_WEB_APP_ID)
@@ -185,6 +283,9 @@ public const val INSTAGRAM_WEB_APP_ID: String = "936619743392459"
 public const val INSTAGRAM_WEB_USER_AGENT: String =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
         "Chrome/126.0.0.0 Safari/537.36"
+
+private const val INSTAGRAM_FOLLOWING_FEED_DOC_ID = "26187106280962534"
+private const val INSTAGRAM_FOLLOWING_FEED_FRIENDLY_NAME = "PolarisFeedRootPaginationCachedQuery_subscribe"
 
 internal data class InstagramTimelinePage(
     val items: List<InstagramMedia>,

@@ -179,7 +179,7 @@ private class InstagramHomeTimelineRemoteLoader(
     private val service: InstagramService,
     private val accountKey: MicroBlogKey,
 ) : CacheableRemoteLoader<UiTimelineV2> {
-    override val pagingKey: String = "instagram_home_$accountKey"
+    override val pagingKey: String = "instagram_following_web_$accountKey"
 
     override suspend fun load(
         pageSize: Int,
