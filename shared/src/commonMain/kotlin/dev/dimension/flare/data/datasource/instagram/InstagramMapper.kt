@@ -2,9 +2,11 @@ package dev.dimension.flare.data.datasource.instagram
 
 import dev.dimension.flare.data.datasource.microblog.ActionMenu
 import dev.dimension.flare.data.network.instagram.INSTAGRAM_WEB_USER_AGENT
+import dev.dimension.flare.data.network.instagram.InstagramAttachment
 import dev.dimension.flare.data.network.instagram.InstagramImage
 import dev.dimension.flare.data.network.instagram.InstagramMedia
 import dev.dimension.flare.data.network.instagram.InstagramUser
+import dev.dimension.flare.data.network.instagram.InstagramVideo
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
@@ -68,7 +70,7 @@ internal fun InstagramMedia.toUiTimeline(
     val statusKey = MicroBlogKey(id, instagramWebHost)
     return UiTimelineV2.Post(
         platformType = PlatformType.Instagram,
-        images = images.map { it.toUiMedia() }.toImmutableList(),
+        images = attachments.map { it.toUiMedia() }.toImmutableList(),
         sensitive = false,
         contentWarning = null,
         user = userOverride ?: user?.toUiProfile(accountKey),
@@ -89,6 +91,12 @@ internal fun InstagramMedia.toUiTimeline(
     )
 }
 
+private fun InstagramAttachment.toUiMedia(): UiMedia =
+    when (this) {
+        is InstagramImage -> toUiMedia()
+        is InstagramVideo -> toUiMedia()
+    }
+
 private fun InstagramImage.toUiMedia(): UiMedia.Image =
     UiMedia.Image(
         url = url,
@@ -97,5 +105,15 @@ private fun InstagramImage.toUiMedia(): UiMedia.Image =
         height = height,
         width = width,
         sensitive = false,
+        customHeaders = instagramMediaHeaders,
+    )
+
+private fun InstagramVideo.toUiMedia(): UiMedia.Video =
+    UiMedia.Video(
+        url = url,
+        thumbnailUrl = thumbnailUrl,
+        description = null,
+        height = height,
+        width = width,
         customHeaders = instagramMediaHeaders,
     )

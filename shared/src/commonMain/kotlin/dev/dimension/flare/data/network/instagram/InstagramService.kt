@@ -211,14 +211,23 @@ internal data class InstagramMedia(
     val caption: String,
     val takenAt: Long,
     val user: InstagramUser?,
-    val images: List<InstagramImage>,
+    val attachments: List<InstagramAttachment>,
 )
+
+internal sealed interface InstagramAttachment
 
 internal data class InstagramImage(
     val url: String,
     val width: Float,
     val height: Float,
-)
+) : InstagramAttachment
+
+internal data class InstagramVideo(
+    val url: String,
+    val thumbnailUrl: String,
+    val width: Float,
+    val height: Float,
+) : InstagramAttachment
 
 private fun JsonObject.toInstagramUser(): InstagramUser =
     InstagramUser(
@@ -236,19 +245,40 @@ private fun JsonObject.toInstagramUser(): InstagramUser =
 
 private fun JsonObject.toInstagramMedia(): InstagramMedia? {
     val id = string("id") ?: string("pk") ?: return null
-    val images =
+    val attachmentSources =
         this["carousel_media"]
             .arrayOrEmpty()
-            .mapNotNull { it.objectOrNull()?.bestImage() }
-            .ifEmpty { listOfNotNull(bestImage()) }
+            .mapNotNull { it.objectOrNull() }
+            .ifEmpty { listOf(this) }
+    val attachments = attachmentSources.mapNotNull { it.toInstagramAttachment() }
     return InstagramMedia(
         id = id,
         code = string("code").orEmpty(),
         caption = captionText(),
         takenAt = number("taken_at") ?: number("taken_at_timestamp") ?: 0L,
         user = this["user"].objectOrNull()?.toInstagramUser(),
-        images = images,
+        attachments = attachments,
     )
+}
+
+private fun JsonObject.toInstagramAttachment(): InstagramAttachment? {
+    val image = bestImage()
+    val isVideo = number("media_type") == 2L || this["video_versions"].arrayOrNull()?.isNotEmpty() == true
+    if (isVideo) {
+        val video = bestVideo(image)
+        if (video != null) {
+            return video
+        }
+        if (image != null) {
+            return InstagramVideo(
+                url = "",
+                thumbnailUrl = image.url,
+                width = image.width,
+                height = image.height,
+            )
+        }
+    }
+    return image
 }
 
 private fun JsonObject.bestImage(): InstagramImage? {
@@ -268,6 +298,25 @@ private fun JsonObject.bestImage(): InstagramImage? {
             }
     return candidates.maxByOrNull { it.width * it.height }
         ?: string("display_url")?.let { InstagramImage(it, 1f, 1f) }
+}
+
+private fun JsonObject.bestVideo(thumbnail: InstagramImage?): InstagramVideo? {
+    val candidates =
+        this["video_versions"]
+            .arrayOrEmpty()
+            .mapNotNull { candidate ->
+                val json = candidate.objectOrNull() ?: return@mapNotNull null
+                val url = json.string("url") ?: return@mapNotNull null
+                val width = (json.number("width") ?: 0L).toFloat()
+                val height = (json.number("height") ?: 0L).toFloat()
+                InstagramVideo(
+                    url = url,
+                    thumbnailUrl = thumbnail?.url.orEmpty(),
+                    width = width.takeIf { it > 0f } ?: thumbnail?.width ?: 1f,
+                    height = height.takeIf { it > 0f } ?: thumbnail?.height ?: 1f,
+                )
+            }
+    return candidates.maxByOrNull { it.width * it.height }
 }
 
 private fun JsonObject.captionText(): String =
