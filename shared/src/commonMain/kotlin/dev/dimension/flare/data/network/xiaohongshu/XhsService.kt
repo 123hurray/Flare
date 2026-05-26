@@ -120,6 +120,7 @@ internal class XhsService(
     suspend fun subComments(
         noteId: String,
         rootCommentId: String,
+        xsecToken: String,
         cursor: String = "",
         num: Int = 30,
     ): XhsCommentPageResponse {
@@ -131,6 +132,7 @@ internal class XhsService(
                     "root_comment_id" to rootCommentId,
                     "num" to num.toString(),
                     "cursor" to cursor,
+                    "xsec_token" to xsecToken,
                 ),
             )
         requireVerifiedMainApiSigning(path)
@@ -428,6 +430,13 @@ internal class XhsService(
         status: Int,
         body: String,
     ) {
+        if (path.contains("/comment/page") || path.contains("/comment/sub/page")) {
+            logRawCommentBody(
+                scope = "XhsService",
+                id = path,
+                body = body,
+            )
+        }
         val line =
             buildString {
                 append("XhsService: response path=")
@@ -471,6 +480,26 @@ internal class XhsService(
         val root = runCatching { JSON.decodeFromString<JsonElement>(body) }.getOrNull() as? JsonObject ?: return
         val data = root["data"] as? JsonObject ?: return
         when {
+            path.contains("/comment/page") || path.contains("/comment/sub/page") -> {
+                val kind =
+                    if (path.contains("/comment/sub/page")) {
+                        "sub"
+                    } else {
+                        "root"
+                    }
+                val comments = data["comments"] as? JsonArray
+                logDiagnostic(
+                    "XhsService: commentRawSummary kind=$kind dataKeys=${data.keys.sorted()} " +
+                        "count=${comments?.size ?: 0} cursor=${data.valueForLog("cursor")} " +
+                        "hasMore=${data.valueForLog("has_more")}",
+                )
+                comments
+                    ?.take(3)
+                    ?.forEachIndexed { index, item ->
+                        val comment = item as? JsonObject ?: return@forEachIndexed
+                        logDiagnostic("XhsService: commentRawSample kind=$kind index=$index ${comment.commentStructureForLog()}")
+                    }
+            }
             path.contains("/homefeed") || path.contains("/search/notes") -> {
                 (data["items"] as? JsonArray)
                     ?.take(3)
@@ -508,6 +537,30 @@ internal class XhsService(
                 )
             }
         }
+    }
+
+    private fun logRawCommentBody(
+        scope: String,
+        id: String,
+        body: String,
+    ) {
+        val chunks = body.chunked(3500)
+        println("$scope: rawCommentBodyBegin id=$id chunks=${chunks.size} length=${body.length}")
+        chunks.forEachIndexed { index, chunk ->
+            println("$scope: rawCommentBody[$index/${chunks.size}] $chunk")
+        }
+        println("$scope: rawCommentBodyEnd id=$id")
+    }
+
+    private fun JsonObject.commentStructureForLog(): String {
+        val subComments = this["sub_comments"] as? JsonArray
+        val targetComment = this["target_comment"] as? JsonObject
+        val imageList = this["image_list"] as? JsonArray
+        return "keys=${keys.sorted()} id=${valueForLog("id")} commentId=${valueForLog("comment_id")} " +
+            "subCommentCount=${valueForLog("sub_comment_count")} subComments=${subComments?.size ?: 0} " +
+            "targetKeys=${targetComment?.keys?.sorted().orEmpty()} images=${imageList?.size ?: 0} " +
+            "userKeys=${(this["user_info"] as? JsonObject)?.keys?.sorted().orEmpty()} " +
+            "subSampleKeys=${subComments?.firstOrNull()?.let { (it as? JsonObject)?.keys?.sorted() }.orEmpty()}"
     }
 
     private fun JsonObject.summaryFields(): String {

@@ -2,10 +2,10 @@ package dev.dimension.flare.data.network.dongqiudi
 
 import dev.dimension.flare.common.JSON
 import dev.dimension.flare.data.network.ktorClient
-import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -57,6 +57,7 @@ internal class DongqiudiService {
 
     suspend fun hotComments(articleId: String): List<DongqiudiComment> {
         val root = requestJson("https://api.dongqiudi.com/v2/article/$articleId/hot?size=30&version=576")
+        root.logCommentStructure("hot", articleId)
         val data = root["data"].objectOrNull() ?: return emptyList()
         val users =
             data["user_list"]
@@ -68,12 +69,100 @@ internal class DongqiudiService {
             .mapNotNull { it.objectOrNull()?.toComment(users) }
     }
 
-    private suspend fun requestJson(url: String): JsonObject =
-        client
-            .get(url) {
+    suspend fun comments(
+        articleId: String,
+        nextUrl: String? = null,
+    ): DongqiudiCommentPage {
+        val root =
+            requestJson(
+                nextUrl
+                    ?: "https://api.dongqiudi.com/v2/article/$articleId/comment?sort=up&size=30&version=576&platform=h5",
+            )
+        root.logCommentStructure("root", articleId)
+        val data = root["data"].objectOrNull() ?: return DongqiudiCommentPage(emptyList(), null, true)
+        val users =
+            data["user_list"]
+                .arrayOrEmpty()
+                .mapNotNull { it.objectOrNull()?.toCommentUser() }
+                .associateBy { it.id }
+        return DongqiudiCommentPage(
+            comments =
+                data["comment_list"]
+                    .arrayOrEmpty()
+                    .mapNotNull { it.objectOrNull()?.toComment(users) },
+            nextUrl = data.string("next"),
+            isEnd = data.string("next").isNullOrBlank(),
+        )
+    }
+
+    suspend fun comment(
+        articleId: String,
+        commentId: String,
+    ): DongqiudiComment? {
+        val hot = hotComments(articleId).firstOrNull { it.id == commentId }
+        if (hot != null) return hot
+        var nextUrl: String? = null
+        repeat(3) {
+            val page = comments(articleId, nextUrl)
+            page.comments.firstOrNull { it.id == commentId }?.let { return it }
+            if (page.isEnd) return null
+            nextUrl = page.nextUrl
+        }
+        return null
+    }
+
+    suspend fun commentReplies(
+        articleId: String,
+        rootCommentId: String,
+    ): List<DongqiudiComment> {
+        val candidates =
+            listOf(
+                "https://api.dongqiudi.com/v2/comment/$rootCommentId?article_id=$articleId&size=30&version=576",
+            )
+        candidates.forEach { url ->
+            val comments =
+                runCatching {
+                    val root = requestJson(url)
+                    root.logCommentStructure("reply", "$articleId:$rootCommentId")
+                    val data = root["data"].objectOrNull() ?: root
+                    val users =
+                        data["user_list"]
+                            .arrayOrEmpty()
+                            .mapNotNull { it.objectOrNull()?.toCommentUser() }
+                            .associateBy { it.id }
+                    val replies =
+                        data["reply_list"]
+                            .arrayOrEmpty()
+                            .ifEmpty { data["comment_list"].arrayOrEmpty() }
+                    replies
+                        .mapNotNull { it.objectOrNull()?.toComment(users) }
+                }.getOrElse {
+                    println("DongqiudiService: comment replies unavailable articleId=$articleId commentId=$rootCommentId url=$url message=${it.message}")
+                    emptyList()
+                }
+            if (comments.isNotEmpty()) {
+                return comments
+            }
+        }
+        return emptyList()
+    }
+
+    private suspend fun requestJson(url: String): JsonObject {
+        val body =
+            client
+                .get(url) {
                 header("User-Agent", DONGQIUDI_USER_AGENT)
                 header("Accept", "application/json")
-            }.body()
+                }.bodyAsText()
+        if (url.contains("/comment") || url.contains("/hot")) {
+            logRawCommentBody(
+                scope = "DongqiudiService",
+                id = url,
+                body = body,
+            )
+        }
+        return JSON.decodeFromString(body)
+    }
 
     private fun JsonObject.toArticleSummary(): DongqiudiArticle =
         DongqiudiArticle(
@@ -83,7 +172,7 @@ internal class DongqiudiService {
             bodyHtml = null,
             thumbnail = string("thumb"),
             commentsTotal = long("comments_total") ?: 0L,
-            showTime = long("sort_timestamp") ?: long("show_time") ?: 0L,
+            showTime = long("show_time") ?: long("sort_timestamp") ?: 0L,
             writer = string("author_name") ?: string("media_name") ?: string("author") ?: string("writer") ?: "懂球帝",
             userId = string("showid") ?: string("user_id") ?: "dongqiudi",
             authorAvatar = string("author_avatar").orEmpty(),
@@ -152,11 +241,61 @@ internal class DongqiudiService {
             height = long("height") ?: 0L,
         )
     }
+
+    private fun JsonObject.logCommentStructure(
+        kind: String,
+        id: String,
+    ) {
+        val data = this["data"].objectOrNull() ?: this
+        val comments =
+            data["comment_list"]
+                .arrayOrEmpty()
+                .ifEmpty { data["reply_list"].arrayOrEmpty() }
+        println(
+            "DongqiudiService: commentRawSummary kind=$kind id=$id rootKeys=${keys.sorted()} " +
+                "dataKeys=${data.keys.sorted()} count=${comments.size} next=${data.string("next").orEmpty()}",
+        )
+        comments
+            .take(3)
+            .forEachIndexed { index, item ->
+                val comment = item.objectOrNull() ?: return@forEachIndexed
+                println("DongqiudiService: commentRawSample kind=$kind index=$index ${comment.commentStructureForLog()}")
+            }
+    }
+
+    private fun JsonObject.commentStructureForLog(): String {
+        val attachments = get("attachments").arrayOrEmpty()
+        val statementList = get("comment_statement_list").arrayOrEmpty()
+        return "keys=${keys.sorted()} id=${string("id").orEmpty()} articleId=${string("article_id").orEmpty()} " +
+            "userId=${string("user_id").orEmpty()} replyTotal=${string("reply_total") ?: long("reply_total")?.toString().orEmpty()} " +
+            "parent=${string("parent_id").orEmpty()} root=${string("root_id").orEmpty()} " +
+            "attachments=${attachments.size} statementList=${statementList.size} " +
+            "statementSampleKeys=${statementList.firstOrNull()?.objectOrNull()?.keys?.sorted().orEmpty()}"
+    }
+}
+
+private fun logRawCommentBody(
+    scope: String,
+    id: String,
+    body: String,
+) {
+    val chunks = body.chunked(3500)
+    println("$scope: rawCommentBodyBegin id=$id chunks=${chunks.size} length=${body.length}")
+    chunks.forEachIndexed { index, chunk ->
+        println("$scope: rawCommentBody[$index/${chunks.size}] $chunk")
+    }
+    println("$scope: rawCommentBodyEnd id=$id")
 }
 
 internal data class DongqiudiTimelinePage(
     val items: List<DongqiudiArticle>,
     val nextUrl: String?,
+)
+
+internal data class DongqiudiCommentPage(
+    val comments: List<DongqiudiComment>,
+    val nextUrl: String?,
+    val isEnd: Boolean,
 )
 
 internal data class DongqiudiArticle(

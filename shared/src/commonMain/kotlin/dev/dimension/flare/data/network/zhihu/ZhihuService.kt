@@ -3,10 +3,10 @@ package dev.dimension.flare.data.network.zhihu
 import dev.dimension.flare.common.JSON
 import dev.dimension.flare.data.network.ktorClient
 import dev.dimension.flare.data.repository.RequireReLoginException
-import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import dev.dimension.flare.model.MicroBlogKey
@@ -119,11 +119,14 @@ internal class ZhihuService(
     suspend fun questionHeader(questionId: String): ZhihuContent =
         questionAnswers(questionId).header ?: ZhihuContent.questionPlaceholder(questionId)
 
-    suspend fun comments(statusId: String): List<ZhihuComment> =
+    suspend fun comments(
+        statusId: String,
+        nextUrl: String? = null,
+    ): ZhihuCommentPage =
         runCatching {
             val key = ZhihuContentKey.parse(statusId)
             if (key.type == ZhihuContentType.Question) {
-                return@runCatching emptyList()
+                return@runCatching ZhihuCommentPage(emptyList(), null, true)
             }
             val contentType =
                 when (key.type) {
@@ -134,15 +137,45 @@ internal class ZhihuService(
                 }
             val root =
                 requestJson(
-                    "https://api.zhihu.com/comment_v5/$contentType/${key.id}/root_comment?order_by=score&limit=20",
+                    nextUrl ?: "https://api.zhihu.com/comment_v5/$contentType/${key.id}/root_comment?order_by=score&limit=20",
                 )
             root.throwIfZhihuError("comments", statusId)
-            root["data"]
-                .arrayOrEmpty()
-                .mapNotNull { it.objectOrNull()?.toComment() }
+            root.logCommentStructure("root", statusId)
+            root.toCommentPage()
         }.getOrElse {
             println("ZhihuService: comments unavailable statusId=$statusId message=${it.message}")
-            emptyList()
+            ZhihuCommentPage(emptyList(), null, true)
+        }
+
+    suspend fun comment(
+        statusId: String,
+        commentId: String,
+    ): ZhihuComment? {
+        var nextUrl: String? = null
+        repeat(3) {
+            val page = comments(statusId, nextUrl)
+            page.comments.firstOrNull { it.id == commentId }?.let { return it }
+            if (page.isEnd) return null
+            nextUrl = page.nextUrl
+        }
+        return null
+    }
+
+    suspend fun childComments(
+        rootCommentId: String,
+        nextUrl: String? = null,
+    ): ZhihuCommentPage =
+        runCatching {
+            val root =
+                requestJson(
+                    nextUrl ?: "https://api.zhihu.com/comment_v5/comment/$rootCommentId/child_comment?order_by=ts&limit=20",
+                )
+            root.throwIfZhihuError("childComments", rootCommentId)
+            root.logCommentStructure("child", rootCommentId)
+            root.toCommentPage()
+        }.getOrElse {
+            println("ZhihuService: child comments unavailable commentId=$rootCommentId message=${it.message}")
+            ZhihuCommentPage(emptyList(), null, true)
         }
 
     private suspend fun requestJson(url: String): JsonObject {
@@ -153,10 +186,19 @@ internal class ZhihuService(
                 platformType = PlatformType.Zhihu,
             )
         }
-        return client
+        val body =
+            client
             .get(url) {
                 zhihuHeaders(url, cookies)
-            }.body()
+            }.bodyAsText()
+        if (url.contains("/comment_v5/")) {
+            logRawCommentBody(
+                scope = "ZhihuService",
+                id = url,
+                body = body,
+            )
+        }
+        return JSON.decodeFromString(body)
     }
 
     private fun io.ktor.client.request.HttpRequestBuilder.zhihuHeaders(
@@ -179,6 +221,19 @@ internal class ZhihuService(
         header("x-requested-with", "fetch")
         header(HttpHeaders.Cookie, cookies.toCookieHeader())
     }
+}
+
+private fun logRawCommentBody(
+    scope: String,
+    id: String,
+    body: String,
+) {
+    val chunks = body.chunked(3500)
+    println("$scope: rawCommentBodyBegin id=$id chunks=${chunks.size} length=${body.length}")
+    chunks.forEachIndexed { index, chunk ->
+        println("$scope: rawCommentBody[$index/${chunks.size}] $chunk")
+    }
+    println("$scope: rawCommentBodyEnd id=$id")
 }
 
 internal data class ZhihuViewer(
@@ -274,6 +329,13 @@ internal data class ZhihuComment(
     val likeCount: Long,
     val replyCount: Long,
     val createdTime: Long,
+    val childComments: List<ZhihuComment> = emptyList(),
+)
+
+internal data class ZhihuCommentPage(
+    val comments: List<ZhihuComment>,
+    val nextUrl: String?,
+    val isEnd: Boolean,
 )
 
 internal enum class ZhihuContentType(val prefix: String) {
@@ -437,16 +499,73 @@ private fun JsonObject.toAnswerContent(questionId: String): ZhihuContent? {
 private fun JsonObject.toComment(): ZhihuComment? {
     val id = string("id") ?: return null
     val author = get("author").objectOrNull()?.get("member").objectOrNull() ?: get("author").objectOrNull()
+    val replyToAuthor =
+        get("reply_to_author")
+            .objectOrNull()
+            ?.get("member")
+            .objectOrNull()
+            ?: get("reply_to_author").objectOrNull()
+    val rawContent = string("content").orEmpty()
+    val replyToName = replyToAuthor?.string("name")?.takeIf { it.isNotBlank() }
     return ZhihuComment(
         id = id,
-        content = string("content").orEmpty(),
+        content =
+            if (replyToName.isNullOrBlank() || rawContent.contains("@$replyToName")) {
+                rawContent
+            } else {
+                "@$replyToName $rawContent"
+            },
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
         likeCount = long("like_count") ?: long("vote_count") ?: 0L,
         replyCount = long("child_comment_count") ?: 0L,
         createdTime = long("created_time") ?: Clock.System.now().epochSeconds,
+        childComments =
+            get("child_comments")
+                .arrayOrEmpty()
+                .mapNotNull { it.objectOrNull()?.toComment() },
     )
+}
+
+private fun JsonObject.toCommentPage(): ZhihuCommentPage =
+    ZhihuCommentPage(
+        comments =
+            get("data")
+                .arrayOrEmpty()
+                .mapNotNull { it.objectOrNull()?.toComment() },
+        nextUrl = get("paging").objectOrNull()?.string("next"),
+        isEnd = get("paging").objectOrNull()?.boolean("is_end") ?: true,
+    )
+
+private fun JsonObject.logCommentStructure(
+    kind: String,
+    id: String,
+) {
+    val data = get("data").arrayOrEmpty()
+    val paging = get("paging").objectOrNull()
+    println(
+        "ZhihuService: commentRawSummary kind=$kind id=$id rootKeys=${keys.sorted()} " +
+            "pagingKeys=${paging?.keys?.sorted().orEmpty()} count=${data.size} " +
+            "isEnd=${paging?.valueForLog("is_end")} next=${paging?.string("next")?.take(80).orEmpty()}",
+    )
+    data
+        .take(3)
+        .forEachIndexed { index, item ->
+            val comment = item.objectOrNull() ?: return@forEachIndexed
+            println("ZhihuService: commentRawSample kind=$kind index=$index ${comment.commentStructureForLog()}")
+        }
+}
+
+private fun JsonObject.commentStructureForLog(): String {
+    val childComments = get("child_comments").arrayOrEmpty()
+    val replyToAuthor = get("reply_to_author").objectOrNull()
+    val author = get("author").objectOrNull()
+    return "keys=${keys.sorted()} id=${valueForLog("id")} " +
+        "childCommentCount=${valueForLog("child_comment_count")} childComments=${childComments.size} " +
+        "replyToKeys=${replyToAuthor?.keys?.sorted().orEmpty()} " +
+        "authorKeys=${author?.keys?.sorted().orEmpty()} " +
+        "childSampleKeys=${childComments.firstOrNull()?.objectOrNull()?.keys?.sorted().orEmpty()}"
 }
 
 private fun JsonObject.toQuestionContent(fallbackQuestionId: String): ZhihuContent {
@@ -480,10 +599,24 @@ private fun JsonObject.thumbnailImageUrls(): List<String> =
             .arrayOrEmpty()
             .mapNotNull { it.imageUrlOrNull() }
             .forEach(::add)
+        get("thumbnail_info").objectOrNull()?.imageUrlOrNull()?.let(::add)
+        get("thumbnail_info")
+            .arrayOrEmpty()
+            .mapNotNull { it.imageUrlOrNull() }
+            .forEach(::add)
+        get("image_list")
+            .arrayOrEmpty()
+            .mapNotNull { it.imageUrlOrNull() }
+            .forEach(::add)
+        get("images")
+            .arrayOrEmpty()
+            .mapNotNull { it.imageUrlOrNull() }
+            .forEach(::add)
         get("image").objectOrNull()?.firstImageUrl()?.let(::add)
         get("cover").objectOrNull()?.firstImageUrl()?.let(::add)
         string("image_url")?.let(::add)
         string("imageUrl")?.let(::add)
+        string("thumbnail_url")?.let(::add)
     }.filter { it.isNotBlank() }
         .distinct()
 
@@ -499,6 +632,10 @@ private fun JsonObject.firstImageUrl(): String? =
         ?: string("image_url")
         ?: string("imageUrl")
         ?: string("src")
+        ?: string("thumbnail")
+        ?: string("thumbnail_url")
+        ?: string("original")
+        ?: string("original_url")
         ?: get("image").objectOrNull()?.firstImageUrl()
 
 private fun JsonObject.throwIfZhihuError(
@@ -539,6 +676,14 @@ private fun JsonObject.boolean(key: String): Boolean? =
     when (val primitive = get(key) as? JsonPrimitive) {
         null -> null
         else -> primitive.contentOrNull?.toBooleanStrictOrNull()
+    }
+
+private fun JsonObject.valueForLog(key: String): String =
+    when (val value = this[key]) {
+        null -> "<missing>"
+        is JsonObject -> "{keys=${value.keys.sorted()}}"
+        is JsonArray -> "[size=${value.size}]"
+        is JsonPrimitive -> value.contentOrNull.orEmpty().take(80)
     }
 
 private fun JsonElement?.objectOrNull(): JsonObject? = this as? JsonObject

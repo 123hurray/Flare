@@ -119,6 +119,13 @@ internal fun DongqiudiArticle.toUiTimeline(
 
 internal fun DongqiudiComment.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Post {
     val accountType = AccountType.Specific(accountKey)
+    val statusKey = MicroBlogKey("comment:$articleId:$id", dongqiudiWebHost)
+    val detailStatusKey =
+        if (replyTotal > 0L) {
+            statusKey
+        } else {
+            MicroBlogKey(articleId, dongqiudiWebHost)
+        }
     return UiTimelineV2.Post(
         platformType = PlatformType.Dongqiudi,
         images = attachments.map { it.toUiMedia() }.toImmutableList(),
@@ -126,7 +133,7 @@ internal fun DongqiudiComment.toUiTimeline(accountKey: MicroBlogKey): UiTimeline
         contentWarning = null,
         user = user.toUiProfile(accountKey),
         sourceLanguages = sourceLanguages.toImmutableList(),
-        content = content.toUiPlainText(sourceLanguages),
+        content = parseHtml(content).toUi(sourceLanguages),
         actions =
             persistentListOf(
                 ActionMenu.Item(
@@ -138,13 +145,26 @@ internal fun DongqiudiComment.toUiTimeline(accountKey: MicroBlogKey): UiTimeline
                     icon = UiIcon.Comment,
                     text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Comment),
                     count = UiNumber(replyTotal),
+                    clickEvent =
+                        ClickEvent.Deeplink(
+                            DeeplinkRoute.Status.Detail(
+                                accountType = accountType,
+                                statusKey = detailStatusKey,
+                            ),
+                        ),
                 ),
             ),
         poll = null,
-        statusKey = MicroBlogKey("comment:$id", dongqiudiWebHost),
+        statusKey = statusKey,
         card = null,
         createdAt = UiDateTime(Instant.fromEpochMilliseconds(showTime.coerceAtLeast(0L) * 1000L)),
-        clickEvent = ClickEvent.Noop,
+        clickEvent =
+            ClickEvent.Deeplink(
+                DeeplinkRoute.Status.Detail(
+                    accountType = accountType,
+                    statusKey = detailStatusKey,
+                ),
+            ),
         accountType = accountType,
     )
 }

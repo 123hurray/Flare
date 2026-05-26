@@ -410,9 +410,14 @@ internal fun XhsComment.toUiTimeline(
             }
             append(content)
         }
+    val rootCommentId = targetComment?.mapperCommentIdentity()?.takeIf { it.isNotBlank() }
+    val threadStatusKey =
+        rootCommentId
+            ?.let { MicroBlogKey("$noteId:comment:$it", accountKey.host) }
+            ?: statusKey
     val detailStatusKey =
-        if (subCommentCount.toCount() > 0L) {
-            statusKey
+        if (rootCommentId != null || subCommentCount.toCount() > 0L) {
+            threadStatusKey
         } else {
             MicroBlogKey(noteId, accountKey.host)
         }
@@ -432,6 +437,13 @@ internal fun XhsComment.toUiTimeline(
                     icon = UiIcon.Reply,
                     text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Reply),
                     count = UiNumber(subCommentCount.toCount()),
+                    clickEvent =
+                        ClickEvent.Deeplink(
+                            DeeplinkRoute.Status.Detail(
+                                accountType = AccountType.Specific(accountKey),
+                                statusKey = detailStatusKey,
+                            ),
+                        ),
                 ),
                 ActionMenu.Item(
                     icon = UiIcon.Like,
@@ -456,6 +468,9 @@ internal fun XhsComment.toUiTimeline(
 
 internal fun XhsComment.flattenWithInlineSubComments(): List<XhsComment> =
     listOf(this) + subComments
+
+private fun XhsComment.mapperCommentIdentity(): String =
+    commentId?.takeIf { it.isNotBlank() } ?: id
 
 private fun XhsUser.toUiProfile(accountKey: MicroBlogKey): UiProfile {
     val name = displayName()

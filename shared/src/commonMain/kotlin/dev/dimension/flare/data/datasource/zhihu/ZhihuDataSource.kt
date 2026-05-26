@@ -96,7 +96,13 @@ internal class ZhihuDataSource(
         )
 
     override fun context(statusKey: MicroBlogKey): RemoteLoader<UiTimelineV2> =
-        when (ZhihuContentKey.parse(statusKey.id).type) {
+        statusKey.id.zhihuCommentTarget()?.let { target ->
+            ZhihuCommentThreadRemoteLoader(
+                accountKey = accountKey,
+                service = service,
+                target = target,
+            )
+        } ?: when (ZhihuContentKey.parse(statusKey.id).type) {
             ZhihuContentType.Question ->
                 ZhihuQuestionAnswerRemoteLoader(
                     accountKey = accountKey,
@@ -152,7 +158,12 @@ private class ZhihuLoader(
 ) : PostLoader,
     UserLoader {
     override suspend fun status(statusKey: MicroBlogKey): UiTimelineV2 =
-        service
+        statusKey.id.zhihuCommentTarget()?.let { target ->
+            service
+                .comment(target.parentStatusId, target.commentId)
+                ?.toUiTimeline(accountKey, target.parentStatusId)
+                ?: error("Zhihu comment is empty: ${statusKey.id}")
+        } ?: service
             .contentDetail(statusKey.id)
             .toUiTimeline(accountKey, detail = true)
 
@@ -227,14 +238,79 @@ private class ZhihuCommentRemoteLoader(
         request: PagingRequest,
     ): PagingResult<UiTimelineV2> {
         if (request !is PagingRequest.Refresh) {
+            if (request is PagingRequest.Append) {
+                val page = service.comments(statusKey.id, request.nextKey)
+                return PagingResult(
+                    data =
+                        page.comments
+                            .flatMap { it.flattenWithInlineChildComments() }
+                            .map { it.toUiTimeline(accountKey, statusKey.id) },
+                    nextKey = page.nextUrl,
+                    endOfPaginationReached = page.isEnd || page.nextUrl.isNullOrBlank(),
+                )
+            }
             return PagingResult(endOfPaginationReached = true)
         }
         val comments = service.comments(statusKey.id)
         return PagingResult(
             data =
                 listOf(service.contentDetail(statusKey.id).toUiTimeline(accountKey, detail = true)) +
-                    comments.map { it.toUiTimeline(accountKey) },
-            endOfPaginationReached = true,
+                    comments.comments
+                        .flatMap { it.flattenWithInlineChildComments() }
+                        .map { it.toUiTimeline(accountKey, statusKey.id) },
+            nextKey = comments.nextUrl,
+            endOfPaginationReached = comments.isEnd || comments.nextUrl.isNullOrBlank(),
         )
     }
+}
+
+private class ZhihuCommentThreadRemoteLoader(
+    private val accountKey: MicroBlogKey,
+    private val service: ZhihuService,
+    private val target: ZhihuCommentTarget,
+) : RemoteLoader<UiTimelineV2> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        if (request is PagingRequest.Append) {
+            val page = service.childComments(target.commentId, request.nextKey)
+            return PagingResult(
+                data =
+                    page.comments
+                        .flatMap { it.flattenWithInlineChildComments() }
+                        .map { it.toUiTimeline(accountKey, target.parentStatusId) },
+                nextKey = page.nextUrl,
+                endOfPaginationReached = page.isEnd || page.nextUrl.isNullOrBlank(),
+            )
+        }
+        val rootComment = service.comment(target.parentStatusId, target.commentId)
+        val replies = service.childComments(target.commentId)
+        return PagingResult(
+            data =
+                listOfNotNull(rootComment?.toUiTimeline(accountKey, target.parentStatusId)) +
+                    replies.comments
+                        .flatMap { it.flattenWithInlineChildComments() }
+                        .map { it.toUiTimeline(accountKey, target.parentStatusId) },
+            nextKey = replies.nextUrl,
+            endOfPaginationReached = replies.isEnd || replies.nextUrl.isNullOrBlank(),
+        )
+    }
+}
+
+private data class ZhihuCommentTarget(
+    val parentStatusId: String,
+    val commentId: String,
+)
+
+private fun String.zhihuCommentTarget(): ZhihuCommentTarget? {
+    val parts = split(':')
+    if (parts.size != 4 || parts[0] != "comment") return null
+    val parentType = parts[1].takeIf { it.isNotBlank() } ?: return null
+    val parentId = parts[2].takeIf { it.isNotBlank() } ?: return null
+    val commentId = parts[3].takeIf { it.isNotBlank() } ?: return null
+    return ZhihuCommentTarget("$parentType:$parentId", commentId)
 }

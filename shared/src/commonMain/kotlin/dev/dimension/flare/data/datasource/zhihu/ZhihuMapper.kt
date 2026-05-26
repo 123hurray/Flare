@@ -40,27 +40,26 @@ internal fun ZhihuContent.toUiTimeline(
     val statusKey = MicroBlogKey(statusId, zhihuWebHost)
     val accountType = AccountType.Specific(accountKey)
     val content = toUiContent(accountKey, detail, includeTitle)
+    val media =
+        if (detail) {
+            content.imageUrls
+        } else {
+            imageUrls.take(6)
+        }.map {
+            UiMedia.Image(
+                url = it,
+                previewUrl = it,
+                description = null,
+                height = 0f,
+                width = 0f,
+                sensitive = false,
+            )
+        }.toImmutableList()
     val primaryCount = if (type == ZhihuContentType.Question) answerCount else commentCount
     val secondaryCount = if (type == ZhihuContentType.Question) followerCount else voteupCount
     return UiTimelineV2.Post(
         platformType = PlatformType.Zhihu,
-        images =
-            if (detail) {
-                persistentListOf()
-            } else {
-                imageUrls
-                    .take(9)
-                    .map {
-                        UiMedia.Image(
-                            url = it,
-                            previewUrl = it,
-                            description = title,
-                            height = 0f,
-                            width = 0f,
-                            sensitive = false,
-                        )
-                    }.toImmutableList()
-            },
+        images = media,
         sensitive = false,
         contentWarning = null,
         user = toAuthorProfile(accountKey),
@@ -199,13 +198,23 @@ private fun ZhihuContent.toTitleContent(
                         ),
                 ),
             ),
-        block = RenderBlockStyle(headingLevel = if (detail) 2 else 4),
+        block = RenderBlockStyle(headingLevel = if (detail) 3 else 4),
     )
 }
 
-internal fun ZhihuComment.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Post {
+internal fun ZhihuComment.toUiTimeline(
+    accountKey: MicroBlogKey,
+    parentStatusId: String,
+): UiTimelineV2.Post {
     val accountType = AccountType.Specific(accountKey)
     val content = parseHtml(content).toUi(sourceLanguages)
+    val statusKey = MicroBlogKey("comment:$parentStatusId:$id", zhihuWebHost)
+    val detailStatusKey =
+        if (replyCount > 0L) {
+            statusKey
+        } else {
+            MicroBlogKey(parentStatusId, zhihuWebHost)
+        }
     return UiTimelineV2.Post(
         platformType = PlatformType.Zhihu,
         images = persistentListOf(),
@@ -225,16 +234,32 @@ internal fun ZhihuComment.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.P
                     icon = UiIcon.Comment,
                     text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Comment),
                     count = UiNumber(replyCount),
+                    clickEvent =
+                        ClickEvent.Deeplink(
+                            DeeplinkRoute.Status.Detail(
+                                accountType = accountType,
+                                statusKey = detailStatusKey,
+                            ),
+                        ),
                 ),
             ),
         poll = null,
-        statusKey = MicroBlogKey("comment:$id", zhihuWebHost),
+        statusKey = statusKey,
         card = null,
         createdAt = UiDateTime(Instant.fromEpochMilliseconds(createdTime.coerceAtLeast(0L) * 1000L)),
-        clickEvent = ClickEvent.Noop,
+        clickEvent =
+            ClickEvent.Deeplink(
+                DeeplinkRoute.Status.Detail(
+                    accountType = accountType,
+                    statusKey = detailStatusKey,
+                ),
+            ),
         accountType = accountType,
     )
 }
+
+internal fun ZhihuComment.flattenWithInlineChildComments(): List<ZhihuComment> =
+    listOf(this) + childComments.flatMap { it.flattenWithInlineChildComments() }
 
 private fun ZhihuContent.toAuthorProfile(accountKey: MicroBlogKey): UiProfile =
     UiProfile(

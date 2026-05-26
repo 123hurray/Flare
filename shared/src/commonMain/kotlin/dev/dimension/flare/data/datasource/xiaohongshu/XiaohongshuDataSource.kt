@@ -4,10 +4,15 @@ import dev.dimension.flare.data.datasource.microblog.AuthenticatedMicroblogDataS
 import dev.dimension.flare.data.datasource.microblog.ComposeConfig
 import dev.dimension.flare.data.datasource.microblog.ComposeData
 import dev.dimension.flare.data.datasource.microblog.ComposeType
+import dev.dimension.flare.data.datasource.microblog.DatabaseUpdater
 import dev.dimension.flare.data.datasource.microblog.NotificationFilter
+import dev.dimension.flare.data.datasource.microblog.PostEvent
 import dev.dimension.flare.data.datasource.microblog.ProfileTab
+import dev.dimension.flare.data.datasource.microblog.datasource.PostDataSource
 import dev.dimension.flare.data.datasource.microblog.datasource.RelationDataSource
 import dev.dimension.flare.data.datasource.microblog.datasource.UserDataSource
+import dev.dimension.flare.data.datasource.microblog.handler.PostEventHandler
+import dev.dimension.flare.data.datasource.microblog.handler.PostHandler
 import dev.dimension.flare.data.datasource.microblog.handler.RelationHandler
 import dev.dimension.flare.data.datasource.microblog.handler.UserHandler
 import dev.dimension.flare.data.datasource.microblog.loader.RelationActionType
@@ -33,8 +38,10 @@ import org.koin.core.component.inject
 internal class XiaohongshuDataSource(
     override val accountKey: MicroBlogKey,
 ) : AuthenticatedMicroblogDataSource,
+    PostDataSource,
     UserDataSource,
     RelationDataSource,
+    PostEventHandler.Handler,
     KoinComponent {
     private val accountRepository: AccountRepository by inject()
     private val specificAccountType = AccountType.Specific(accountKey)
@@ -69,6 +76,20 @@ internal class XiaohongshuDataSource(
         )
     }
 
+    override val postHandler by lazy {
+        PostHandler(
+            accountType = specificAccountType,
+            loader = loader,
+        )
+    }
+
+    override val postEventHandler by lazy {
+        PostEventHandler(
+            accountType = specificAccountType,
+            handler = this,
+        )
+    }
+
     override val relationHandler by lazy {
         RelationHandler(
             accountType = AccountType.Specific(accountKey),
@@ -78,6 +99,11 @@ internal class XiaohongshuDataSource(
 
     override val supportedRelationTypes: Set<RelationActionType>
         get() = loader.supportedTypes
+
+    override suspend fun handle(
+        event: PostEvent,
+        updater: DatabaseUpdater,
+    ) = Unit
 
     override fun homeTimeline(): RemoteLoader<UiTimelineV2> =
         XhsHomeTimelineRemoteMediator(
@@ -167,6 +193,7 @@ internal class XiaohongshuDataSource(
                     .subComments(
                         noteId = noteId,
                         rootCommentId = rootCommentId,
+                        xsecToken = commentContext.xsecToken,
                         cursor = request.nextKey,
                         num = pageSize.coerceIn(1, 30),
                     ).data
@@ -193,6 +220,7 @@ internal class XiaohongshuDataSource(
                 .subComments(
                     noteId = noteId,
                     rootCommentId = rootCommentId,
+                    xsecToken = commentContext.xsecToken,
                     num = pageSize.coerceIn(1, 30),
                 ).data
         return PagingResult(

@@ -81,6 +81,7 @@ public fun RichText(
     overflow: TextOverflow = TextOverflow.Ellipsis,
     softWrap: Boolean = true,
     onTextLayout: (TextLayoutResult) -> Unit = {},
+    onBlockImageClick: ((String) -> Unit)? = null,
     textStyle: TextStyle = PlatformTextStyle.current,
     linkStyle: TextStyle =
         textStyle.copy(
@@ -216,12 +217,16 @@ public fun RichText(
                                         .fillMaxWidth()
                                         .clip(PlatformTheme.shapes.medium)
                                         .let {
-                                            if (content.href.isNullOrEmpty()) {
-                                                it
-                                            } else {
+                                            if (!content.href.isNullOrEmpty()) {
                                                 it.clickable {
                                                     uriHandler.openUri(content.href)
                                                 }
+                                            } else if (onBlockImageClick != null) {
+                                                it.clickable {
+                                                    onBlockImageClick.invoke(content.url)
+                                                }
+                                            } else {
+                                                it
                                             }
                                         },
                                 model = content.url,

@@ -169,8 +169,8 @@ public fun CommonStatusComponent(
     showExpandButton: Boolean = true,
 ) {
     val uriHandler = LocalUriHandler.current
-    LaunchedEffect(item.platformType, item.statusKey, item.content.raw, item.images) {
-        if (item.platformType == PlatformType.Xiaohongshu) {
+    LaunchedEffect(item.platformType, item.statusKey, item.content.raw, item.images, isDetail) {
+        if (item.platformType == PlatformType.Xiaohongshu || (isDetail && item.platformType == PlatformType.Zhihu && item.images.isNotEmpty())) {
             StatusMediaRouteCache.put(item)
         }
     }
@@ -492,6 +492,7 @@ private fun ZhihuDetailStatusComponent(
     showExpandButton: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val uriHandler = LocalUriHandler.current
     val titleContent = item.zhihuQuestionTitleContent()
     val bodyContent = item.zhihuBodyContent()
     val isQuestion = item.statusKey.id.startsWith("question:")
@@ -519,6 +520,9 @@ private fun ZhihuDetailStatusComponent(
                     RichText(
                         text = bodyContent,
                         modifier = Modifier.fillMaxWidth(),
+                        onBlockImageClick = { url ->
+                            openStatusRichTextImage(item, url, uriHandler)
+                        },
                     )
                 }
             }
@@ -575,6 +579,9 @@ private fun ZhihuDetailStatusComponent(
                     maxLines = Int.MAX_VALUE,
                     showExpandButton = showExpandButton,
                     onExpandClick = null,
+                    onBlockImageClick = { url ->
+                        openStatusRichTextImage(item, url, uriHandler)
+                    },
                 )
             }
         }
@@ -643,6 +650,32 @@ private fun UiTimelineV2.Post.zhihuVoteupCount(): Long? =
         ?.value
 
 private fun UiTimelineV2.Post.hasKnownCreatedAt(): Boolean = createdAt.value != Instant.fromEpochMilliseconds(0L)
+
+private fun openStatusRichTextImage(
+    item: UiTimelineV2.Post,
+    url: String,
+    uriHandler: UriHandler,
+) {
+    if (item.images.isEmpty()) return
+    val index =
+        item.images.indexOfFirst { media ->
+            when (media) {
+                is UiMedia.Image -> media.url == url || media.previewUrl == url
+                is UiMedia.Gif -> media.url == url || media.previewUrl == url
+                is UiMedia.Video -> media.url == url || media.thumbnailUrl == url
+                is UiMedia.Audio -> media.url == url
+            }
+        }.takeIf { it >= 0 } ?: return
+    StatusMediaRouteCache.put(item)
+    uriHandler.openUri(
+        DeeplinkRoute.Media.StatusMedia(
+            statusKey = item.statusKey,
+            accountType = item.accountType,
+            index = index,
+            preview = url,
+        ).toUri(),
+    )
+}
 
 @Composable
 internal fun StatusMediasComponent(
@@ -1398,6 +1431,7 @@ private fun StatusContentComponent(
     showExpandButton: Boolean,
     onExpandClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    onBlockImageClick: ((String) -> Unit)? = null,
 ) {
     var expanded by rememberSaveable {
         mutableStateOf(false)
@@ -1456,6 +1490,7 @@ private fun StatusContentComponent(
                                 maxLines != Int.MAX_VALUE &&
                                 showExpandButton
                         },
+                        onBlockImageClick = onBlockImageClick,
                     )
                     if (showSoftExpand) {
                         PlatformTextButton(

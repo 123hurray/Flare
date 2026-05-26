@@ -80,7 +80,14 @@ internal class DongqiudiDataSource(
         )
 
     override fun context(statusKey: MicroBlogKey): RemoteLoader<UiTimelineV2> =
-        DongqiudiContextRemoteLoader(
+        statusKey.id.dongqiudiCommentTarget()?.let { target ->
+            DongqiudiCommentContextRemoteLoader(
+                accountKey = accountKey,
+                service = service,
+                articleId = target.articleId,
+                commentId = target.commentId,
+            )
+        } ?: DongqiudiContextRemoteLoader(
             accountKey = accountKey,
             service = service,
             statusKey = statusKey,
@@ -133,7 +140,12 @@ private class DongqiudiLoader(
 ) : PostLoader,
     UserLoader {
     override suspend fun status(statusKey: MicroBlogKey): UiTimelineV2 =
-        service
+        statusKey.id.dongqiudiCommentTarget()?.let { target ->
+            service
+                .comment(target.articleId, target.commentId)
+                ?.toUiTimeline(accountKey)
+                ?: error("Dongqiudi comment is empty: ${statusKey.id}")
+        } ?: service
             .articleDetail(statusKey.id)
             .withResolvedAuthor(service)
             .toUiTimeline(accountKey, detail = true)
@@ -210,6 +222,30 @@ private class DongqiudiContextRemoteLoader(
     }
 }
 
+private class DongqiudiCommentContextRemoteLoader(
+    private val accountKey: MicroBlogKey,
+    private val service: DongqiudiService,
+    private val articleId: String,
+    private val commentId: String,
+) : RemoteLoader<UiTimelineV2> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request is PagingRequest.Prepend || request is PagingRequest.Append) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val rootComment = service.comment(articleId, commentId)
+        val replies = service.commentReplies(articleId, commentId)
+        return PagingResult(
+            data =
+                listOfNotNull(rootComment?.toUiTimeline(accountKey)) +
+                    replies.map { it.toUiTimeline(accountKey) },
+            endOfPaginationReached = true,
+        )
+    }
+}
+
 private suspend fun DongqiudiArticle.withResolvedAuthor(service: DongqiudiService): DongqiudiArticle {
     val resolvedUserId = userId.takeIf { it.isNotBlank() && it != "dongqiudi" } ?: return this
     if (authorAvatar.isNotBlank()) return this
@@ -225,4 +261,17 @@ private suspend fun DongqiudiArticle.withResolvedAuthor(service: DongqiudiServic
         userId = profile.id.ifBlank { userId },
         authorAvatar = profile.avatar,
     )
+}
+
+private data class DongqiudiCommentTarget(
+    val articleId: String,
+    val commentId: String,
+)
+
+private fun String.dongqiudiCommentTarget(): DongqiudiCommentTarget? {
+    val parts = split(':')
+    if (parts.size != 3 || parts[0] != "comment") return null
+    val articleId = parts[1].takeIf { it.isNotBlank() } ?: return null
+    val commentId = parts[2].takeIf { it.isNotBlank() } ?: return null
+    return DongqiudiCommentTarget(articleId, commentId)
 }
