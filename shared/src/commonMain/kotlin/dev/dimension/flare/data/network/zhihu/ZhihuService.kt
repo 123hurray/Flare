@@ -346,7 +346,7 @@ private fun JsonObject.toDetailContent(key: ZhihuContentKey): ZhihuContent {
         excerpt = string("excerpt") ?: string("detail") ?: "",
         contentHtml = string("content") ?: string("detail"),
         authorName = author?.string("name") ?: "知乎用户",
-        authorId = author?.string("id") ?: author?.string("url_token") ?: "zhihu",
+        authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
         questionId = question?.string("id"),
         voteupCount = long("voteup_count") ?: 0L,
@@ -359,14 +359,15 @@ private fun JsonObject.toDetailContent(key: ZhihuContentKey): ZhihuContent {
 private fun JsonObject.toAnswerContent(questionId: String): ZhihuContent? {
     val id = string("id") ?: return null
     val author = get("author").objectOrNull()
+    val question = get("question").objectOrNull()
     return ZhihuContent(
         id = id,
         type = ZhihuContentType.Answer,
-        title = string("question") ?: "知乎回答",
+        title = question?.string("title") ?: string("question") ?: "知乎回答",
         excerpt = string("excerpt").orEmpty(),
         contentHtml = string("content"),
         authorName = author?.string("name") ?: "知乎用户",
-        authorId = author?.string("id") ?: "zhihu",
+        authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url").orEmpty(),
         questionId = questionId,
         voteupCount = long("voteup_count") ?: 0L,
@@ -383,7 +384,7 @@ private fun JsonObject.toComment(): ZhihuComment? {
         id = id,
         content = string("content").orEmpty(),
         authorName = author?.string("name") ?: "知乎用户",
-        authorId = author?.string("id") ?: author?.string("url_token") ?: "zhihu",
+        authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
         likeCount = long("like_count") ?: long("vote_count") ?: 0L,
         replyCount = long("child_comment_count") ?: 0L,

@@ -12,15 +12,21 @@ import dev.dimension.flare.model.zhihuWebHost
 import dev.dimension.flare.ui.model.ClickEvent
 import dev.dimension.flare.ui.model.UiHandle
 import dev.dimension.flare.ui.model.UiIcon
-import dev.dimension.flare.ui.model.UiMedia
 import dev.dimension.flare.ui.model.UiNumber
 import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiTimelineV2
+import dev.dimension.flare.ui.render.RenderBlockStyle
+import dev.dimension.flare.ui.render.RenderContent
+import dev.dimension.flare.ui.render.RenderRun
+import dev.dimension.flare.ui.render.RenderTextStyle
 import dev.dimension.flare.ui.render.UiDateTime
+import dev.dimension.flare.ui.render.UiRichText
 import dev.dimension.flare.ui.render.parseHtml
 import dev.dimension.flare.ui.render.toUi
 import dev.dimension.flare.ui.render.toUiPlainText
+import dev.dimension.flare.ui.render.uiRichTextOf
 import dev.dimension.flare.ui.route.DeeplinkRoute
+import dev.dimension.flare.ui.route.toUri
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlin.time.Instant
@@ -31,27 +37,12 @@ internal fun ZhihuContent.toUiTimeline(
 ): UiTimelineV2.Post {
     val statusKey = MicroBlogKey(statusId, zhihuWebHost)
     val accountType = AccountType.Specific(accountKey)
-    val content =
-        contentHtml
-            ?.let { parseHtml("<h2>$title</h2>$it").toUi(sourceLanguages) }
-            ?: listOf(title, excerpt)
-                .filter { it.isNotBlank() }
-                .joinToString("\n\n")
-                .toUiPlainText(sourceLanguages)
+    val content = toUiContent(accountKey, detail)
     return UiTimelineV2.Post(
         platformType = PlatformType.Zhihu,
         images =
             if (detail) {
-                content.imageUrls.map { url ->
-                    UiMedia.Image(
-                        url = url,
-                        previewUrl = url,
-                        description = null,
-                        height = 0f,
-                        width = 0f,
-                        sensitive = false,
-                    )
-                }.toImmutableList()
+                persistentListOf()
             } else {
                 persistentListOf()
             },
@@ -114,6 +105,76 @@ internal fun ZhihuContent.toUiTimeline(
                 ),
             ),
         accountType = accountType,
+    )
+}
+
+private fun ZhihuContent.toUiContent(
+    accountKey: MicroBlogKey,
+    detail: Boolean,
+): UiRichText {
+    val titleContent = toTitleContent(accountKey, detail)
+    val bodyContent =
+        contentHtml
+            ?.takeIf { it.isNotBlank() }
+            ?.let { parseHtml(it).toUi(sourceLanguages) }
+
+    if (bodyContent != null) {
+        val renderContents = listOfNotNull(titleContent) + bodyContent.renderRuns
+        return uiRichTextOf(
+            renderRuns = renderContents,
+            raw = listOf(title, bodyContent.raw).filter { it.isNotBlank() }.joinToString("\n\n"),
+            innerText = listOf(title, bodyContent.innerText).filter { it.isNotBlank() }.joinToString("\n\n"),
+            imageUrls = bodyContent.imageUrls,
+            sourceLanguages = sourceLanguages,
+        )
+    }
+
+    val renderContents =
+        listOfNotNull(
+            titleContent,
+            excerpt
+                .takeIf { it.isNotBlank() }
+                ?.let {
+                    RenderContent.Text(
+                        runs = persistentListOf(RenderRun.Text(it)),
+                    )
+                },
+        )
+    return uiRichTextOf(
+        renderRuns = renderContents,
+        raw = listOf(title, excerpt).filter { it.isNotBlank() }.joinToString("\n\n"),
+        innerText = listOf(title, excerpt).filter { it.isNotBlank() }.joinToString("\n\n"),
+        sourceLanguages = sourceLanguages,
+    )
+}
+
+private fun ZhihuContent.toQuestionLink(accountKey: MicroBlogKey): String? {
+    val id = questionId?.takeIf { it.isNotBlank() } ?: return null
+    if (type == ZhihuContentType.Question) return null
+    return DeeplinkRoute.Status.Detail(
+        accountType = AccountType.Specific(accountKey),
+        statusKey = MicroBlogKey("question:$id", zhihuWebHost),
+    ).toUri()
+}
+
+private fun ZhihuContent.toTitleContent(
+    accountKey: MicroBlogKey,
+    detail: Boolean,
+): RenderContent.Text? {
+    if (title.isBlank()) return null
+    return RenderContent.Text(
+        runs =
+            persistentListOf(
+                RenderRun.Text(
+                    text = title,
+                    style =
+                        RenderTextStyle(
+                            link = if (detail) toQuestionLink(accountKey) else null,
+                            bold = true,
+                        ),
+                ),
+            ),
+        block = if (detail) RenderBlockStyle(headingLevel = 2) else RenderBlockStyle(),
     )
 }
 

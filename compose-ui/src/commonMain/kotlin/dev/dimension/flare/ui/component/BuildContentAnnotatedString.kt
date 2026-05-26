@@ -381,7 +381,10 @@ private fun StyleData.runTextStyle(
 ): TextStyle {
     var style =
         if (renderStyle.link != null) {
-            linkStyle
+            blockTextStyle.copy(
+                color = linkStyle.color,
+                textDecoration = linkStyle.textDecoration,
+            )
         } else {
             blockTextStyle
         }
