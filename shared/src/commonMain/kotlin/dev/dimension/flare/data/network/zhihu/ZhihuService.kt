@@ -50,7 +50,7 @@ internal class ZhihuService(
         val root =
             requestJson(
                 nextUrl
-                    ?: "https://www.zhihu.com/api/v3/feed/topstory/recommend?session_token=&desktop=true&page_number=1&limit=12&action=down&after_id=0",
+                    ?: "https://api.zhihu.com/topstory/recommend",
             )
         root.throwIfZhihuError("recommend", "home")
         return ZhihuTimelinePage(
@@ -144,18 +144,25 @@ internal class ZhihuService(
         }
         return client
             .get(url) {
-                zhihuHeaders(cookies)
+                zhihuHeaders(url, cookies)
             }.body()
     }
 
-    private fun io.ktor.client.request.HttpRequestBuilder.zhihuHeaders(cookies: Map<String, String>) {
+    private fun io.ktor.client.request.HttpRequestBuilder.zhihuHeaders(
+        url: String,
+        cookies: Map<String, String>,
+    ) {
         header(HttpHeaders.UserAgent, ZHIHU_WEB_USER_AGENT)
+        header("Accept", "application/json, text/plain, */*")
+        header("x-udid", ZHIHU_DEVICE_ID)
+        if (url.startsWith("https://api.zhihu.com/topstory/recommend")) {
+            header(HttpHeaders.Cookie, cookies.toCookieHeader())
+            return
+        }
         header("x-api-version", "3.1.8")
         header("x-app-version", "10.12.0")
         header("x-app-bundleid", "com.zhihu.android")
         header("x-app-za", "OS=Android&VersionName=10.12.0&VersionCode=21210")
-        header("x-udid", "0000000000000000")
-        header("Accept", "application/json, text/plain, */*")
         header("Referer", "https://www.zhihu.com/")
         header("Origin", "https://www.zhihu.com")
         header("x-requested-with", "fetch")
@@ -431,3 +438,5 @@ private fun JsonElement?.arrayOrEmpty(): List<JsonElement> = (this as? JsonArray
 public const val ZHIHU_WEB_USER_AGENT: String =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
         "Chrome/126.0.0.0 Safari/537.36"
+
+private const val ZHIHU_DEVICE_ID: String = "FlareAndroidZhihuClient000000000000="
