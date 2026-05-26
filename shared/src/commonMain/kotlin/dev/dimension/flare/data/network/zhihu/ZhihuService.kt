@@ -190,6 +190,7 @@ internal data class ZhihuContent(
     val title: String,
     val excerpt: String,
     val contentHtml: String?,
+    val imageUrls: List<String>,
     val authorName: String,
     val authorId: String,
     val authorAvatar: String,
@@ -211,6 +212,7 @@ internal data class ZhihuContent(
                 title = "知乎内容",
                 excerpt = "详情接口当前受限，已保留入口并在日志中记录失败原因。",
                 contentHtml = null,
+                imageUrls = emptyList(),
                 authorName = "知乎",
                 authorId = "zhihu",
                 authorAvatar = "",
@@ -303,6 +305,7 @@ private fun JsonObject.toFeedContent(): ZhihuContent? {
         title = title,
         excerpt = excerpt,
         contentHtml = null,
+        imageUrls = feedContent.thumbnailImageUrls(),
         authorName = authorName,
         authorId = authorName,
         authorAvatar = avatar,
@@ -325,6 +328,7 @@ private fun JsonObject.toTargetContent(): ZhihuContent? {
         title = question?.string("title") ?: string("title") ?: "知乎内容",
         excerpt = string("excerpt") ?: string("excerpt_new") ?: string("detail") ?: string("content") ?: "",
         contentHtml = null,
+        imageUrls = thumbnailImageUrls(),
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
@@ -345,6 +349,7 @@ private fun JsonObject.toDetailContent(key: ZhihuContentKey): ZhihuContent {
         title = question?.string("title") ?: string("title") ?: "知乎内容",
         excerpt = string("excerpt") ?: string("detail") ?: "",
         contentHtml = string("content") ?: string("detail"),
+        imageUrls = thumbnailImageUrls(),
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
@@ -366,6 +371,7 @@ private fun JsonObject.toAnswerContent(questionId: String): ZhihuContent? {
         title = question?.string("title") ?: string("question") ?: "知乎回答",
         excerpt = string("excerpt").orEmpty(),
         contentHtml = string("content"),
+        imageUrls = thumbnailImageUrls(),
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url").orEmpty(),
@@ -391,6 +397,34 @@ private fun JsonObject.toComment(): ZhihuComment? {
         createdTime = long("created_time") ?: Clock.System.now().epochSeconds,
     )
 }
+
+private fun JsonObject.thumbnailImageUrls(): List<String> =
+    buildList {
+        string("thumbnail")?.let(::add)
+        get("thumbnails")
+            .arrayOrEmpty()
+            .mapNotNull { it.imageUrlOrNull() }
+            .forEach(::add)
+        get("image").objectOrNull()?.firstImageUrl()?.let(::add)
+        get("cover").objectOrNull()?.firstImageUrl()?.let(::add)
+        string("image_url")?.let(::add)
+        string("imageUrl")?.let(::add)
+    }.filter { it.isNotBlank() }
+        .distinct()
+
+private fun JsonElement.imageUrlOrNull(): String? =
+    when (this) {
+        is JsonPrimitive -> contentOrNull
+        is JsonObject -> firstImageUrl()
+        else -> null
+    }
+
+private fun JsonObject.firstImageUrl(): String? =
+    string("url")
+        ?: string("image_url")
+        ?: string("imageUrl")
+        ?: string("src")
+        ?: get("image").objectOrNull()?.firstImageUrl()
 
 private fun JsonObject.throwIfZhihuError(
     scope: String,

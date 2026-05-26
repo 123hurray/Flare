@@ -201,7 +201,7 @@ private class ZhihuQuestionAnswerRemoteLoader(
             return PagingResult(endOfPaginationReached = true)
         }
         val page = service.questionAnswers(questionId, (request as? PagingRequest.Append)?.nextKey)
-        val answers = page.items.map { it.toUiTimeline(accountKey, detail = false) }
+        val answers = page.items.map { it.toUiTimeline(accountKey, detail = false, includeTitle = false) }
         return PagingResult(
             data =
                 when (request) {

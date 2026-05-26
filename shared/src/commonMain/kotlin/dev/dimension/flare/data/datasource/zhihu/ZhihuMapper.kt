@@ -12,6 +12,7 @@ import dev.dimension.flare.model.zhihuWebHost
 import dev.dimension.flare.ui.model.ClickEvent
 import dev.dimension.flare.ui.model.UiHandle
 import dev.dimension.flare.ui.model.UiIcon
+import dev.dimension.flare.ui.model.UiMedia
 import dev.dimension.flare.ui.model.UiNumber
 import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiTimelineV2
@@ -34,17 +35,28 @@ import kotlin.time.Instant
 internal fun ZhihuContent.toUiTimeline(
     accountKey: MicroBlogKey,
     detail: Boolean,
+    includeTitle: Boolean = true,
 ): UiTimelineV2.Post {
     val statusKey = MicroBlogKey(statusId, zhihuWebHost)
     val accountType = AccountType.Specific(accountKey)
-    val content = toUiContent(accountKey, detail)
+    val content = toUiContent(accountKey, detail, includeTitle)
     return UiTimelineV2.Post(
         platformType = PlatformType.Zhihu,
         images =
             if (detail) {
                 persistentListOf()
             } else {
-                persistentListOf()
+                imageUrls
+                    .map {
+                        UiMedia.Image(
+                            url = it,
+                            previewUrl = it,
+                            description = title,
+                            height = 0f,
+                            width = 0f,
+                            sensitive = false,
+                        )
+                    }.toImmutableList()
             },
         sensitive = false,
         contentWarning = null,
@@ -111,8 +123,9 @@ internal fun ZhihuContent.toUiTimeline(
 private fun ZhihuContent.toUiContent(
     accountKey: MicroBlogKey,
     detail: Boolean,
+    includeTitle: Boolean,
 ): UiRichText {
-    val titleContent = toTitleContent(accountKey, detail)
+    val titleContent = if (includeTitle) toTitleContent(accountKey, detail) else null
     val bodyContent =
         contentHtml
             ?.takeIf { it.isNotBlank() }
@@ -174,7 +187,7 @@ private fun ZhihuContent.toTitleContent(
                         ),
                 ),
             ),
-        block = if (detail) RenderBlockStyle(headingLevel = 2) else RenderBlockStyle(),
+        block = RenderBlockStyle(headingLevel = if (detail) 2 else 4),
     )
 }
 
