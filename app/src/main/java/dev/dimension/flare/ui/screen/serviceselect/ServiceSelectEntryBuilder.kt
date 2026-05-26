@@ -44,7 +44,8 @@ internal fun EntryProviderScope<NavKey>.serviceSelectEntryBuilder(
         VVOLoginScreen(
             toHome = {
                 onBack()
-            }
+            },
+            onBack = onBack,
         )
     }
 

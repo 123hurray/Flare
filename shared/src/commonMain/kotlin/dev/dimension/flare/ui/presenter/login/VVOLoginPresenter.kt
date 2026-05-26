@@ -37,6 +37,9 @@ public class VVOLoginPresenter(
             override fun checkChocolate(cookie: String): Boolean = VVOService.checkChocolates(cookie)
 
             override fun login(chocolate: String) {
+                if (loading) {
+                    return
+                }
                 scope.launch {
                     loading = true
                     error = null
