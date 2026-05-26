@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,18 +20,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import compose.icons.FontAwesomeIcons
+import compose.icons.fontawesomeicons.Solid
+import compose.icons.fontawesomeicons.solid.MagnifyingGlass
 import dev.dimension.flare.R
 import dev.dimension.flare.data.model.BottomBarBehavior
 import dev.dimension.flare.data.model.LocalAppearanceSettings
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.PlatformType
+import dev.dimension.flare.model.zhihuWebHost
 import dev.dimension.flare.ui.component.BackButton
+import dev.dimension.flare.ui.component.FAIcon
 import dev.dimension.flare.ui.component.FlareScaffold
 import dev.dimension.flare.ui.component.FlareTopAppBar
 import dev.dimension.flare.ui.component.RefreshContainer
 import dev.dimension.flare.ui.component.platform.isBigScreen
 import dev.dimension.flare.ui.component.status.LazyStatusVerticalStaggeredGrid
 import dev.dimension.flare.ui.component.status.status
+import dev.dimension.flare.ui.model.UiTimelineV2
+import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.presenter.status.StatusContextPresenter
 import kotlinx.coroutines.launch
@@ -46,6 +56,8 @@ internal fun StatusScreen(
     val state by producePresenter(statusKey.toString()) {
         statusPresenter(accountType = accountType, statusKey = statusKey)
     }
+    val currentPost = state.state.current.takeSuccess() as? UiTimelineV2.Post
+    val isZhihuStatus = currentPost?.platformType == PlatformType.Zhihu || statusKey.host == zhihuWebHost
     val topAppBarScrollBehavior =
         if (LocalAppearanceSettings.current.bottomBarBehavior == BottomBarBehavior.AlwaysShow) {
             TopAppBarDefaults.pinnedScrollBehavior()
@@ -57,10 +69,28 @@ internal fun StatusScreen(
             FlareTopAppBar(
                 scrollBehavior = topAppBarScrollBehavior,
                 title = {
-                    Text(text = stringResource(id = R.string.status_title))
+                    if (!isZhihuStatus) {
+                        Text(text = stringResource(id = R.string.status_title))
+                    }
                 },
                 navigationIcon = {
                     BackButton(onBack = onBack)
+                },
+                actions = {
+                    if (isZhihuStatus) {
+                        TextButton(onClick = {}) {
+                            Text("邀请回答")
+                        }
+                        TextButton(onClick = {}) {
+                            Text("写回答")
+                        }
+                        IconButton(onClick = {}) {
+                            FAIcon(
+                                imageVector = FontAwesomeIcons.Solid.MagnifyingGlass,
+                                contentDescription = "搜索",
+                            )
+                        }
+                    }
                 },
             )
         },

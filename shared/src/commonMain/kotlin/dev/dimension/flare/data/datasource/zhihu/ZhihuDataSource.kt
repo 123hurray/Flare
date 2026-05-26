@@ -207,7 +207,7 @@ private class ZhihuQuestionAnswerRemoteLoader(
                 when (request) {
                     is PagingRequest.Append -> answers
                     PagingRequest.Refresh ->
-                        listOf(service.contentDetail("question:$questionId").toUiTimeline(accountKey, detail = true)) +
+                        listOf((page.header ?: service.questionHeader(questionId)).toUiTimeline(accountKey, detail = true)) +
                             answers
                     is PagingRequest.Prepend -> emptyList()
                 },

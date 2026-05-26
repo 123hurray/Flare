@@ -40,6 +40,8 @@ internal fun ZhihuContent.toUiTimeline(
     val statusKey = MicroBlogKey(statusId, zhihuWebHost)
     val accountType = AccountType.Specific(accountKey)
     val content = toUiContent(accountKey, detail, includeTitle)
+    val primaryCount = if (type == ZhihuContentType.Question) answerCount else commentCount
+    val secondaryCount = if (type == ZhihuContentType.Question) followerCount else voteupCount
     return UiTimelineV2.Post(
         platformType = PlatformType.Zhihu,
         images =
@@ -47,6 +49,7 @@ internal fun ZhihuContent.toUiTimeline(
                 persistentListOf()
             } else {
                 imageUrls
+                    .take(9)
                     .map {
                         UiMedia.Image(
                             url = it,
@@ -68,7 +71,7 @@ internal fun ZhihuContent.toUiTimeline(
                 ActionMenu.Item(
                     icon = UiIcon.Comment,
                     text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Comment),
-                    count = UiNumber(commentCount),
+                    count = UiNumber(primaryCount),
                     clickEvent =
                         ClickEvent.Deeplink(
                             DeeplinkRoute.Status.Detail(
@@ -80,7 +83,7 @@ internal fun ZhihuContent.toUiTimeline(
                 ActionMenu.Item(
                     icon = UiIcon.Like,
                     text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Like),
-                    count = UiNumber(voteupCount),
+                    count = UiNumber(secondaryCount),
                 ),
                 ActionMenu.Group(
                     displayItem =
@@ -109,6 +112,15 @@ internal fun ZhihuContent.toUiTimeline(
         statusKey = statusKey,
         card = null,
         createdAt = UiDateTime(Instant.fromEpochMilliseconds(createdTime.coerceAtLeast(0L) * 1000L)),
+        sourceChannel =
+            if (detail) {
+                UiTimelineV2.Post.SourceChannel(
+                    id = "zhihu-question-meta:$statusId",
+                    name = questionMetaText(),
+                )
+            } else {
+                null
+            },
         clickEvent =
             ClickEvent.Deeplink(
                 DeeplinkRoute.Status.Detail(
@@ -233,7 +245,7 @@ private fun ZhihuContent.toAuthorProfile(accountKey: MicroBlogKey): UiProfile =
         platformType = PlatformType.Zhihu,
         clickEvent = ClickEvent.Noop,
         banner = null,
-        description = null,
+        description = authorHeadline.takeIf { it.isNotBlank() }?.toUiPlainText(sourceLanguages),
         sourceLanguages = sourceLanguages.toImmutableList(),
         matrices = UiProfile.Matrices(fansCount = 0, followsCount = 0, statusesCount = 0),
         mark = persistentListOf(),
@@ -291,5 +303,12 @@ private fun ZhihuContent.shareUrl(): String =
         ZhihuContentType.Pin -> "https://$zhihuWebHost/pin/$id"
         ZhihuContentType.Question -> "https://$zhihuWebHost/question/$id"
     }
+
+private fun ZhihuContent.questionMetaText(): String =
+    buildList {
+        add("知乎")
+        answerCount.takeIf { it > 0 }?.let { add("${it} 个回答") }
+        followerCount.takeIf { it > 0 }?.let { add("${it} 个关注") }
+    }.joinToString(" · ") + " ›"
 
 private val sourceLanguages = listOf("zh-CN")

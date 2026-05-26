@@ -141,12 +141,15 @@ import dev.dimension.flare.ui.model.brandIcon
 import dev.dimension.flare.ui.model.onError
 import dev.dimension.flare.ui.model.onLoading
 import dev.dimension.flare.ui.model.onSuccess
+import dev.dimension.flare.ui.render.RenderContent
+import dev.dimension.flare.ui.render.RenderRun
 import dev.dimension.flare.ui.render.UiRichText
 import dev.dimension.flare.ui.route.DeeplinkRoute
 import dev.dimension.flare.ui.route.toUri
 import dev.dimension.flare.ui.theme.PlatformContentColor
 import dev.dimension.flare.ui.theme.PlatformTheme
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import moe.tlaster.precompose.molecule.producePresenter
@@ -170,6 +173,14 @@ public fun CommonStatusComponent(
         if (item.platformType == PlatformType.Xiaohongshu) {
             StatusMediaRouteCache.put(item)
         }
+    }
+    if (isDetail && item.platformType == PlatformType.Zhihu) {
+        ZhihuDetailStatusComponent(
+            item = item,
+            showExpandButton = showExpandButton,
+            modifier = modifier,
+        )
+        return
     }
     val appearanceSettings = LocalComponentAppearance.current
     val showAsFullWidth = !appearanceSettings.fullWidthPost && !isQuote && !isDetail
@@ -474,6 +485,162 @@ public fun CommonStatusComponent(
         }
     }
 }
+
+@Composable
+private fun ZhihuDetailStatusComponent(
+    item: UiTimelineV2.Post,
+    showExpandButton: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val titleContent = item.zhihuQuestionTitleContent()
+    val bodyContent = item.zhihuBodyContent()
+    val isQuestion = item.statusKey.id.startsWith("question:")
+    Column(
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        titleContent?.let {
+            RichText(
+                text = it,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item.sourceChannel?.name?.takeIf { it.isNotBlank() }?.let {
+            Spacer(modifier = Modifier.height(8.dp))
+            PlatformText(
+                text = it,
+                style = PlatformTheme.typography.body,
+                color = PlatformTheme.colorScheme.caption,
+            )
+        }
+        if (isQuestion) {
+            if (!bodyContent.isEmpty) {
+                Spacer(modifier = Modifier.height(16.dp))
+                SelectionContainer {
+                    RichText(
+                        text = bodyContent,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            return@Column
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(16.dp))
+        item.user?.let { user ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                AvatarComponent(data = user.avatar)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    RichText(
+                        text = user.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    PlatformText(
+                        text = user.description?.innerText?.takeIf { it.isNotBlank() } ?: user.handle.canonical,
+                        style = PlatformTheme.typography.caption,
+                        color = PlatformTheme.colorScheme.caption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                PlatformFilledTonalButton(onClick = {}) {
+                    PlatformText("+ 关注")
+                }
+            }
+        }
+        item.zhihuVoteupCount()?.takeIf { it > 0 }?.let {
+            Spacer(modifier = Modifier.height(16.dp))
+            PlatformText(
+                text = "$it 人赞同了该回答 ›",
+                style = PlatformTheme.typography.body,
+                color = PlatformTheme.colorScheme.caption,
+            )
+        }
+        if (!bodyContent.isEmpty) {
+            Spacer(modifier = Modifier.height(16.dp))
+            SelectionContainer {
+                StatusContentComponent(
+                    content = bodyContent,
+                    contentWarning = null,
+                    poll = item.poll,
+                    maxLines = Int.MAX_VALUE,
+                    showExpandButton = showExpandButton,
+                    onExpandClick = null,
+                )
+            }
+        }
+        if (item.actions.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            CompositionLocalProvider(
+                PlatformContentColor provides PlatformTheme.colorScheme.text,
+                PlatformTextStyle provides PlatformTheme.typography.body,
+            ) {
+                StatusActions(
+                    item.actions,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+private fun UiTimelineV2.Post.zhihuQuestionTitleContent(): UiRichText? {
+    val title = content.renderRuns.firstOrNull() as? RenderContent.Text ?: return null
+    if (title.block.headingLevel == null) return null
+    val text = title.zhihuPlainText().trim()
+    if (text.isBlank()) return null
+    return content.copy(
+        renderRuns = persistentListOf(title),
+        raw = text,
+        innerText = text,
+        imageUrls = persistentListOf(),
+    )
+}
+
+private fun UiTimelineV2.Post.zhihuBodyContent(): UiRichText {
+    val first = content.renderRuns.firstOrNull()
+    val titleText =
+        (first as? RenderContent.Text)
+            ?.takeIf { it.block.headingLevel != null }
+            ?.zhihuPlainText()
+            ?.trim()
+            .orEmpty()
+    val renderRuns =
+        if (titleText.isNotBlank()) {
+            content.renderRuns.drop(1)
+        } else {
+            content.renderRuns
+        }
+    return content.copy(
+        renderRuns = renderRuns.toImmutableList(),
+        raw = content.raw.removePrefix(titleText).trimStart(),
+        innerText = content.innerText.removePrefix(titleText).trimStart(),
+    )
+}
+
+private fun RenderContent.Text.zhihuPlainText(): String =
+    runs.joinToString(separator = "") {
+        when (it) {
+            is RenderRun.Text -> it.text
+            is RenderRun.Image -> it.alt
+        }
+    }
+
+private fun UiTimelineV2.Post.zhihuVoteupCount(): Long? =
+    actions
+        .filterIsInstance<ActionMenu.Item>()
+        .getOrNull(1)
+        ?.count
+        ?.value
 
 private fun UiTimelineV2.Post.hasKnownCreatedAt(): Boolean = createdAt.value != Instant.fromEpochMilliseconds(0L)
 

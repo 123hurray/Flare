@@ -66,6 +66,9 @@ internal class ZhihuService(
     suspend fun contentDetail(statusId: String): ZhihuContent =
         runCatching {
             val key = ZhihuContentKey.parse(statusId)
+            if (key.type == ZhihuContentType.Question) {
+                return@runCatching questionHeader(key.id)
+            }
             val root =
                 when (key.type) {
                     ZhihuContentType.Answer ->
@@ -74,8 +77,7 @@ internal class ZhihuService(
                         requestJson("https://www.zhihu.com/api/v4/articles/${key.id}?include=author,content,voteup_count,comment_count,excerpt,created")
                     ZhihuContentType.Pin ->
                         requestJson("https://www.zhihu.com/api/v4/pins/${key.id}")
-                    ZhihuContentType.Question ->
-                        requestJson("https://www.zhihu.com/api/v4/questions/${key.id}?include=read_count,answer_count,comment_count,detail,excerpt,author,topics")
+                    ZhihuContentType.Question -> error("Question detail should be loaded from answers feed")
                 }
             root.throwIfZhihuError("detail", statusId)
             root.toDetailContent(key)
@@ -95,18 +97,27 @@ internal class ZhihuService(
                         ?: "https://www.zhihu.com/api/v4/questions/$questionId/feeds?include=badge%5B*%5D.topics,comment_count,excerpt,voteup_count,created_time,updated_time&limit=20&order=default",
                 )
             root.throwIfZhihuError("questionAnswers", questionId)
+            val targets =
+                root["data"]
+                    .arrayOrEmpty()
+                    .mapNotNull { it.objectOrNull()?.get("target").objectOrNull() }
+            val header =
+                targets
+                    .mapNotNull { it.get("question").objectOrNull()?.toQuestionContent(questionId) }
+                    .firstOrNull()
             ZhihuTimelinePage(
-                items =
-                    root["data"]
-                        .arrayOrEmpty()
-                        .mapNotNull { it.objectOrNull()?.get("target").objectOrNull()?.toAnswerContent(questionId) },
+                items = targets.mapNotNull { it.toAnswerContent(questionId) },
                 nextUrl = root["paging"].objectOrNull()?.string("next"),
                 isEnd = root["paging"].objectOrNull()?.boolean("is_end") ?: true,
+                header = header,
             )
         }.getOrElse {
             println("ZhihuService: question answers unavailable questionId=$questionId message=${it.message}")
-            ZhihuTimelinePage(emptyList(), nextUrl = null, isEnd = true)
+            ZhihuTimelinePage(emptyList(), nextUrl = null, isEnd = true, header = ZhihuContent.questionPlaceholder(questionId))
         }
+
+    suspend fun questionHeader(questionId: String): ZhihuContent =
+        questionAnswers(questionId).header ?: ZhihuContent.questionPlaceholder(questionId)
 
     suspend fun comments(statusId: String): List<ZhihuComment> =
         runCatching {
@@ -182,6 +193,7 @@ internal data class ZhihuTimelinePage(
     val items: List<ZhihuContent>,
     val nextUrl: String?,
     val isEnd: Boolean,
+    val header: ZhihuContent? = null,
 )
 
 internal data class ZhihuContent(
@@ -194,7 +206,10 @@ internal data class ZhihuContent(
     val authorName: String,
     val authorId: String,
     val authorAvatar: String,
+    val authorHeadline: String,
     val questionId: String?,
+    val answerCount: Long,
+    val followerCount: Long,
     val voteupCount: Long,
     val commentCount: Long,
     val createdTime: Long,
@@ -216,13 +231,37 @@ internal data class ZhihuContent(
                 authorName = "知乎",
                 authorId = "zhihu",
                 authorAvatar = "",
+                authorHeadline = "",
                 questionId = null,
+                answerCount = 0,
+                followerCount = 0,
                 voteupCount = 0,
                 commentCount = 0,
                 createdTime = Clock.System.now().epochSeconds,
                 url = null,
             )
         }
+
+        fun questionPlaceholder(questionId: String): ZhihuContent =
+            ZhihuContent(
+                id = questionId,
+                type = ZhihuContentType.Question,
+                title = "知乎问题",
+                excerpt = "",
+                contentHtml = null,
+                imageUrls = emptyList(),
+                authorName = "知乎",
+                authorId = "zhihu",
+                authorAvatar = "",
+                authorHeadline = "",
+                questionId = questionId,
+                answerCount = 0,
+                followerCount = 0,
+                voteupCount = 0,
+                commentCount = 0,
+                createdTime = Clock.System.now().epochSeconds,
+                url = "https://www.zhihu.com/question/$questionId",
+            )
     }
 }
 
@@ -309,7 +348,10 @@ private fun JsonObject.toFeedContent(): ZhihuContent? {
         authorName = authorName,
         authorId = authorName,
         authorAvatar = avatar,
+        authorHeadline = "",
         questionId = questionId,
+        answerCount = 0,
+        followerCount = 0,
         voteupCount = 0,
         commentCount = 0,
         createdTime = createdTime,
@@ -332,7 +374,10 @@ private fun JsonObject.toTargetContent(): ZhihuContent? {
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
+        authorHeadline = author?.string("headline").orEmpty(),
         questionId = question?.string("id") ?: if (type == ZhihuContentType.Question) id else null,
+        answerCount = question?.long("answer_count") ?: if (type == ZhihuContentType.Question) long("answer_count") ?: 0L else 0L,
+        followerCount = question?.long("follower_count") ?: if (type == ZhihuContentType.Question) long("follower_count") ?: 0L else 0L,
         voteupCount = long("voteup_count") ?: long("vote_count") ?: 0L,
         commentCount = long("comment_count") ?: 0L,
         createdTime = long("created_time") ?: long("created") ?: Clock.System.now().epochSeconds,
@@ -353,7 +398,10 @@ private fun JsonObject.toDetailContent(key: ZhihuContentKey): ZhihuContent {
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
+        authorHeadline = author?.string("headline").orEmpty(),
         questionId = question?.string("id"),
+        answerCount = question?.long("answer_count") ?: long("answer_count") ?: 0L,
+        followerCount = question?.long("follower_count") ?: long("follower_count") ?: 0L,
         voteupCount = long("voteup_count") ?: 0L,
         commentCount = long("comment_count") ?: 0L,
         createdTime = long("created_time") ?: long("created") ?: Clock.System.now().epochSeconds,
@@ -375,7 +423,10 @@ private fun JsonObject.toAnswerContent(questionId: String): ZhihuContent? {
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url").orEmpty(),
+        authorHeadline = author?.string("headline").orEmpty(),
         questionId = questionId,
+        answerCount = question?.long("answer_count") ?: 0L,
+        followerCount = question?.long("follower_count") ?: 0L,
         voteupCount = long("voteup_count") ?: 0L,
         commentCount = long("comment_count") ?: 0L,
         createdTime = long("created_time") ?: Clock.System.now().epochSeconds,
@@ -395,6 +446,30 @@ private fun JsonObject.toComment(): ZhihuComment? {
         likeCount = long("like_count") ?: long("vote_count") ?: 0L,
         replyCount = long("child_comment_count") ?: 0L,
         createdTime = long("created_time") ?: Clock.System.now().epochSeconds,
+    )
+}
+
+private fun JsonObject.toQuestionContent(fallbackQuestionId: String): ZhihuContent {
+    val author = get("author").objectOrNull()
+    val id = string("id") ?: fallbackQuestionId
+    return ZhihuContent(
+        id = id,
+        type = ZhihuContentType.Question,
+        title = string("title") ?: "知乎问题",
+        excerpt = string("excerpt").orEmpty(),
+        contentHtml = string("detail")?.takeIf { it.isNotBlank() },
+        imageUrls = thumbnailImageUrls(),
+        authorName = author?.string("name") ?: "知乎用户",
+        authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
+        authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
+        authorHeadline = author?.string("headline").orEmpty(),
+        questionId = id,
+        answerCount = long("answer_count") ?: 0L,
+        followerCount = long("follower_count") ?: 0L,
+        voteupCount = 0L,
+        commentCount = long("comment_count") ?: 0L,
+        createdTime = long("created") ?: long("created_time") ?: Clock.System.now().epochSeconds,
+        url = string("url"),
     )
 }
 
