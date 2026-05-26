@@ -143,11 +143,10 @@ internal class XiaohongshuDataSource(
                     return PagingResult(
                         endOfPaginationReached = comments?.hasMore != true || comments.cursor.isNullOrBlank(),
                         data =
-                            comments
-                                ?.comments
-                                .orEmpty()
-                                .flatMap { it.flattenWithInlineSubComments() }
-                                .map { it.toUiTimeline(accountKey, statusKey.id) },
+                        comments
+                            ?.comments
+                            .orEmpty()
+                            .map { it.toUiTimeline(accountKey, statusKey.id) },
                         nextKey = comments?.cursor,
                     )
                 }
@@ -166,7 +165,6 @@ internal class XiaohongshuDataSource(
                     comments
                         ?.comments
                         .orEmpty()
-                        .flatMap { it.flattenWithInlineSubComments() }
                         .map { it.toUiTimeline(accountKey, statusKey.id) }
                 return PagingResult(
                     endOfPaginationReached = comments?.hasMore != true || comments.cursor.isNullOrBlank(),
@@ -199,7 +197,11 @@ internal class XiaohongshuDataSource(
                     ).data
             return PagingResult(
                 endOfPaginationReached = page?.hasMore != true || page.cursor.isNullOrBlank(),
-                data = page?.comments.orEmpty().map { it.toUiTimeline(accountKey, noteId) },
+                data =
+                    page
+                        ?.comments
+                        .orEmpty()
+                        .map { it.toUiTimeline(accountKey, noteId, includeInlineSubComments = false) },
                 nextKey = page?.cursor,
             )
         }
@@ -226,8 +228,11 @@ internal class XiaohongshuDataSource(
         return PagingResult(
             endOfPaginationReached = replies?.hasMore != true || replies.cursor.isNullOrBlank(),
             data =
-                listOfNotNull(rootComment?.toUiTimeline(accountKey, noteId)) +
-                    replies?.comments.orEmpty().map { it.toUiTimeline(accountKey, noteId) },
+                listOfNotNull(rootComment?.toUiTimeline(accountKey, noteId, includeInlineSubComments = false)) +
+                    replies
+                        ?.comments
+                        .orEmpty()
+                        .map { it.toUiTimeline(accountKey, noteId, includeInlineSubComments = false) },
             nextKey = replies?.cursor,
         )
     }

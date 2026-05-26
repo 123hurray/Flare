@@ -396,6 +396,7 @@ internal fun XhsNoteCard.toUiTimeline(
 internal fun XhsComment.toUiTimeline(
     accountKey: MicroBlogKey,
     noteId: String,
+    includeInlineSubComments: Boolean = true,
 ): UiTimelineV2.Post {
     val id = commentId?.takeIf { it.isNotBlank() } ?: id
     val statusKey = MicroBlogKey("$noteId:comment:$id", accountKey.host)
@@ -428,7 +429,14 @@ internal fun XhsComment.toUiTimeline(
         contentWarning = null,
         user = userInfo?.toUiProfile(accountKey),
         sourceLanguages = sourceLanguages,
-        quote = persistentListOf(),
+        quote =
+            if (includeInlineSubComments) {
+                subComments
+                    .map { it.toUiTimeline(accountKey, noteId, includeInlineSubComments = false) }
+                    .toPersistentList()
+            } else {
+                persistentListOf()
+            },
         content =
             text.toXhsRichText(accountKey, sourceLanguages),
         actions =
@@ -465,9 +473,6 @@ internal fun XhsComment.toUiTimeline(
         accountType = AccountType.Specific(accountKey),
     )
 }
-
-internal fun XhsComment.flattenWithInlineSubComments(): List<XhsComment> =
-    listOf(this) + subComments
 
 private fun XhsComment.mapperCommentIdentity(): String =
     commentId?.takeIf { it.isNotBlank() } ?: id

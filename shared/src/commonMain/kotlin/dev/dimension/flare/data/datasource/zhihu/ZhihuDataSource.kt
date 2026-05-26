@@ -243,7 +243,6 @@ private class ZhihuCommentRemoteLoader(
                 return PagingResult(
                     data =
                         page.comments
-                            .flatMap { it.flattenWithInlineChildComments() }
                             .map { it.toUiTimeline(accountKey, statusKey.id) },
                     nextKey = page.nextUrl,
                     endOfPaginationReached = page.isEnd || page.nextUrl.isNullOrBlank(),
@@ -256,7 +255,6 @@ private class ZhihuCommentRemoteLoader(
             data =
                 listOf(service.contentDetail(statusKey.id).toUiTimeline(accountKey, detail = true)) +
                     comments.comments
-                        .flatMap { it.flattenWithInlineChildComments() }
                         .map { it.toUiTimeline(accountKey, statusKey.id) },
             nextKey = comments.nextUrl,
             endOfPaginationReached = comments.isEnd || comments.nextUrl.isNullOrBlank(),
@@ -281,8 +279,13 @@ private class ZhihuCommentThreadRemoteLoader(
             return PagingResult(
                 data =
                     page.comments
-                        .flatMap { it.flattenWithInlineChildComments() }
-                        .map { it.toUiTimeline(accountKey, target.parentStatusId) },
+                        .map {
+                            it.toUiTimeline(
+                                accountKey,
+                                target.parentStatusId,
+                                includeInlineChildComments = false,
+                            )
+                        },
                 nextKey = page.nextUrl,
                 endOfPaginationReached = page.isEnd || page.nextUrl.isNullOrBlank(),
             )
@@ -291,10 +294,21 @@ private class ZhihuCommentThreadRemoteLoader(
         val replies = service.childComments(target.commentId)
         return PagingResult(
             data =
-                listOfNotNull(rootComment?.toUiTimeline(accountKey, target.parentStatusId)) +
+                listOfNotNull(
+                    rootComment?.toUiTimeline(
+                        accountKey,
+                        target.parentStatusId,
+                        includeInlineChildComments = false,
+                    ),
+                ) +
                     replies.comments
-                        .flatMap { it.flattenWithInlineChildComments() }
-                        .map { it.toUiTimeline(accountKey, target.parentStatusId) },
+                        .map {
+                            it.toUiTimeline(
+                                accountKey,
+                                target.parentStatusId,
+                                includeInlineChildComments = false,
+                            )
+                        },
             nextKey = replies.nextUrl,
             endOfPaginationReached = replies.isEnd || replies.nextUrl.isNullOrBlank(),
         )

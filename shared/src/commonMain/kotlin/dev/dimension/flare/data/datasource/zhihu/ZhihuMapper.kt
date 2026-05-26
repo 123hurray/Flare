@@ -205,6 +205,7 @@ private fun ZhihuContent.toTitleContent(
 internal fun ZhihuComment.toUiTimeline(
     accountKey: MicroBlogKey,
     parentStatusId: String,
+    includeInlineChildComments: Boolean = true,
 ): UiTimelineV2.Post {
     val accountType = AccountType.Specific(accountKey)
     val content = parseHtml(content).toUi(sourceLanguages)
@@ -221,6 +222,14 @@ internal fun ZhihuComment.toUiTimeline(
         sensitive = false,
         contentWarning = null,
         user = toAuthorProfile(accountKey),
+        quote =
+            if (includeInlineChildComments) {
+                childComments
+                    .map { it.toUiTimeline(accountKey, parentStatusId, includeInlineChildComments = false) }
+                    .toImmutableList()
+            } else {
+                persistentListOf()
+            },
         sourceLanguages = sourceLanguages.toImmutableList(),
         content = content,
         actions =
@@ -257,9 +266,6 @@ internal fun ZhihuComment.toUiTimeline(
         accountType = accountType,
     )
 }
-
-internal fun ZhihuComment.flattenWithInlineChildComments(): List<ZhihuComment> =
-    listOf(this) + childComments.flatMap { it.flattenWithInlineChildComments() }
 
 private fun ZhihuContent.toAuthorProfile(accountKey: MicroBlogKey): UiProfile =
     UiProfile(

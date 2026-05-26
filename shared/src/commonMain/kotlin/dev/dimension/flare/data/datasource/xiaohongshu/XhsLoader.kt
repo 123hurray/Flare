@@ -34,10 +34,10 @@ internal class XhsLoader(
                         ).data
                         ?.comments
                         .orEmpty()
-                        .flatMap { it.flattenWithInlineSubComments() }
+                        .flatMap { listOf(it) + it.subComments }
                         .firstOrNull { it.loaderCommentIdentity() == target.commentId }
                 }
-            return comment?.toUiTimeline(accountKey, target.noteId)
+            return comment?.toUiTimeline(accountKey, target.noteId, includeInlineSubComments = false)
                 ?: error("Xiaohongshu comment is empty: ${statusKey.id}")
         }
         return loadPost(statusKey)
