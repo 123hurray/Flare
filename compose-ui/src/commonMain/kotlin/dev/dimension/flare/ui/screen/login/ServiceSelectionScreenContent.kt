@@ -115,6 +115,7 @@ public fun ServiceSelectionScreenContent(
     onJike: () -> Unit,
     onXiaohongshu: () -> Unit = {},
     onInstagram: () -> Unit = {},
+    onZhihu: () -> Unit = {},
     onBack: (() -> Unit),
     openUri: (String) -> Unit,
     registerDeeplinkCallback: @Composable ((url: String) -> Unit) -> Unit,
@@ -579,6 +580,34 @@ public fun ServiceSelectionScreenContent(
                                     PlatformFilledTonalButton(
                                         onClick = {
                                             onInstagram.invoke()
+                                        },
+                                        modifier = Modifier.width(300.dp),
+                                        content = {
+                                            PlatformText(
+                                                text = stringResource(Res.string.service_select_next_button),
+                                            )
+                                        },
+                                    )
+                                }
+
+                                PlatformType.Dongqiudi -> {
+                                    PlatformFilledTonalButton(
+                                        onClick = {
+                                            state.addDongqiudiAnonymous()
+                                        },
+                                        modifier = Modifier.width(300.dp),
+                                        content = {
+                                            PlatformText(
+                                                text = stringResource(Res.string.service_select_next_button),
+                                            )
+                                        },
+                                    )
+                                }
+
+                                PlatformType.Zhihu -> {
+                                    PlatformFilledTonalButton(
+                                        onClick = {
+                                            onZhihu.invoke()
                                         },
                                         modifier = Modifier.width(300.dp),
                                         content = {

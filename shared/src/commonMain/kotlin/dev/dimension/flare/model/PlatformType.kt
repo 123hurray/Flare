@@ -20,6 +20,8 @@ public enum class PlatformType {
     Jike,
     Xiaohongshu,
     Instagram,
+    Dongqiudi,
+    Zhihu,
 }
 
 @Immutable
@@ -78,6 +80,12 @@ public const val xiaohongshuLoginUrl: String = "https://www.xiaohongshu.com/logi
 public const val instagramWebHost: String = "www.instagram.com"
 public const val instagramWebUrl: String = "https://www.instagram.com/"
 public const val instagramApiHost: String = "i.instagram.com"
+
+public const val dongqiudiApiHost: String = "api.dongqiudi.com"
+public const val dongqiudiWebHost: String = "www.dongqiudi.com"
+
+public const val zhihuApiHost: String = "api.zhihu.com"
+public const val zhihuWebHost: String = "www.zhihu.com"
 
 /**
  * Jike API endpoint identifier (from open-jike/jike-sdk)

@@ -72,6 +72,8 @@ public class StatusContextPresenter(
         object : TimelinePresenter() {
             override fun allowLongTextTranslationDisplay(loader: RemoteLoader<UiTimelineV2>): Boolean = true
 
+            override val enableDuplicateCommentFilter: Boolean = true
+
             override val loader: Flow<RemoteLoader<UiTimelineV2>> by lazy {
                 currentStatusFlow
                     .map { statusKey }

@@ -233,6 +233,11 @@ internal sealed interface Route : NavKey {
         data class InstagramLogin(
             val accountKey: MicroBlogKey? = null,
         ) : ServiceSelect
+
+        @Serializable
+        data class ZhihuLogin(
+            val accountKey: MicroBlogKey? = null,
+        ) : ServiceSelect
     }
 
     @Serializable

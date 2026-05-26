@@ -23,6 +23,7 @@ internal class LocalFilterRepository(
                     .map {
                         UiKeywordFilter(
                             keyword = it.keyword,
+                            isRegex = it.is_regex == 1L,
                             forTimeline = it.for_timeline == 1L,
                             forNotification = it.for_notification == 1L,
                             forSearch = it.for_search == 1L,
@@ -47,12 +48,23 @@ internal class LocalFilterRepository(
             forSearch = if (forSearch) 1L else 0L,
         ).map {
             it.map {
-                it.keyword
+                UiKeywordFilter(
+                    keyword = it.keyword,
+                    isRegex = it.is_regex == 1L,
+                    forTimeline = it.for_timeline == 1L,
+                    forNotification = it.for_notification == 1L,
+                    forSearch = it.for_search == 1L,
+                    expiredAt =
+                        it.expired_at
+                            .takeIf { it > 0L }
+                            ?.let { Instant.fromEpochMilliseconds(it) },
+                )
             }
         }
 
     fun add(
         keyword: String,
+        isRegex: Boolean,
         forTimeline: Boolean,
         forNotification: Boolean,
         forSearch: Boolean,
@@ -61,6 +73,7 @@ internal class LocalFilterRepository(
         database.keywordFilterDao().insert(
             DbKeywordFilter(
                 keyword = keyword,
+                is_regex = if (isRegex) 1L else 0L,
                 for_timeline = if (forTimeline) 1L else 0L,
                 for_notification = if (forNotification) 1L else 0L,
                 for_search = if (forSearch) 1L else 0L,
@@ -71,12 +84,14 @@ internal class LocalFilterRepository(
 
     fun update(
         keyword: String,
+        isRegex: Boolean,
         forTimeline: Boolean,
         forNotification: Boolean,
         forSearch: Boolean,
         expiredAt: Instant?,
     ) = coroutineScope.launch {
         database.keywordFilterDao().update(
+            isRegex = if (isRegex) 1L else 0L,
             forTimeline = if (forTimeline) 1L else 0L,
             forNotification = if (forNotification) 1L else 0L,
             forSearch = if (forSearch) 1L else 0L,

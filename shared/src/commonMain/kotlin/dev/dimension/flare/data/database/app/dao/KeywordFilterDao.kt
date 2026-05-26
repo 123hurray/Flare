@@ -38,10 +38,11 @@ internal interface KeywordFilterDao {
     suspend fun deleteAll()
 
     @Query(
-        "UPDATE DbKeywordFilter SET for_timeline = :forTimeline, for_notification = :forNotification, for_search = :forSearch, expired_at = :expiredAt WHERE keyword = :keyword",
+        "UPDATE DbKeywordFilter SET is_regex = :isRegex, for_timeline = :forTimeline, for_notification = :forNotification, for_search = :forSearch, expired_at = :expiredAt WHERE keyword = :keyword",
     )
     suspend fun update(
         keyword: String,
+        isRegex: Long,
         forTimeline: Long,
         forNotification: Long,
         forSearch: Long,

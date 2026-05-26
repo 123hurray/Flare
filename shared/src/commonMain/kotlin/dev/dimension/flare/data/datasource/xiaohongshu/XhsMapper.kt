@@ -703,11 +703,11 @@ private fun dev.dimension.flare.data.network.xiaohongshu.model.XhsVideoStreamIte
 
 private fun XhsImage.bestUrl(): String =
     firstNotBlank(
+        infoList.firstBestUrl(),
         urlDefault,
         urlPre,
         url,
         urlList.firstOrNull(),
-        infoList.firstBestUrl(),
     )
         .normalizeXhsMediaUrl()
 

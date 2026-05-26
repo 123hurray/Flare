@@ -58,10 +58,10 @@ internal class ComposeInAppNotification : InAppNotification {
                     success = false,
                     args =
                         listOfNotNull(
-                            if (throwable is LoginExpiredException) {
-                                throwable.accountKey
-                            } else {
-                                null
+                            when (message) {
+                                Message.LoginExpired -> (throwable as? LoginExpiredException)?.accountKey
+                                Message.Timeline -> throwable.message ?: throwable::class.simpleName
+                                else -> null
                             },
                         ),
                 ),
@@ -74,4 +74,5 @@ private val Message.title
         when (this) {
             Message.Compose -> R.string.compose_notification_title
             Message.LoginExpired -> R.string.notification_login_expired
+            Message.Timeline -> R.string.notification_timeline_error
         }

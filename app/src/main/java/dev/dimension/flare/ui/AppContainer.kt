@@ -83,6 +83,8 @@ fun FlareApp(content: @Composable () -> Unit) {
                             VideoAutoplay.NEVER -> ComponentAppearance.VideoAutoplay.NEVER
                         },
                     expandMediaSize = appearanceSettings.expandMediaSize,
+                    timelineLongPressExpandMediaSize = appearanceSettings.timelineLongPressExpandMediaSize,
+                    detailExpandMediaSize = appearanceSettings.detailExpandMediaSize,
                     compatLinkPreview = appearanceSettings.compatLinkPreview,
                     aiConfig =
                         ComponentAppearance.AiConfig(

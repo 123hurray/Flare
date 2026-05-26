@@ -12,7 +12,9 @@ import dev.dimension.flare.common.toPagingState
 import dev.dimension.flare.data.datasource.microblog.paging.toPagingSource
 import dev.dimension.flare.data.datasource.microblog.pagingConfig
 import dev.dimension.flare.data.datasource.vvo.VVODataSource
+import dev.dimension.flare.data.datastore.AppDataStore
 import dev.dimension.flare.data.repository.AccountRepository
+import dev.dimension.flare.data.repository.LocalFilterRepository
 import dev.dimension.flare.data.repository.accountServiceProvider
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
@@ -22,16 +24,23 @@ import dev.dimension.flare.ui.model.flatMap
 import dev.dimension.flare.ui.model.map
 import dev.dimension.flare.ui.model.toUi
 import dev.dimension.flare.ui.presenter.PresenterBase
+import dev.dimension.flare.ui.presenter.home.applyLocalTimelineFilters
+import dev.dimension.flare.ui.presenter.home.filterDuplicateCommentPages
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 public class VVOCommentPresenter(
     private val accountType: AccountType,
     private val commentKey: MicroBlogKey,
 ) : PresenterBase<VVOCommentState>(),
     KoinComponent {
     private val accountRepository: AccountRepository by inject()
+    private val localFilterRepository: LocalFilterRepository by inject()
+    private val appDataStore: AppDataStore by inject()
 
     @Composable
     override fun body(): VVOCommentState {
@@ -59,9 +68,22 @@ public class VVOCommentPresenter(
                 .map { service ->
                     remember(service) {
                         require(service is VVODataSource)
-                        Pager(config = pagingConfig) {
-                            service.commentChild(commentKey = commentKey).toPagingSource()
-                        }.flow
+                        appDataStore.appSettingsStore.data.flatMapLatest { appSettings ->
+                            val rawLoader = service.commentChild(commentKey = commentKey)
+                            val loader =
+                                if (appSettings.localFilterConfig.filterDuplicateComments) {
+                                    rawLoader.filterDuplicateCommentPages(appSettings.localFilterConfig.duplicateCommentThreshold)
+                                } else {
+                                    rawLoader
+                                }
+                            Pager(config = pagingConfig) {
+                                loader.toPagingSource()
+                            }.flow
+                        }.applyLocalTimelineFilters(
+                            localFilterRepository = localFilterRepository,
+                            appDataStore = appDataStore,
+                            filterDuplicateComments = true,
+                        )
                     }.collectAsLazyPagingItems()
                 }.toPagingState()
         return object : VVOCommentState {

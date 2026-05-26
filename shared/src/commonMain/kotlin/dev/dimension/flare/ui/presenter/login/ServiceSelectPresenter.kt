@@ -7,7 +7,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.data.repository.ApplicationRepository
+import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.dongqiudiWebHost
+import dev.dimension.flare.ui.model.UiAccount
 import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.presenter.PresenterBase
 import kotlinx.coroutines.launch
@@ -19,6 +23,7 @@ public class ServiceSelectPresenter(
 ) : PresenterBase<ServiceSelectState>(),
     KoinComponent {
     private val applicationRepository: ApplicationRepository by inject()
+    private val accountRepository: AccountRepository by inject()
 
     @Composable
     override fun body(): ServiceSelectState {
@@ -29,6 +34,7 @@ public class ServiceSelectPresenter(
         val mastodonLoginState = mastodonLoginPresenter(toHome)
         val misskeyLoginState = misskeyLoginPresenter(toHome)
         val jikeLoginState = remember { JikeLoginPresenter(null, toHome) }.body()
+        val scope = rememberCoroutineScope()
         val loading =
             nostrLoginState.loading ||
                 blueskyLoginState.loading ||
@@ -46,6 +52,17 @@ public class ServiceSelectPresenter(
             override val misskeyLoginState = misskeyLoginState
             override val jikeLoginState = jikeLoginState
             override val loading = loading
+
+            override fun addDongqiudiAnonymous() {
+                scope.launch {
+                    val accountKey = MicroBlogKey("anonymous", dongqiudiWebHost)
+                    accountRepository.addAccount(
+                        UiAccount.Dongqiudi(accountKey),
+                        UiAccount.Dongqiudi.Credential,
+                    )
+                    toHome()
+                }
+            }
         }
     }
 
@@ -157,6 +174,8 @@ public interface ServiceSelectState : NodeInfoState {
     public val misskeyLoginState: MisskeyLoginState
     public val jikeLoginState: JikeLoginState
     public val loading: Boolean
+
+    public fun addDongqiudiAnonymous()
 }
 
 @Immutable

@@ -8,6 +8,7 @@ import dev.dimension.flare.data.model.TabItem
 import dev.dimension.flare.data.model.TimelineTabItem
 import dev.dimension.flare.data.network.nodeinfo.PlatformDetector
 import dev.dimension.flare.data.platform.BlueskyPlatformSpec
+import dev.dimension.flare.data.platform.DongqiudiPlatformSpec
 import dev.dimension.flare.data.platform.JikePlatformSpec
 import dev.dimension.flare.data.platform.InstagramPlatformSpec
 import dev.dimension.flare.data.platform.MastodonPlatformSpec
@@ -16,6 +17,7 @@ import dev.dimension.flare.data.platform.NostrPlatformSpec
 import dev.dimension.flare.data.platform.VvoPlatformSpec
 import dev.dimension.flare.data.platform.XqtPlatformSpec
 import dev.dimension.flare.data.platform.XiaohongshuPlatformSpec
+import dev.dimension.flare.data.platform.ZhihuPlatformSpec
 import dev.dimension.flare.ui.model.UiIcon
 import dev.dimension.flare.ui.model.UiInstanceMetadata
 import kotlinx.collections.immutable.ImmutableList
@@ -62,4 +64,6 @@ internal val PlatformType.spec: PlatformSpec
             PlatformType.Jike -> JikePlatformSpec
             PlatformType.Xiaohongshu -> XiaohongshuPlatformSpec
             PlatformType.Instagram -> InstagramPlatformSpec
+            PlatformType.Dongqiudi -> DongqiudiPlatformSpec
+            PlatformType.Zhihu -> ZhihuPlatformSpec
         }

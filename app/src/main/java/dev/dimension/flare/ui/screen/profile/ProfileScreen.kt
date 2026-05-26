@@ -82,6 +82,7 @@ import dev.dimension.flare.ui.component.status.MediaItem
 import dev.dimension.flare.ui.component.status.StatusPlaceholder
 import dev.dimension.flare.ui.component.status.status
 import dev.dimension.flare.ui.model.UiMedia
+import dev.dimension.flare.ui.model.StatusMediaRouteCache
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.map
 import dev.dimension.flare.ui.model.onError
@@ -564,6 +565,7 @@ private fun ProfileMediaTab(
                                         .clickable {
                                             val content = item.status
                                             if (content is UiTimelineV2.Post) {
+                                                StatusMediaRouteCache.put(content)
                                                 onItemClicked(
                                                     item.statusKey,
                                                     item.index,

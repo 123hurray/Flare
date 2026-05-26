@@ -90,6 +90,12 @@ public sealed interface UiApplication {
                 PlatformType.Instagram -> {
                     Nostr(host = host)
                 }
+                PlatformType.Dongqiudi -> {
+                    Nostr(host = host)
+                }
+                PlatformType.Zhihu -> {
+                    Nostr(host = host)
+                }
             }
     }
 }

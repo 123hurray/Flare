@@ -48,6 +48,8 @@ internal fun ProvideThemeSettings(content: @Composable () -> Unit) {
                     showSensitiveContent = appearanceSettings.showSensitiveContent,
                     videoAutoplay = ComponentAppearance.VideoAutoplay.NEVER,
                     expandMediaSize = appearanceSettings.expandMediaSize,
+                    timelineLongPressExpandMediaSize = appearanceSettings.timelineLongPressExpandMediaSize,
+                    detailExpandMediaSize = appearanceSettings.detailExpandMediaSize,
                     compatLinkPreview = appearanceSettings.compatLinkPreview,
                     aiConfig =
                         ComponentAppearance.AiConfig(

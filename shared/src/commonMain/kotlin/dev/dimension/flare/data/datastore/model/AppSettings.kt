@@ -19,7 +19,14 @@ public data class AppSettings(
     val aiConfig: AiConfig = AiConfig(),
     val language: String = "",
     val translateConfig: TranslateConfig = TranslateConfig(),
+    val localFilterConfig: LocalFilterConfig = LocalFilterConfig(),
 ) {
+    @Serializable
+    public data class LocalFilterConfig(
+        val filterDuplicateComments: Boolean = false,
+        val duplicateCommentThreshold: Int = 3,
+    )
+
     @Serializable
     public data class TranslateConfig(
         val preTranslate: Boolean = false,

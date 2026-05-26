@@ -3,6 +3,7 @@ package dev.dimension.flare.ui.component.status
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
@@ -64,6 +66,8 @@ internal fun StatusMediaComponent(
     onMediaClick: (UiMedia) -> Unit,
     sensitive: Boolean,
     modifier: Modifier = Modifier,
+    expandMediaSize: Boolean = LocalComponentAppearance.current.expandMediaSize,
+    onMediaLongClick: ((UiMedia) -> Unit)? = null,
 ) {
     val uriHandler = LocalUriHandler.current
     val appearanceSettings = LocalComponentAppearance.current
@@ -107,10 +111,17 @@ internal fun StatusMediaComponent(
 //                                    animatedVisibilityScope = this@AnimatedVisibilityScope,
 //                                )
                                         .pointerHoverIcon(PointerIcon.Hand)
-                                        .clickable {
-                                            onMediaClick(media)
+                                        .pointerInput(media, onMediaClick, onMediaLongClick) {
+                                            detectTapGestures(
+                                                onTap = {
+                                                    onMediaClick(media)
+                                                },
+                                                onLongPress = {
+                                                    onMediaLongClick?.invoke(media)
+                                                },
+                                            )
                                         },
-                                keepAspectRatio = data.size == 1 && appearanceSettings.expandMediaSize,
+                                keepAspectRatio = data.size == 1 && expandMediaSize,
                             )
                         }
                         if (!media.description.isNullOrEmpty()) {
@@ -169,7 +180,7 @@ internal fun StatusMediaComponent(
                             it
                         }
                     },
-            expandedSize = appearanceSettings.expandMediaSize,
+            expandedSize = expandMediaSize,
         )
         if (showSensitiveButton) {
             Box(

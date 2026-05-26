@@ -204,15 +204,32 @@ private class InstagramHomeTimelineRemoteLoader(
         pageSize: Int,
         request: PagingRequest,
     ): PagingResult<UiTimelineV2> {
+        println(
+            "InstagramHomeTimelineRemoteLoader: start type=$type request=${request::class.simpleName} " +
+                "pageSize=$pageSize pagingKey=$pagingKey",
+        )
         if (request is PagingRequest.Prepend) {
+            println("InstagramHomeTimelineRemoteLoader: skip prepend type=$type")
             return PagingResult(endOfPaginationReached = true)
         }
-        val page =
+        val page = try {
             when (type) {
                 InstagramHomeTimelineType.Following -> service.followingFeed((request as? PagingRequest.Append)?.nextKey)
                 InstagramHomeTimelineType.Recommended -> service.recommendedFeed((request as? PagingRequest.Append)?.nextKey)
             }
+        } catch (e: Throwable) {
+            println(
+                "InstagramHomeTimelineRemoteLoader: error type=$type request=${request::class.simpleName} " +
+                    "message=${e.message}",
+            )
+            throw e
+        }
         val items = page.items.map { it.toUiTimeline(accountKey) }
+        println(
+            "InstagramHomeTimelineRemoteLoader: success type=$type request=${request::class.simpleName} " +
+                "items=${items.size} more=${page.moreAvailable} next=${page.nextMaxId.orEmpty()} " +
+                "first=${items.firstOrNull()?.statusKey?.id.orEmpty()}",
+        )
         return PagingResult(
             endOfPaginationReached = !page.moreAvailable || page.nextMaxId.isNullOrBlank() || items.isEmpty(),
             data = items,

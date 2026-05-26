@@ -27,4 +27,6 @@ public val PlatformType.brandIcon: ImageVector
             PlatformType.Jike -> FontAwesomeIcons.Brands.Jike
             PlatformType.Xiaohongshu -> FontAwesomeIcons.Solid.BookOpen
             PlatformType.Instagram -> FontAwesomeIcons.Brands.Instagram
+            PlatformType.Dongqiudi -> FontAwesomeIcons.Solid.BookOpen
+            PlatformType.Zhihu -> FontAwesomeIcons.Solid.BookOpen
         }

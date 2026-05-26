@@ -7,6 +7,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.SegmentedListItem
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -75,6 +76,26 @@ internal fun LocalFilterScreen(
                     .padding(horizontal = screenHorizontalPadding),
             verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
         ) {
+            item {
+                SegmentedListItem(
+                    onClick = {
+                        state.setFilterDuplicateComments(!state.filterDuplicateComments)
+                    },
+                    shapes = ListItemDefaults.segmentedShapes2(0, 1),
+                    content = {
+                        Text(text = stringResource(id = R.string.local_filter_duplicate_comments))
+                    },
+                    supportingContent = {
+                        Text(text = stringResource(id = R.string.local_filter_duplicate_comments_description))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = state.filterDuplicateComments,
+                            onCheckedChange = state::setFilterDuplicateComments,
+                        )
+                    },
+                )
+            }
             state.items.onSuccess { list ->
                 items(list.size) { index ->
                     val item = list[index]

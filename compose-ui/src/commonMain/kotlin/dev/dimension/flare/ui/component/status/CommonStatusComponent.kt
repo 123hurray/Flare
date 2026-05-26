@@ -357,6 +357,7 @@ public fun CommonStatusComponent(
                 Spacer(modifier = Modifier.height(8.dp))
                 StatusMediasComponent(
                     item,
+                    isDetail = isDetail,
                     isQuote = isQuote,
                     onMediaClick = { media ->
                         if (media is UiMedia.Video && media.url.isBlank()) {
@@ -479,6 +480,7 @@ private fun UiTimelineV2.Post.hasKnownCreatedAt(): Boolean = createdAt.value != 
 @Composable
 internal fun StatusMediasComponent(
     item: UiTimelineV2.Post,
+    isDetail: Boolean,
     isQuote: Boolean,
     onMediaClick: (UiMedia) -> Unit,
 ) {
@@ -489,6 +491,15 @@ internal fun StatusMediasComponent(
     var resolvingKeys by remember(item.statusKey, item.images) {
         mutableStateOf(emptySet<String>())
     }
+    var expandCurrentPostMedia by rememberSaveable(item.statusKey, isDetail) {
+        mutableStateOf(false)
+    }
+    val effectiveExpandMediaSize =
+        when {
+            isDetail -> appearanceSettings.detailExpandMediaSize
+            expandCurrentPostMedia -> true
+            else -> appearanceSettings.expandMediaSize
+        }
     if (appearanceSettings.showMedia || showMedia) {
         if (!appearanceSettings.showMedia) {
             Row(
@@ -561,6 +572,17 @@ internal fun StatusMediasComponent(
                     onMediaClick(media)
                 }
             },
+            expandMediaSize = effectiveExpandMediaSize,
+            onMediaLongClick =
+                if (!isDetail && appearanceSettings.timelineLongPressExpandMediaSize) {
+                    { media ->
+                        if (media is UiMedia.Image || media is UiMedia.Gif || media is UiMedia.Video) {
+                            expandCurrentPostMedia = true
+                        }
+                    }
+                } else {
+                    null
+                },
             sensitive = item.sensitive,
             modifier =
                 Modifier.clip(

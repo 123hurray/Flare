@@ -9,6 +9,7 @@ import kotlinx.serialization.Serializable
 internal data class DbKeywordFilter(
     @PrimaryKey
     val keyword: String,
+    val is_regex: Long = 0L,
     val for_timeline: Long,
     val for_notification: Long,
     val for_search: Long,

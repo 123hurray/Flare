@@ -42,7 +42,6 @@ internal class InstagramService(
                 json(JSON)
             }
         }
-
     suspend fun me(): InstagramUser {
         val cookies = cookiesFlow.first()
         val userId = requireNotNull(cookies["ds_user_id"]?.takeIf { it.isNotBlank() }) {
@@ -384,7 +383,12 @@ private fun JsonObject.toInstagramMedia(): InstagramMedia? {
 
 private fun JsonObject.toInstagramAttachment(): InstagramAttachment? {
     val image = bestImage()
-    val isVideo = number("media_type") == 2L || this["video_versions"].arrayOrNull()?.isNotEmpty() == true
+    val isVideo =
+        number("media_type") == 2L ||
+            boolean("is_video") ||
+            string("__typename") == "GraphVideo" ||
+            this["video_versions"].arrayOrNull()?.isNotEmpty() == true ||
+            string("video_url") != null
     if (isVideo) {
         val video = bestVideo(image)
         if (video != null) {
@@ -416,9 +420,11 @@ private fun JsonObject.bestImage(): InstagramImage? {
                     width = (json.number("width") ?: 1L).toFloat(),
                     height = (json.number("height") ?: 1L).toFloat(),
                 )
-            }
+    }
     return candidates.maxByOrNull { it.width * it.height }
         ?: string("display_url")?.let { InstagramImage(it, 1f, 1f) }
+        ?: string("thumbnail_src")?.let { InstagramImage(it, 1f, 1f) }
+        ?: string("thumbnail_url")?.let { InstagramImage(it, 1f, 1f) }
 }
 
 private fun JsonObject.bestVideo(thumbnail: InstagramImage?): InstagramVideo? {
@@ -427,17 +433,31 @@ private fun JsonObject.bestVideo(thumbnail: InstagramImage?): InstagramVideo? {
             .arrayOrEmpty()
             .mapNotNull { candidate ->
                 val json = candidate.objectOrNull() ?: return@mapNotNull null
-                val url = json.string("url") ?: return@mapNotNull null
-                val width = (json.number("width") ?: 0L).toFloat()
-                val height = (json.number("height") ?: 0L).toFloat()
-                InstagramVideo(
-                    url = url,
-                    thumbnailUrl = thumbnail?.url.orEmpty(),
-                    width = width.takeIf { it > 0f } ?: thumbnail?.width ?: 1f,
-                    height = height.takeIf { it > 0f } ?: thumbnail?.height ?: 1f,
-                )
-            }
+                json.toInstagramVideoCandidate(thumbnail)
+            } +
+            listOfNotNull(
+                string("video_url")?.let { url ->
+                    InstagramVideo(
+                        url = url,
+                        thumbnailUrl = thumbnail?.url.orEmpty(),
+                        width = thumbnail?.width ?: 1f,
+                        height = thumbnail?.height ?: 1f,
+                    )
+                },
+            )
     return candidates.maxByOrNull { it.width * it.height }
+}
+
+private fun JsonObject.toInstagramVideoCandidate(thumbnail: InstagramImage?): InstagramVideo? {
+    val url = string("url") ?: return null
+    val width = (number("width") ?: 0L).toFloat()
+    val height = (number("height") ?: 0L).toFloat()
+    return InstagramVideo(
+        url = url,
+        thumbnailUrl = thumbnail?.url.orEmpty(),
+        width = width.takeIf { it > 0f } ?: thumbnail?.width ?: 1f,
+        height = height.takeIf { it > 0f } ?: thumbnail?.height ?: 1f,
+    )
 }
 
 private fun JsonObject.captionText(): String =

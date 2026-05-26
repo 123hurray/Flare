@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import dev.dimension.flare.common.decodeJson
 import dev.dimension.flare.data.database.app.model.DbAccount
 import dev.dimension.flare.data.datasource.bluesky.BlueskyDataSource
+import dev.dimension.flare.data.datasource.dongqiudi.DongqiudiDataSource
 import dev.dimension.flare.data.datasource.mastodon.MastodonDataSource
 import dev.dimension.flare.data.datasource.microblog.MicroblogDataSource
 import dev.dimension.flare.data.datasource.misskey.MisskeyDataSource
@@ -14,6 +15,7 @@ import dev.dimension.flare.data.datasource.jike.JikeDataSource
 import dev.dimension.flare.data.datasource.instagram.InstagramDataSource
 import dev.dimension.flare.data.datasource.xiaohongshu.XiaohongshuDataSource
 import dev.dimension.flare.data.datasource.xqt.XQTDataSource
+import dev.dimension.flare.data.datasource.zhihu.ZhihuDataSource
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
 import kotlinx.serialization.SerialName
@@ -275,6 +277,36 @@ public sealed class UiAccount {
         ) : UiAccount.Credential
     }
 
+    @Immutable
+    internal data class Dongqiudi(
+        override val accountKey: MicroBlogKey,
+    ) : UiAccount() {
+        override val platformType: PlatformType
+            get() = PlatformType.Dongqiudi
+
+        @Immutable
+        @Serializable
+        @SerialName("DongqiudiCredential")
+        data object Credential : UiAccount.Credential
+    }
+
+    @Immutable
+    internal data class Zhihu(
+        override val accountKey: MicroBlogKey,
+    ) : UiAccount() {
+        override val platformType: PlatformType
+            get() = PlatformType.Zhihu
+
+        @Immutable
+        @Serializable
+        @SerialName("ZhihuCredential")
+        data class Credential(
+            val cookies: Map<String, String> = emptyMap(),
+            val savedAt: Long = 0L,
+            val userAgent: String = "web-windows-chrome-126",
+        ) : UiAccount.Credential
+    }
+
     internal companion object {
         fun UiAccount.createDataSource(): MicroblogDataSource =
             when (this) {
@@ -344,6 +376,18 @@ public sealed class UiAccount {
                         accountKey = accountKey,
                     )
                 }
+
+                is Dongqiudi -> {
+                    DongqiudiDataSource(
+                        accountKey = accountKey,
+                    )
+                }
+
+                is Zhihu -> {
+                    ZhihuDataSource(
+                        accountKey = accountKey,
+                    )
+                }
             }
 
         fun DbAccount.toUi(): UiAccount =
@@ -405,6 +449,18 @@ public sealed class UiAccount {
 
                 PlatformType.Instagram -> {
                     Instagram(
+                        accountKey = account_key,
+                    )
+                }
+
+                PlatformType.Dongqiudi -> {
+                    Dongqiudi(
+                        accountKey = account_key,
+                    )
+                }
+
+                PlatformType.Zhihu -> {
+                    Zhihu(
                         accountKey = account_key,
                     )
                 }

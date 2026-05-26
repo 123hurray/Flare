@@ -8,7 +8,6 @@ import androidx.paging.ExperimentalPagingApi
 import androidx.paging.Pager
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import androidx.paging.filter
 import androidx.paging.map
 import dev.dimension.flare.common.InAppNotification
 import dev.dimension.flare.common.Message
@@ -28,6 +27,7 @@ import dev.dimension.flare.data.datasource.microblog.paging.TimelinePagingMapper
 import dev.dimension.flare.data.datasource.microblog.paging.TimelineRemoteMediator
 import dev.dimension.flare.data.datasource.microblog.paging.toPagingSource
 import dev.dimension.flare.data.datasource.microblog.pagingConfig
+import dev.dimension.flare.data.datastore.model.AppSettings
 import dev.dimension.flare.data.datastore.AppDataStore
 import dev.dimension.flare.data.repository.LocalFilterRepository
 import dev.dimension.flare.data.repository.LoginExpiredException
@@ -59,28 +59,37 @@ public abstract class TimelinePresenter :
     private val localFilterRepository: LocalFilterRepository by inject()
     private val inAppNotification: InAppNotification by inject()
 
-    private val filterFlow: Flow<List<String>> by lazy {
-        localFilterRepository.getFlow(forTimeline = true)
-    }
-
     private val translationSettingsFlow: Flow<TranslationDisplayOptions> by lazy {
         TranslationSettingsSupport.displayOptionsFlow(appDataStore)
     }
 
+    private val localFilterConfigFlow: Flow<AppSettings.LocalFilterConfig> by lazy {
+        appDataStore.appSettingsStore.data.map { it.localFilterConfig }
+    }
+
     internal open fun allowLongTextTranslationDisplay(loader: RemoteLoader<UiTimelineV2>): Boolean = false
+
+    internal open val enableDuplicateCommentFilter: Boolean = false
 
     @OptIn(ExperimentalCoroutinesApi::class)
     internal fun createPager(scope: CoroutineScope): Flow<PagingData<UiTimelineV2>> =
         loader
             .flatMapLatest { remoteLoader ->
-                when (remoteLoader) {
+                localFilterConfigFlow.flatMapLatest { localFilterConfig ->
+                    val effectiveRemoteLoader =
+                        if (enableDuplicateCommentFilter && localFilterConfig.filterDuplicateComments) {
+                            remoteLoader.filterDuplicateCommentPages(localFilterConfig.duplicateCommentThreshold)
+                        } else {
+                            remoteLoader
+                        }
+                    when (effectiveRemoteLoader) {
                     is NotSupportRemoteLoader<UiTimelineV2> -> {
                         PagingData.emptyFlow(isError = false)
                     }
 
                     is CacheableRemoteLoader<UiTimelineV2> -> {
                         cachePager(
-                            loader = remoteLoader,
+                            loader = effectiveRemoteLoader,
                         ).cachedIn(scope).flatMapLatest { pagingData ->
                             translationSettingsFlow
                                 .map { translationDisplayOptions ->
@@ -88,7 +97,7 @@ public abstract class TimelinePresenter :
                                         pagingData.map { item ->
                                             TimelinePagingMapper.toUi(
                                                 item = item,
-                                                pagingKey = remoteLoader.pagingKey,
+                                                pagingKey = effectiveRemoteLoader.pagingKey,
                                                 translationDisplayOptions = translationDisplayOptions,
                                             )
                                         }
@@ -99,25 +108,17 @@ public abstract class TimelinePresenter :
 
                     else -> {
                         networkPager(
-                            loader = remoteLoader,
+                            loader = effectiveRemoteLoader,
                         ).cachedIn(scope)
                     }
-                }.flatMapLatest { pager ->
-                    filterFlow.map { filterList ->
-                        pager
-                            .filter { item ->
-                                if (filterList.isEmpty()) {
-                                    true
-                                } else {
-                                    !filterList.any { filter ->
-                                        item.searchText
-                                            .orEmpty()
-                                            .contains(filter, ignoreCase = true)
-                                    }
-                                }
-                            }.map {
-                                transform(it)
-                            }
+                    }
+                }.applyLocalTimelineFilters(
+                    localFilterRepository = localFilterRepository,
+                    appDataStore = appDataStore,
+                    filterDuplicateComments = enableDuplicateCommentFilter,
+                ).map { pager ->
+                    pager.map {
+                        transform(it)
                     }
                 }
             }.catch {
@@ -136,8 +137,11 @@ public abstract class TimelinePresenter :
                         allowLongText = allowLongText,
                         preTranslationService = preTranslationService,
                         notifyError = { e ->
+                            println("TimelinePresenter: timeline load error message=${e.message}")
                             if (e is LoginExpiredException) {
                                 inAppNotification.onError(Message.LoginExpired, e)
+                            } else {
+                                inAppNotification.onError(Message.Timeline, e)
                             }
                         },
                     ),

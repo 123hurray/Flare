@@ -195,6 +195,58 @@ internal fun AppearanceMediaScreen(onBack: () -> Unit) {
                 SegmentedListItem(
                     onClick = {
                         state.updateSettings {
+                            copy(timelineLongPressExpandMediaSize = !timelineLongPressExpandMediaSize)
+                        }
+                    },
+                    shapes = ListItemDefaults.item(),
+                    content = {
+                        Text(text = stringResource(id = R.string.settings_appearance_timeline_long_press_expand_media))
+                    },
+                    supportingContent = {
+                        Text(text = stringResource(id = R.string.settings_appearance_timeline_long_press_expand_media_description))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = appearanceSettings.timelineLongPressExpandMediaSize,
+                            onCheckedChange = {
+                                state.updateSettings {
+                                    copy(timelineLongPressExpandMediaSize = it)
+                                }
+                            },
+                        )
+                    },
+                )
+            }
+            AnimatedVisibility(appearanceSettings.showMedia) {
+                SegmentedListItem(
+                    onClick = {
+                        state.updateSettings {
+                            copy(detailExpandMediaSize = !detailExpandMediaSize)
+                        }
+                    },
+                    shapes = ListItemDefaults.item(),
+                    content = {
+                        Text(text = stringResource(id = R.string.settings_appearance_detail_expand_media))
+                    },
+                    supportingContent = {
+                        Text(text = stringResource(id = R.string.settings_appearance_detail_expand_media_description))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = appearanceSettings.detailExpandMediaSize,
+                            onCheckedChange = {
+                                state.updateSettings {
+                                    copy(detailExpandMediaSize = it)
+                                }
+                            },
+                        )
+                    },
+                )
+            }
+            AnimatedVisibility(appearanceSettings.showMedia) {
+                SegmentedListItem(
+                    onClick = {
+                        state.updateSettings {
                             copy(shareImageExpandMediaSize = !shareImageExpandMediaSize)
                         }
                     },

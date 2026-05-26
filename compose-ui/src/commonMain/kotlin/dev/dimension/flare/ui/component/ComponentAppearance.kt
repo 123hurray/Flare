@@ -20,6 +20,8 @@ public data class ComponentAppearance(
     val showSensitiveContent: Boolean = false,
     val videoAutoplay: VideoAutoplay = VideoAutoplay.WIFI,
     val expandMediaSize: Boolean = false,
+    val timelineLongPressExpandMediaSize: Boolean = false,
+    val detailExpandMediaSize: Boolean = false,
     val compatLinkPreview: Boolean = false,
     val aiConfig: AiConfig = AiConfig(),
     val lineLimit: Int = 5,

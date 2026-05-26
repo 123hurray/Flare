@@ -231,6 +231,10 @@
     <string name="settings_appearance_expand_media_description">Keep the aspectradio of the media in timeline</string>
     <string name="settings_appearance_hide_media_post_info_by_default">Hide post info in media viewer by default</string>
     <string name="settings_appearance_hide_media_post_info_by_default_description">Start image and video detail screens with the post overlay hidden</string>
+    <string name="settings_appearance_timeline_long_press_expand_media">Long press timeline media to expand this post</string>
+    <string name="settings_appearance_timeline_long_press_expand_media_description">Long press an image or video in the timeline to use full-size media for the current post</string>
+    <string name="settings_appearance_detail_expand_media">Expand media to full size in detail pages</string>
+    <string name="settings_appearance_detail_expand_media_description">Keep the media aspect ratio in post detail pages</string>
     <string name="settings_appearance_share_image_expand_media">Expand media to full size when sharing</string>
     <string name="settings_appearance_share_image_expand_media_description">Keep the aspectradio of the media when sharing posts as images</string>
     <string name="settings_appearance_video_autoplay">Video autoplay</string>
@@ -328,6 +332,9 @@
     <string name="local_filter_add_title">Add Filter</string>
     <string name="local_filter_keyword">Keyword</string>
     <string name="local_filter_keyword_hint">Keyword to filter</string>
+    <string name="local_filter_regex">Regular expression</string>
+    <string name="local_filter_duplicate_comments">Filter duplicate comments</string>
+    <string name="local_filter_duplicate_comments_description">When 3 comments share the same text, newly loaded duplicates are hidden.</string>
     <string name="local_filter_for_timeline">Filter in timeline</string>
     <string name="local_filter_for_notification">Filter in notification</string>
     <string name="local_filter_for_search">Filter in search</string>
@@ -410,6 +417,7 @@
 
 
     <string name="notification_login_expired">Login expired for %1$s</string>
+    <string name="notification_timeline_error">Timeline refresh failed: %1$s</string>
 
     <string name="following_title">Following</string>
     <string name="fans_title">Follower</string>

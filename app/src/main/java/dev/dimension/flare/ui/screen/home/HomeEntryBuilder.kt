@@ -12,6 +12,7 @@ import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.instagramWebHost
 import dev.dimension.flare.model.jikeWebHost
 import dev.dimension.flare.model.xiaohongshuWebHost
+import dev.dimension.flare.model.zhihuWebHost
 import dev.dimension.flare.ui.component.BottomSheetSceneStrategy
 import dev.dimension.flare.ui.route.Route
 
@@ -136,6 +137,7 @@ private fun AccountType.reloginRoute(): Route =
                 jikeWebHost -> Route.ServiceSelect.JikeLogin(accountKey)
                 xiaohongshuWebHost -> Route.ServiceSelect.XiaohongshuLogin(accountKey)
                 instagramWebHost -> Route.ServiceSelect.InstagramLogin(accountKey)
+                zhihuWebHost -> Route.ServiceSelect.ZhihuLogin(accountKey)
                 else -> Route.ServiceSelect.Selection
             }
 

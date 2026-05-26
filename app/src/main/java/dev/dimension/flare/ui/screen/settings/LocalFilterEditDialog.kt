@@ -115,9 +115,24 @@ internal fun LocalFilterEditDialog(
             ) {
                 SegmentedListItem(
                     onClick = {
-                        state.setForTimeline(!state.forTimeline)
+                        state.setIsRegex(!state.isRegex)
                     },
                     shapes = ListItemDefaults.first(),
+                    content = {
+                        Text(text = stringResource(id = R.string.local_filter_regex))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = state.isRegex,
+                            onCheckedChange = state::setIsRegex,
+                        )
+                    },
+                )
+                SegmentedListItem(
+                    onClick = {
+                        state.setForTimeline(!state.forTimeline)
+                    },
+                    shapes = ListItemDefaults.item(),
                     content = {
                         Text(text = stringResource(id = R.string.local_filter_for_timeline))
                     },
@@ -191,6 +206,7 @@ internal fun LocalFilterEditDialog(
 private fun presenter(keyword: String?) =
     run {
         val input = rememberTextFieldState(keyword ?: "")
+        var isRegex by remember { mutableStateOf(false) }
         var forTimeline by remember { mutableStateOf(true) }
         var forNotification by remember { mutableStateOf(true) }
         var forSearch by remember { mutableStateOf(true) }
@@ -203,6 +219,7 @@ private fun presenter(keyword: String?) =
         state.items.onSuccess {
             LaunchedEffect(Unit) {
                 it.find { it.keyword == keyword }?.let { item ->
+                    isRegex = item.isRegex
                     forTimeline = item.forTimeline
                     forNotification = item.forNotification
                     forSearch = item.forSearch
@@ -213,9 +230,14 @@ private fun presenter(keyword: String?) =
 
         object {
             val input = input
+            val isRegex = isRegex
             val forTimeline = forTimeline
             val forNotification = forNotification
             val forSearch = forSearch
+
+            fun setIsRegex(value: Boolean) {
+                isRegex = value
+            }
 
             fun setForTimeline(value: Boolean) {
                 forTimeline = value
@@ -234,6 +256,7 @@ private fun presenter(keyword: String?) =
                     item =
                         UiKeywordFilter(
                             keyword = input.text.toString(),
+                            isRegex = isRegex,
                             forTimeline = forTimeline,
                             forNotification = forNotification,
                             forSearch = forSearch,

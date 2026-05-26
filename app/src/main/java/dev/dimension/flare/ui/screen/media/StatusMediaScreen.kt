@@ -9,13 +9,14 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +71,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -86,9 +88,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.state.rememberPlayPauseButtonState
 import androidx.window.core.layout.WindowSizeClass
 import coil3.annotation.ExperimentalCoilApi
+import coil3.compose.AsyncImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
-import coil3.request.crossfade
 import coil3.size.Size
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -104,9 +106,11 @@ import compose.icons.fontawesomeicons.solid.ShareNodes
 import compose.icons.fontawesomeicons.solid.Xmark
 import dev.dimension.flare.R
 import dev.dimension.flare.common.VideoDownloadHelper
+import dev.dimension.flare.data.datasource.xiaohongshu.XhsStatusMediaLazyResolver
 import dev.dimension.flare.data.model.LocalAppearanceSettings
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.ui.component.FAIcon
 import dev.dimension.flare.ui.component.Glassify
 import dev.dimension.flare.ui.component.LocalComponentAppearance
@@ -224,30 +228,13 @@ internal fun StatusMediaScreen(
                                 state = pagerState,
                                 userScrollEnabled = !state.lockPager,
                                 key = {
-                                    when (val medias = state.medias) {
-                                        is UiState.Error -> {
-                                            preview
-                                        }
-
-                                        is UiState.Loading -> {
-                                            preview
-                                        }
-
-                                        is UiState.Success -> {
-                                            when (val item = medias.data[it]) {
-                                                is UiMedia.Audio -> item.previewUrl
-                                                is UiMedia.Gif -> item.previewUrl
-                                                is UiMedia.Image -> item.previewUrl
-                                                is UiMedia.Video -> item.thumbnailUrl
-                                            }
-                                        }
-                                    } ?: it
+                                    it
                                 },
                             ) { index ->
                                 AnimatedContent(
                                     state.medias,
                                     transitionSpec = {
-                                        fadeIn() togetherWith fadeOut()
+                                        EnterTransition.None togetherWith ExitTransition.None
                                     },
                                 ) {
                                     it
@@ -868,28 +855,83 @@ private fun ImageItem(
         }
     }
 
-    ZoomableAsyncImage(
-        model =
-            ImageRequest
-                .Builder(LocalContext.current)
-                .data(url)
-                .placeholderMemoryCacheKey(previewUrl)
-                .crossfade(1_000)
-                .size(Size.ORIGINAL)
-                .build(),
-        contentDescription = description,
-        state = rememberZoomableImageState(zoomableState),
-        modifier = modifier,
-        contentScale = contentScale,
-        alignment = alignment,
-        onClick = {
-            onClick.invoke()
-        },
-        onLongClick = {
-            onLongClick.invoke()
-        },
-        onDoubleClick = DoubleClickToZoomListener.cycle(2f),
-    )
+    val context = LocalContext.current
+    val stablePreviewUrl = remember { mutableStateOf(previewUrl) }
+    if (stablePreviewUrl.value.isBlank() && previewUrl.isNotBlank()) {
+        stablePreviewUrl.value = previewUrl
+    }
+    var highResReady by remember(url) {
+        mutableStateOf(url == stablePreviewUrl.value)
+    }
+    Box(
+        modifier =
+            modifier.then(
+                if (!highResReady) {
+                    Modifier.pointerInput(onClick, onLongClick) {
+                    detectTapGestures(
+                        onTap = { onClick.invoke() },
+                        onLongPress = { onLongClick.invoke() },
+                    )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        AsyncImage(
+            model =
+                ImageRequest
+                    .Builder(context)
+                    .data(stablePreviewUrl.value)
+                    .size(Size.ORIGINAL)
+                    .build(),
+            contentDescription = description,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = contentScale,
+            alignment = alignment,
+        )
+        if (!highResReady) {
+            AsyncImage(
+                model =
+                    ImageRequest
+                        .Builder(context)
+                        .data(url)
+                        .size(Size.ORIGINAL)
+                        .build(),
+                contentDescription = null,
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .alpha(0f),
+                onSuccess = {
+                    highResReady = true
+                },
+            )
+        }
+        if (highResReady) {
+            ZoomableAsyncImage(
+                model =
+                    ImageRequest
+                        .Builder(context)
+                        .data(url)
+                        .placeholderMemoryCacheKey(stablePreviewUrl.value)
+                        .size(Size.ORIGINAL)
+                        .build(),
+                contentDescription = description,
+                state = rememberZoomableImageState(zoomableState),
+                modifier = Modifier.fillMaxSize(),
+                contentScale = contentScale,
+                alignment = alignment,
+                onClick = {
+                    onClick.invoke()
+                },
+                onLongClick = {
+                    onLongClick.invoke()
+                },
+                onDoubleClick = DoubleClickToZoomListener.cycle(2f),
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalCoilApi::class)
@@ -916,6 +958,9 @@ private fun statusMediaPresenter(
         remember(statusKey, accountType) {
             StatusMediaRouteCache.get(statusKey, accountType)
         }
+    var resolvedStatus by remember(statusKey, accountType) {
+        mutableStateOf(cachedStatus)
+    }
     var medias: UiState<ImmutableList<UiMedia>> by remember(statusKey) {
         mutableStateOf(
             cachedStatus
@@ -927,8 +972,22 @@ private fun statusMediaPresenter(
     var currentPage by remember(statusKey, initialIndex) {
         mutableIntStateOf(initialIndex)
     }
+    LaunchedEffect(cachedStatus) {
+        if (cachedStatus?.platformType == PlatformType.Xiaohongshu) {
+            runCatching {
+                XhsStatusMediaLazyResolver.resolve(cachedStatus)
+            }.getOrNull()
+                ?.takeIf { it.images.isNotEmpty() }
+                ?.let {
+                    preloadMediaImages(context, it.images, currentPage)
+                    StatusMediaRouteCache.put(it)
+                    resolvedStatus = it
+                    medias = UiState.Success(it.images.toImmutableList())
+                }
+        }
+    }
     val statusState: UiState<UiTimelineV2> =
-        cachedStatus
+        resolvedStatus
             ?.let { UiState.Success(it) }
             ?: UiState.Loading()
     object {
@@ -1101,6 +1160,40 @@ private fun statusMediaPresenter(
                             Toast.LENGTH_SHORT,
                         ).show()
                 }
+            }
+        }
+    }
+}
+
+private suspend fun preloadMediaImages(
+    context: Context,
+    medias: List<UiMedia>,
+    firstIndex: Int,
+) {
+    val orderedImages =
+        medias
+            .mapIndexedNotNull { index, media ->
+                val url =
+                    when (media) {
+                        is UiMedia.Image -> media.url
+                        is UiMedia.Gif -> media.url
+                        else -> null
+                    }?.takeIf { it.isNotBlank() }
+                url?.let { index to it }
+            }.sortedBy { (index, _) ->
+                if (index == firstIndex) 0 else 1
+            }.map { (_, url) -> url }
+            .distinct()
+    withContext(Dispatchers.IO) {
+        orderedImages.forEach { url ->
+            runCatching {
+                context.imageLoader.execute(
+                    ImageRequest
+                        .Builder(context)
+                        .data(url)
+                        .size(Size.ORIGINAL)
+                        .build(),
+                )
             }
         }
     }

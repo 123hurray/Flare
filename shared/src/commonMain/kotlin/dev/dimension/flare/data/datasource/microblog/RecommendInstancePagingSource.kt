@@ -163,6 +163,24 @@ internal class RecommendInstancePagingSource : BasePagingSource<Int, UiInstance>
                     bannerUrl = null,
                     usersCount = 0,
                 ),
+                UiInstance(
+                    name = "懂球帝",
+                    description = "懂球帝 - 足球资讯与评论",
+                    iconUrl = null,
+                    domain = "www.dongqiudi.com",
+                    type = PlatformType.Dongqiudi,
+                    bannerUrl = null,
+                    usersCount = 0,
+                ),
+                UiInstance(
+                    name = "知乎",
+                    description = "知乎 - 问答、文章与想法",
+                    iconUrl = null,
+                    domain = "www.zhihu.com",
+                    type = PlatformType.Zhihu,
+                    bannerUrl = null,
+                    usersCount = 0,
+                ),
             )
         return LoadResult.Page(
             data = extra + (instances.sortedByDescending { it.usersCount }.filter { it !in extra }),
