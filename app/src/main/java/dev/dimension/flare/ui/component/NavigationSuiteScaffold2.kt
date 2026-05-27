@@ -270,37 +270,6 @@ fun NavigationSuiteScaffold2(
                 }
             }
             Box {
-                CompositionLocalProvider(
-                    LocalBottomBarHeight provides
-                        if (isPodcastShowing) {
-                            56.dp
-                        } else {
-                            0.dp
-                        } +
-                        if (
-                            scope.itemList.any { item ->
-                                item is NavigationSuiteItem.DefaultItem && item.selected
-                            } && layoutType == NavigationSuiteType.NavigationBar
-                        ) {
-                            when (bottomBarStyle) {
-                                BottomBarStyle.Floating -> 72.dp
-                                BottomBarStyle.Classic -> 64.dp
-                            }
-                        } else {
-                            0.dp
-                        } +
-                        with(LocalDensity.current) {
-                            WindowInsets.systemBars
-                                .only(
-                                    WindowInsetsSides.Bottom,
-                                ).getBottom(this)
-                                .toDp()
-                        },
-                    LocalBottomBarShowing provides (layoutType == NavigationSuiteType.NavigationBar),
-                ) {
-                    content.invoke()
-                }
-
                 val isFloating =
                     remember(bottomBarState) {
                         when (bottomBarState) {
@@ -321,6 +290,37 @@ fun NavigationSuiteScaffold2(
                             BottomBarState.ClassicHidden -> true
                         }
                     }
+                CompositionLocalProvider(
+                    LocalBottomBarHeight provides
+                        if (isPodcastShowing) {
+                            56.dp
+                        } else {
+                            0.dp
+                        } +
+                        if (
+                            scope.itemList.any { item ->
+                                item is NavigationSuiteItem.DefaultItem && item.selected
+                            } && layoutType == NavigationSuiteType.NavigationBar && !isHidden
+                        ) {
+                            when (bottomBarStyle) {
+                                BottomBarStyle.Floating -> 72.dp
+                                BottomBarStyle.Classic -> 64.dp
+                            }
+                        } else {
+                            0.dp
+                        } +
+                        with(LocalDensity.current) {
+                            WindowInsets.systemBars
+                                .only(
+                                    WindowInsetsSides.Bottom,
+                                ).getBottom(this)
+                                .toDp()
+                        },
+                    LocalBottomBarShowing provides (layoutType == NavigationSuiteType.NavigationBar && !isHidden),
+                ) {
+                    content.invoke()
+                }
+
                 Column(
                     modifier =
                         Modifier

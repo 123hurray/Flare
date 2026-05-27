@@ -52,7 +52,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,7 +101,6 @@ import dev.dimension.flare.ui.presenter.home.LoggedInPresenter
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.presenter.rememberTimelineItemPresenterWithLazyListState
 import dev.dimension.flare.ui.theme.screenHorizontalPadding
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -139,7 +137,7 @@ internal fun HomeTimelineScreen(
                             if (tabs.any()) {
                                 val selectedPage by remember(pagerState, tabs.size) {
                                     derivedStateOf {
-                                        pagerState.settledPage.coerceIn(0, tabs.lastIndex)
+                                        pagerState.currentPage.coerceIn(0, tabs.lastIndex)
                                     }
                                 }
                                 SecondaryScrollableTabRow(
@@ -166,7 +164,7 @@ internal fun HomeTimelineScreen(
                                                 selected = index == selectedPage,
                                                 onClick = {
                                                     scope.launch {
-                                                        pagerState.animateScrollToPage(index)
+                                                        pagerState.scrollToPage(index)
                                                     }
                                                 },
                                                 text = {
@@ -262,7 +260,7 @@ internal fun HomeTimelineScreen(
                     if (tabs.size > 1) {
                         val selectedPage by remember(pagerState, tabs.size) {
                             derivedStateOf {
-                                pagerState.settledPage.coerceIn(0, tabs.lastIndex)
+                                pagerState.currentPage.coerceIn(0, tabs.lastIndex)
                             }
                         }
                         TimelineTabFanButton(
@@ -286,7 +284,7 @@ internal fun HomeTimelineScreen(
                         if (tabState.isEmpty()) {
                             0
                         } else {
-                            pagerState.settledPage.coerceIn(0, tabState.lastIndex)
+                            pagerState.currentPage.coerceIn(0, tabState.lastIndex)
                         }
                     }
                 }
@@ -294,23 +292,6 @@ internal fun HomeTimelineScreen(
                     if (pagerState.currentPage >= tabState.size) {
                         scope.launch {
                             pagerState.scrollToPage(0)
-                        }
-                    }
-                }
-                LaunchedEffect(pagerState, tabState.size) {
-                    snapshotFlow {
-                        Triple(
-                            pagerState.isScrollInProgress,
-                            pagerState.targetPage,
-                            pagerState.currentPageOffsetFraction,
-                        )
-                    }.collect { (isScrollInProgress, targetPage, currentPageOffsetFraction) ->
-                        if (
-                            !isScrollInProgress &&
-                            tabState.isNotEmpty() &&
-                            abs(currentPageOffsetFraction) > 0.001f
-                        ) {
-                            pagerState.animateScrollToPage(targetPage.coerceIn(0, tabState.lastIndex))
                         }
                     }
                 }
@@ -355,7 +336,6 @@ private fun TimelineTabFanButton(
     val density = LocalDensity.current
     val ringCount = ((tabs.size + 4) / 5).coerceAtLeast(1)
     val maxRadiusDp = (88 + (ringCount - 1) * 64).dp
-    val anchorLiftPx = with(density) { (maxRadiusDp + 64.dp).toPx() }
     val containerSize = (maxRadiusDp.value * 2 + 128).dp
     LaunchedEffect(visible) {
         if (!visible) {
@@ -389,7 +369,7 @@ private fun TimelineTabFanButton(
                 val angleRadians = Math.toRadians(angleDegrees)
                 val radius = with(density) { (88 + ring * 64).dp.toPx() }
                 val offsetX = (cos(angleRadians) * radius * progress).roundToInt()
-                val offsetY = ((-anchorLiftPx - sin(angleRadians) * radius) * progress).roundToInt()
+                val offsetY = (sin(angleRadians) * radius * progress).roundToInt()
 
                 AnimatedVisibility(
                     visible = expanded,
@@ -404,7 +384,7 @@ private fun TimelineTabFanButton(
                         onClick = {
                             expanded = false
                             scope.launch {
-                                pagerState.animateScrollToPage(index)
+                                pagerState.scrollToPage(index)
                             }
                         },
                         shape = CircleShape,

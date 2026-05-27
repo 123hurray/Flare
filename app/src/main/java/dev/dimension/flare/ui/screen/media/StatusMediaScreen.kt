@@ -20,8 +20,11 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,6 +94,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -930,26 +934,40 @@ private fun VideoGestureLayer(
     onTransform: (pan: Offset, zoom: Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val viewConfiguration = LocalViewConfiguration.current
     Box(
         modifier =
-            modifier
-                .pointerInput(onTap) {
-                    detectTapGestures(
-                        onTap = {
-                            onTap()
-                        },
-                    )
-                }.then(
-                    if (isLandscape) {
-                        Modifier.pointerInput(onTransform) {
-                            detectTransformGestures { _, pan, zoom, _ ->
+            modifier.pointerInput(isLandscape, onTap, onTransform, viewConfiguration) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var isTap = true
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val pressedChanges = event.changes.filter { it.pressed }
+                        if (pressedChanges.isEmpty()) {
+                            if (isTap) {
+                                onTap()
+                            }
+                            break
+                        }
+                        if (isLandscape && pressedChanges.size > 1) {
+                            isTap = false
+                            val zoom = event.calculateZoom()
+                            val pan = event.calculatePan()
+                            if (zoom != 1f || pan != Offset.Zero) {
                                 onTransform(pan, zoom)
                             }
+                            event.changes.forEach { it.consume() }
+                        } else if (
+                            pressedChanges.any {
+                                (it.position - down.position).getDistance() > viewConfiguration.touchSlop
+                            }
+                        ) {
+                            isTap = false
                         }
-                    } else {
-                        Modifier
-                    },
-                ),
+                    }
+                }
+            },
     )
 }
 
@@ -999,7 +1017,7 @@ private fun VideoFloatingControls(
                 shape = MaterialTheme.shapes.medium,
             ) {
                 Text(
-                    text = "${zoom.oneDecimal()}x",
+                    text = "缩放 ${zoom.oneDecimal()}x",
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     color = Color.White,
                     style = MaterialTheme.typography.labelLarge,
@@ -1066,7 +1084,7 @@ private fun VideoSpeedMenu(
             shape = MaterialTheme.shapes.medium,
         ) {
             Text(
-                text = "${playbackSpeed.speedLabel()}x",
+                text = "速度 ${playbackSpeed.speedLabel()}x",
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 color = Color.White,
                 style = MaterialTheme.typography.labelLarge,
