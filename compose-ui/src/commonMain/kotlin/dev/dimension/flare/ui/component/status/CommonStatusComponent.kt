@@ -568,6 +568,7 @@ private fun CompactCommentStatusComponent(
             CommentMetaAndActions(item)
             if (item.quote.isNotEmpty() || replyAction != null) {
                 CompactChildComments(
+                    parent = item,
                     comments = item.quote,
                     moreAction = replyAction,
                 )
@@ -616,6 +617,7 @@ private fun CommentMetaAndActions(item: UiTimelineV2.Post) {
 
 @Composable
 private fun CompactChildComments(
+    parent: UiTimelineV2.Post,
     comments: ImmutableList<UiTimelineV2.Post>,
     moreAction: ActionMenu.Item?,
 ) {
@@ -623,16 +625,14 @@ private fun CompactChildComments(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clip(PlatformTheme.shapes.small)
-                .background(PlatformTheme.colorScheme.caption.copy(alpha = 0.08f))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(top = 2.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         comments.fastForEach { comment ->
             CompactChildComment(comment)
         }
         moreAction?.let {
-            MoreChildCommentsAction(it)
+            MoreChildCommentsAction(parent, it)
         }
     }
 }
@@ -645,9 +645,9 @@ private fun CompactChildComment(item: UiTimelineV2.Post) {
         item.user?.let {
             AvatarComponent(
                 it.avatar,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(18.dp),
             )
-        } ?: Spacer(modifier = Modifier.size(24.dp))
+        } ?: Spacer(modifier = Modifier.size(18.dp))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -695,7 +695,10 @@ private fun CompactChildComment(item: UiTimelineV2.Post) {
 }
 
 @Composable
-private fun MoreChildCommentsAction(action: ActionMenu.Item) {
+private fun MoreChildCommentsAction(
+    parent: UiTimelineV2.Post,
+    action: ActionMenu.Item,
+) {
     val uriHandler = LocalUriHandler.current
     val count = action.count?.value ?: 0L
     val text =
@@ -710,7 +713,7 @@ private fun MoreChildCommentsAction(action: ActionMenu.Item) {
         style = PlatformTheme.typography.body,
         modifier =
             Modifier.clickable {
-                action.onClicked.invoke(
+                parent.onClicked.invoke(
                     ClickContext(
                         launcher = { url ->
                             uriHandler.openUri(url)
