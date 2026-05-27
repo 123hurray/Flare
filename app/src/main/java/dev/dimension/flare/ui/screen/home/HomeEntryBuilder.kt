@@ -15,6 +15,7 @@ import dev.dimension.flare.model.xiaohongshuWebHost
 import dev.dimension.flare.model.zhihuWebHost
 import dev.dimension.flare.ui.component.BottomSheetSceneStrategy
 import dev.dimension.flare.ui.route.Route
+import dev.dimension.flare.ui.presenter.status.LogStatusHistoryPresenter
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3AdaptiveApi::class)
 internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
@@ -65,6 +66,20 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
     }
     entry<Route.Notification> {
         NotificationScreen()
+    }
+    entry<Route.Footprints> {
+        GlobalStatusTimelineScreen(
+            title = "足迹",
+            pagingKey = LogStatusHistoryPresenter.FOOTPRINTS_PAGING_KEY,
+            onBack = onBack,
+        )
+    }
+    entry<Route.Favorites> {
+        GlobalStatusTimelineScreen(
+            title = "收藏",
+            pagingKey = LogStatusHistoryPresenter.FAVORITES_PAGING_KEY,
+            onBack = onBack,
+        )
     }
     entry<Route.Search> { args ->
         SearchScreen(

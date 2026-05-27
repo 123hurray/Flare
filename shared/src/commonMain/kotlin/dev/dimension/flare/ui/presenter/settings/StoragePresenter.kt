@@ -7,7 +7,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import dev.dimension.flare.data.database.cache.CacheDatabase
+import dev.dimension.flare.data.database.cache.mapper.saveToDatabase
 import dev.dimension.flare.ui.presenter.PresenterBase
+import dev.dimension.flare.ui.presenter.status.LogStatusHistoryPresenter
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -18,7 +20,14 @@ public class StoragePresenter :
     private val cacheDatabase by inject<CacheDatabase>()
 
     public suspend fun clearCacheSuspend() {
+        val favoriteTimeline =
+            cacheDatabase
+                .pagingTimelineDao()
+                .getTimelineWithStatusByPagingKey(LogStatusHistoryPresenter.FAVORITES_PAGING_KEY)
         cacheDatabase.clearAllTables()
+        if (favoriteTimeline.isNotEmpty()) {
+            saveToDatabase(cacheDatabase, favoriteTimeline)
+        }
     }
 
     @Composable

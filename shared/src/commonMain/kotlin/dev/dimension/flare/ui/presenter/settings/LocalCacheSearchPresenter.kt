@@ -69,7 +69,7 @@ public class LocalCacheSearchPresenter :
                     ) {
                         database
                             .pagingTimelineDao()
-                            .getStatusHistoryPagingSource(pagingKey = LogStatusHistoryPresenter.PAGING_KEY)
+                            .getStatusHistoryPagingSource(pagingKey = LogStatusHistoryPresenter.FOOTPRINTS_PAGING_KEY)
                     }.flow.map {
                         it.map {
                             it.status.data.content

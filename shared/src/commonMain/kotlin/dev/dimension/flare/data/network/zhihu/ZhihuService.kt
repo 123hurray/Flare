@@ -351,6 +351,7 @@ internal data class ZhihuContentKey(
 ) {
     companion object {
         fun parse(statusId: String): ZhihuContentKey {
+            parseOrNull(statusId)?.let { return it }
             val prefix = statusId.substringBefore(':', missingDelimiterValue = "question")
             val id = statusId.substringAfter(':', missingDelimiterValue = statusId)
             val type =
@@ -362,6 +363,31 @@ internal data class ZhihuContentKey(
                 }
             return ZhihuContentKey(type, id)
         }
+
+        fun parseOrNull(statusId: String): ZhihuContentKey? {
+            val normalized = statusId.substringBefore('?').substringBefore('#')
+            Regex("""(?:zhuanlan\.zhihu\.com/p/|/p/)(\d+)""")
+                .find(normalized)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let { return ZhihuContentKey(ZhihuContentType.Article, it) }
+            Regex("""/question/\d+/answer/(\d+)""")
+                .find(normalized)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let { return ZhihuContentKey(ZhihuContentType.Answer, it) }
+            Regex("""/pin/(\d+)""")
+                .find(normalized)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let { return ZhihuContentKey(ZhihuContentType.Pin, it) }
+            Regex("""/question/(\d+)""")
+                .find(normalized)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let { return ZhihuContentKey(ZhihuContentType.Question, it) }
+            return null
+        }
     }
 }
 
@@ -369,8 +395,6 @@ private fun JsonObject.toFeedContent(): ZhihuContent? {
     get("target").objectOrNull()?.toTargetContent()?.let { return it }
 
     val extra = get("extra").objectOrNull()
-    val type = extra?.string("type")?.toZhihuContentType() ?: return null
-    val id = extra.string("id") ?: return null
     val feedContent = get("common_card").objectOrNull()?.get("feed_content").objectOrNull() ?: return null
     val title = feedContent["title"].objectOrNull()?.string("panel_text").orEmpty()
     val excerpt = feedContent["content"].objectOrNull()?.string("panel_text").orEmpty()
@@ -393,6 +417,9 @@ private fun JsonObject.toFeedContent(): ZhihuContent? {
             .objectOrNull()
             ?.string("intent_url")
             ?: feedContent["title"].objectOrNull()?.get("action").objectOrNull()?.string("intent_url")
+    val intentKey = intentUrl?.let { ZhihuContentKey.parseOrNull(it) }
+    val type = extra?.string("type")?.toZhihuContentType() ?: intentKey?.type ?: return null
+    val id = extra?.string("id")?.normalizeZhihuContentId(type) ?: intentKey?.id ?: return null
     val questionId = intentUrl?.let { Regex("/question/(\\d+)").find(it)?.groupValues?.getOrNull(1) }
     val createdTime =
         string("id")
@@ -426,13 +453,18 @@ private fun JsonObject.toTargetContent(): ZhihuContent? {
     val id = string("id") ?: return null
     val question = get("question").objectOrNull()
     val author = get("author").objectOrNull()
+    val pinContent = if (type == ZhihuContentType.Pin) pinContentHtml() else null
     return ZhihuContent(
         id = id,
         type = type,
-        title = question?.string("title") ?: string("title") ?: "知乎内容",
-        excerpt = string("excerpt") ?: string("excerpt_new") ?: string("detail") ?: string("content") ?: "",
-        contentHtml = null,
-        imageUrls = thumbnailImageUrls(),
+        title =
+            when (type) {
+                ZhihuContentType.Pin -> string("title").orEmpty()
+                else -> question?.string("title") ?: string("title") ?: "知乎内容"
+            },
+        excerpt = pinContent ?: string("excerpt") ?: string("excerpt_new") ?: string("detail") ?: string("content") ?: "",
+        contentHtml = pinContent,
+        imageUrls = (thumbnailImageUrls() + pinImageUrls()).distinct(),
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
@@ -450,13 +482,18 @@ private fun JsonObject.toTargetContent(): ZhihuContent? {
 private fun JsonObject.toDetailContent(key: ZhihuContentKey): ZhihuContent {
     val question = get("question").objectOrNull()
     val author = get("author").objectOrNull()
+    val pinContent = if (key.type == ZhihuContentType.Pin) pinContentHtml() else null
     return ZhihuContent(
         id = key.id,
         type = key.type,
-        title = question?.string("title") ?: string("title") ?: "知乎内容",
-        excerpt = string("excerpt") ?: string("detail") ?: "",
-        contentHtml = string("content") ?: string("detail"),
-        imageUrls = thumbnailImageUrls(),
+        title =
+            when (key.type) {
+                ZhihuContentType.Pin -> string("title").orEmpty()
+                else -> question?.string("title") ?: string("title") ?: "知乎内容"
+            },
+        excerpt = pinContent ?: string("excerpt") ?: string("detail") ?: "",
+        contentHtml = pinContent ?: string("content") ?: string("detail"),
+        imageUrls = (thumbnailImageUrls() + pinImageUrls()).distinct(),
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
@@ -620,6 +657,33 @@ private fun JsonObject.thumbnailImageUrls(): List<String> =
     }.filter { it.isNotBlank() }
         .distinct()
 
+private fun JsonObject.pinContentHtml(): String? {
+    val content = get("content") ?: return null
+    return when (content) {
+        is JsonPrimitive -> content.contentOrNull
+        is JsonObject ->
+            content.string("content")
+                ?: content.string("text")
+                ?: content.string("title")
+                ?: content.firstImageUrl()?.let { """<img src="$it"/>""" }
+        is JsonArray ->
+            content
+                .mapNotNull { item ->
+                    val obj = item.objectOrNull() ?: return@mapNotNull (item as? JsonPrimitive)?.contentOrNull
+                    obj.string("content")
+                        ?: obj.string("text")
+                        ?: obj.string("title")
+                        ?: obj.firstImageUrl()?.let { """<figure><img src="$it"/></figure>""" }
+                }.joinToString("")
+                .takeIf { it.isNotBlank() }
+    }?.takeIf { it.isNotBlank() }
+}
+
+private fun JsonObject.pinImageUrls(): List<String> =
+    get("content")
+        .arrayOrEmpty()
+        .mapNotNull { it.objectOrNull()?.firstImageUrl() }
+
 private fun JsonElement.imageUrlOrNull(): String? =
     when (this) {
         is JsonPrimitive -> contentOrNull
@@ -647,12 +711,28 @@ private fun JsonObject.throwIfZhihuError(
 }
 
 private fun String.toZhihuContentType(): ZhihuContentType? =
-    when (this) {
+    when (lowercase()) {
         "answer" -> ZhihuContentType.Answer
         "article" -> ZhihuContentType.Article
         "pin" -> ZhihuContentType.Pin
         "question" -> ZhihuContentType.Question
-        else -> null
+        else ->
+            when {
+                contains("answer", ignoreCase = true) -> ZhihuContentType.Answer
+                contains("article", ignoreCase = true) || contains("zhuanlan", ignoreCase = true) -> ZhihuContentType.Article
+                contains("pin", ignoreCase = true) -> ZhihuContentType.Pin
+                contains("question", ignoreCase = true) -> ZhihuContentType.Question
+                else -> null
+            }
+    }
+
+private fun String.normalizeZhihuContentId(type: ZhihuContentType): String =
+    when (type) {
+        ZhihuContentType.Answer,
+        ZhihuContentType.Article,
+        ZhihuContentType.Pin,
+        ZhihuContentType.Question,
+        -> Regex("""\d+""").find(this)?.value ?: this
     }
 
 private fun Map<String, String>.toCookieHeader(): String =

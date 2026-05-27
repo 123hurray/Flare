@@ -12,6 +12,7 @@ import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.flatMap
+import dev.dimension.flare.ui.model.onSuccess
 import dev.dimension.flare.ui.model.toUi
 import dev.dimension.flare.ui.presenter.PresenterBase
 import org.koin.core.component.KoinComponent
@@ -33,7 +34,15 @@ public class StatusPresenter(
                     (service as PostDataSource).postHandler.post(statusKey)
                 }.collectAsState().toUi()
             }
-        remember(statusKey, accountType) { LogStatusHistoryPresenter(accountType = accountType, statusKey = statusKey) }.body()
+        accountServiceState.onSuccess {
+            remember(statusKey, accountType, it) {
+                LogStatusHistoryPresenter(
+                    accountType = accountType,
+                    statusKey = statusKey,
+                    status = it,
+                )
+            }.body()
+        }
 
         return object : StatusState {
             override val status: UiState<UiTimelineV2> = accountServiceState

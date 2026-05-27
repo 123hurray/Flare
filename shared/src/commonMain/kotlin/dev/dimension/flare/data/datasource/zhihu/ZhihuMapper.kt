@@ -112,11 +112,15 @@ internal fun ZhihuContent.toUiTimeline(
         card = null,
         createdAt = UiDateTime(Instant.fromEpochMilliseconds(createdTime.coerceAtLeast(0L) * 1000L)),
         sourceChannel =
-            if (detail) {
-                UiTimelineV2.Post.SourceChannel(
-                    id = "zhihu-question-meta:$statusId",
-                    name = questionMetaText(),
-                )
+            if (detail && type in setOf(ZhihuContentType.Answer, ZhihuContentType.Question)) {
+                questionMetaText()
+                    .takeIf { it.isNotBlank() }
+                    ?.let {
+                        UiTimelineV2.Post.SourceChannel(
+                            id = "zhihu-question-meta:$statusId",
+                            name = it,
+                        )
+                    }
             } else {
                 null
             },
@@ -185,6 +189,7 @@ private fun ZhihuContent.toTitleContent(
     accountKey: MicroBlogKey,
     detail: Boolean,
 ): RenderContent.Text? {
+    if (type == ZhihuContentType.Pin) return null
     if (title.isBlank()) return null
     return RenderContent.Text(
         runs =
@@ -340,6 +345,6 @@ private fun ZhihuContent.questionMetaText(): String =
         add("知乎")
         answerCount.takeIf { it > 0 }?.let { add("${it} 个回答") }
         followerCount.takeIf { it > 0 }?.let { add("${it} 个关注") }
-    }.joinToString(" · ") + " ›"
+    }.joinToString(" · ").takeIf { it.isNotBlank() }?.plus(" ›").orEmpty()
 
 private val sourceLanguages = listOf("zh-CN")

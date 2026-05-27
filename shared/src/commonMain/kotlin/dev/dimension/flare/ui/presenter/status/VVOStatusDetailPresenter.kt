@@ -24,6 +24,7 @@ import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.flatMap
 import dev.dimension.flare.ui.model.map
 import dev.dimension.flare.ui.model.mapper.renderVVOText
+import dev.dimension.flare.ui.model.onSuccess
 import dev.dimension.flare.ui.presenter.PresenterBase
 import dev.dimension.flare.ui.presenter.home.applyLocalTimelineFilters
 import dev.dimension.flare.ui.presenter.home.filterDuplicateCommentPages
@@ -56,7 +57,15 @@ public class VVOStatusDetailPresenter(
                     }.collectAsState(UiState.Loading()).value
                 }
 
-        remember { LogStatusHistoryPresenter(accountType = accountType, statusKey = statusKey) }.body()
+        status.onSuccess {
+            remember(accountType, statusKey, it) {
+                LogStatusHistoryPresenter(
+                    accountType = accountType,
+                    statusKey = statusKey,
+                    status = it,
+                )
+            }.body()
+        }
 
         val extendedText =
             service.flatMap {

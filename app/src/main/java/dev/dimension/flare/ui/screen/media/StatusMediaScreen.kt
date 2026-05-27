@@ -92,6 +92,7 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -158,6 +159,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import me.saket.telephoto.ExperimentalTelephotoApi
 import me.saket.telephoto.zoomable.DoubleClickToZoomListener
 import me.saket.telephoto.zoomable.Viewport
@@ -227,6 +229,7 @@ internal fun StatusMediaScreen(
     val currentMedia = state.medias.takeSuccess()?.getOrNull(state.currentPage)
     val isCurrentVideo = currentMedia is UiMedia.Video
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val density = LocalDensity.current
     var videoFullscreen by rememberSaveable { mutableStateOf(false) }
     val landscapeVideoMode = isCurrentVideo && (videoFullscreen || isLandscape)
     VideoFullscreenEffect(
@@ -341,6 +344,12 @@ internal fun StatusMediaScreen(
                                                 var videoPlaybackSpeed by rememberSaveable(media.url) {
                                                     mutableStateOf(1f)
                                                 }
+                                                var videoSpeedOverride by remember(media.url) {
+                                                    mutableStateOf<Float?>(null)
+                                                }
+                                                var videoSpeedLocked by rememberSaveable(media.url) {
+                                                    mutableStateOf(false)
+                                                }
                                                 var videoZoom by remember(media.url) {
                                                     mutableFloatStateOf(1f)
                                                 }
@@ -360,6 +369,12 @@ internal fun StatusMediaScreen(
                                                     videoOffsetX = videoOffsetX.coerceVideoOffset(videoZoom, videoViewportSize.width)
                                                     videoOffsetY = videoOffsetY.coerceVideoOffset(videoZoom, videoViewportSize.height)
                                                 }
+                                                LaunchedEffect(landscapeVideoMode) {
+                                                    if (!landscapeVideoMode) {
+                                                        videoSpeedOverride = null
+                                                        videoSpeedLocked = false
+                                                    }
+                                                }
                                                 Box(
                                                     modifier =
                                                         Modifier
@@ -374,7 +389,7 @@ internal fun StatusMediaScreen(
                                                         aspectRatio = media.aspectRatio,
                                                         autoPlay = true,
                                                         onClick = {
-                                                            state.setShowUi(!state.showUi)
+                                                            state.setShowUi(!state.showUi, force = true)
                                                         },
                                                         showControls = true,
                                                         keepScreenOn = true,
@@ -384,7 +399,7 @@ internal fun StatusMediaScreen(
                                                         videoScale = videoZoom,
                                                         videoTranslationX = videoOffsetX,
                                                         videoTranslationY = videoOffsetY,
-                                                        playbackSpeed = videoPlaybackSpeed,
+                                                        playbackSpeed = videoSpeedOverride ?: videoPlaybackSpeed,
                                                         modifier =
                                                             Modifier
                                                                 .fillMaxSize()
@@ -398,23 +413,38 @@ internal fun StatusMediaScreen(
                                                             state.setShowSheet(true)
                                                         },
                                                     )
-                                                    VideoGestureLayer(
-                                                        isLandscape = landscapeVideoMode,
-                                                        onTap = {
-                                                            state.setShowUi(!state.showUi)
-                                                        },
-                                                        onTransform = { pan, zoom ->
-                                                            val nextZoom = (videoZoom * zoom).coerceIn(1f, 3f)
-                                                            videoZoom = nextZoom
-                                                            videoOffsetX =
-                                                                (videoOffsetX + pan.x)
-                                                                    .coerceVideoOffset(nextZoom, videoViewportSize.width)
-                                                            videoOffsetY =
-                                                                (videoOffsetY + pan.y)
-                                                                    .coerceVideoOffset(nextZoom, videoViewportSize.height)
-                                                        },
-                                                        modifier = Modifier.fillMaxSize(),
-                                                    )
+                                                    if (landscapeVideoMode) {
+                                                        VideoGestureLayer(
+                                                            onTap = {
+                                                                state.setShowUi(!state.showUi, force = true)
+                                                            },
+                                                            onTransform = { pan, zoom ->
+                                                                val nextZoom = (videoZoom * zoom).coerceIn(1f, 3f)
+                                                                videoZoom = nextZoom
+                                                                videoOffsetX =
+                                                                    (videoOffsetX + pan.x)
+                                                                        .coerceVideoOffset(nextZoom, videoViewportSize.width)
+                                                                videoOffsetY =
+                                                                    (videoOffsetY + pan.y)
+                                                                        .coerceVideoOffset(nextZoom, videoViewportSize.height)
+                                                            },
+                                                            onLongPressSpeedChange = { pressed ->
+                                                                videoSpeedOverride = if (pressed) 2f else null
+                                                            },
+                                                            onSpeedLockChange = { locked ->
+                                                                videoSpeedLocked = locked
+                                                                videoSpeedOverride = if (locked) 2f else null
+                                                            },
+                                                            isSpeedLocked = videoSpeedLocked,
+                                                            speedLockDistancePx = with(density) { 56.dp.toPx() },
+                                                            speedUnlockDistancePx = with(density) { 56.dp.toPx() },
+                                                            basePlaybackSpeed = videoPlaybackSpeed,
+                                                            onBasePlaybackSpeedChange = {
+                                                                videoPlaybackSpeed = it
+                                                            },
+                                                            modifier = Modifier.fillMaxSize(),
+                                                        )
+                                                    }
                                                     if (state.showUi && landscapeVideoMode) {
                                                         Glassify(
                                                             modifier =
@@ -929,18 +959,79 @@ private fun Int?.orZeroKbps(): Int = ((this ?: 0) / 1000).coerceAtLeast(1)
 
 @Composable
 private fun VideoGestureLayer(
-    isLandscape: Boolean,
     onTap: () -> Unit,
     onTransform: (pan: Offset, zoom: Float) -> Unit,
+    onLongPressSpeedChange: (Boolean) -> Unit,
+    onSpeedLockChange: (Boolean) -> Unit,
+    isSpeedLocked: Boolean,
+    speedLockDistancePx: Float,
+    speedUnlockDistancePx: Float,
+    basePlaybackSpeed: Float,
+    onBasePlaybackSpeedChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewConfiguration = LocalViewConfiguration.current
     Box(
         modifier =
-            modifier.pointerInput(isLandscape, onTap, onTransform, viewConfiguration) {
+            modifier.pointerInput(
+                onTap,
+                onTransform,
+                onLongPressSpeedChange,
+                onSpeedLockChange,
+                isSpeedLocked,
+                speedLockDistancePx,
+                speedUnlockDistancePx,
+                basePlaybackSpeed,
+                onBasePlaybackSpeedChange,
+                viewConfiguration,
+            ) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var isTap = true
+                    var isReleased = false
+                    var isTransforming = false
+                    var isLongPressSpeed = false
+                    var unlockLockedOnRelease = false
+                    var dragY = 0f
+                    var speedLocked = isSpeedLocked
+                    val beforeLongPress =
+                        withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pressedChanges = event.changes.filter { it.pressed }
+                                if (pressedChanges.isEmpty()) {
+                                    isReleased = true
+                                    return@withTimeoutOrNull
+                                }
+                                if (pressedChanges.size > 1) {
+                                    isTap = false
+                                    isTransforming = true
+                                    return@withTimeoutOrNull
+                                }
+                                if (
+                                    pressedChanges.any {
+                                        (it.position - down.position).getDistance() > viewConfiguration.touchSlop
+                                    }
+                                ) {
+                                    isTap = false
+                                }
+                            }
+                        }
+                    if (isReleased) {
+                        if (isTap) {
+                            onTap()
+                        }
+                        return@awaitEachGesture
+                    }
+                    if (!isTransforming && beforeLongPress == null) {
+                        isTap = false
+                        if (speedLocked) {
+                            unlockLockedOnRelease = true
+                        } else {
+                            isLongPressSpeed = true
+                            onLongPressSpeedChange(true)
+                        }
+                    }
                     while (true) {
                         val event = awaitPointerEvent()
                         val pressedChanges = event.changes.filter { it.pressed }
@@ -950,8 +1041,13 @@ private fun VideoGestureLayer(
                             }
                             break
                         }
-                        if (isLandscape && pressedChanges.size > 1) {
+                        if (pressedChanges.size > 1) {
+                            if (isLongPressSpeed) {
+                                isLongPressSpeed = false
+                                onLongPressSpeedChange(false)
+                            }
                             isTap = false
+                            isTransforming = true
                             val zoom = event.calculateZoom()
                             val pan = event.calculatePan()
                             if (zoom != 1f || pan != Offset.Zero) {
@@ -964,7 +1060,36 @@ private fun VideoGestureLayer(
                             }
                         ) {
                             isTap = false
+                            val change = pressedChanges.firstOrNull { it.id == down.id }
+                            if (change != null) {
+                                dragY += change.position.y - change.previousPosition.y
+                                if (isLongPressSpeed && dragY <= -speedLockDistancePx) {
+                                    isLongPressSpeed = false
+                                    speedLocked = true
+                                    unlockLockedOnRelease = false
+                                    onLongPressSpeedChange(false)
+                                    onSpeedLockChange(true)
+                                    onBasePlaybackSpeedChange(2f)
+                                } else if ((isLongPressSpeed || speedLocked || unlockLockedOnRelease) &&
+                                    dragY >= speedUnlockDistancePx
+                                ) {
+                                    isLongPressSpeed = false
+                                    speedLocked = false
+                                    unlockLockedOnRelease = false
+                                    onLongPressSpeedChange(false)
+                                    onSpeedLockChange(false)
+                                    onBasePlaybackSpeedChange(1f)
+                                }
+                            }
+                            pressedChanges.forEach { it.consume() }
                         }
+                    }
+                    if (isLongPressSpeed) {
+                        onLongPressSpeedChange(false)
+                    }
+                    if (unlockLockedOnRelease && speedLocked) {
+                        onSpeedLockChange(false)
+                        onBasePlaybackSpeedChange(1f)
                     }
                 }
             },
@@ -1438,7 +1563,9 @@ private fun ImageItem(
                 contentScale = contentScale,
                 alignment = alignment,
                 onClick = {
-                    onClick.invoke()
+                    if ((zoomableState.zoomFraction ?: 0f) <= 0.01f) {
+                        onClick.invoke()
+                    }
                 },
                 onLongClick = {
                     onLongClick.invoke()
@@ -1522,8 +1649,11 @@ private fun statusMediaPresenter(
             showSheet = value
         }
 
-        fun setShowUi(value: Boolean) {
-            if (!lockPager) {
+        fun setShowUi(
+            value: Boolean,
+            force: Boolean = false,
+        ) {
+            if (force || !lockPager) {
                 showUi = value
             }
         }

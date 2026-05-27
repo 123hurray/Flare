@@ -255,6 +255,12 @@ internal sealed interface Route : NavKey {
     data object DraftBox : Route
 
     @Serializable
+    data object Footprints : Route
+
+    @Serializable
+    data object Favorites : Route
+
+    @Serializable
     sealed interface Profile : Route {
         @Serializable
         data class User(

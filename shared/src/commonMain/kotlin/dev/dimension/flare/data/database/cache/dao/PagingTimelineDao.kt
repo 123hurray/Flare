@@ -12,6 +12,7 @@ import androidx.room3.Transaction
 import androidx.room3.paging.PagingSourceDaoReturnTypeConverter
 import dev.dimension.flare.data.database.cache.model.DbPagingKey
 import dev.dimension.flare.data.database.cache.model.DbPagingTimeline
+import dev.dimension.flare.data.database.cache.model.DbPagingTimelineWithStatus
 import dev.dimension.flare.data.database.cache.model.DbStatusWithReference
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.DbAccountType
@@ -75,6 +76,18 @@ internal interface PagingTimelineDao {
     )
     fun getStatusHistoryPagingSource(pagingKey: String): PagingSource<Int, DbStatusWithReference>
 
+    @Transaction
+    @Query(
+        "SELECT DbStatus.* FROM DbStatus " +
+            "INNER JOIN DbPagingTimeline ON DbStatus.id = DbPagingTimeline.statusId " +
+            "WHERE DbPagingTimeline.pagingKey = :pagingKey AND DbStatus.text like :query " +
+            "ORDER BY DbPagingTimeline.sortId DESC",
+    )
+    fun searchStatusHistoryPagingSource(
+        pagingKey: String,
+        query: String,
+    ): PagingSource<Int, DbStatusWithReference>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(timeline: List<DbPagingTimeline>)
 
@@ -93,8 +106,24 @@ internal interface PagingTimelineDao {
     )
     suspend fun getByPagingKey(pagingKey: String): List<DbPagingTimeline>
 
+    @Transaction
+    @Query(
+        "SELECT * FROM DbPagingTimeline " +
+            "WHERE pagingKey = :pagingKey ORDER BY sortId DESC",
+    )
+    suspend fun getTimelineWithStatusByPagingKey(pagingKey: String): List<DbPagingTimelineWithStatus>
+
     @Delete
     suspend fun delete(timeline: List<DbPagingTimeline>)
+
+    @Query(
+        "DELETE FROM DbPagingTimeline " +
+            "WHERE pagingKey = :pagingKey AND statusId = :statusId",
+    )
+    suspend fun deleteByPagingKeyAndStatusId(
+        pagingKey: String,
+        statusId: String,
+    )
 
     @Query(
         "DELETE FROM DbPagingTimeline WHERE pagingKey = :pagingKey " +

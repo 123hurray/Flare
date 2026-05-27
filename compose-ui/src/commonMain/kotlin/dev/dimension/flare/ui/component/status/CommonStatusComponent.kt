@@ -731,9 +731,19 @@ private fun ZhihuDetailStatusComponent(
     modifier: Modifier = Modifier,
 ) {
     val uriHandler = LocalUriHandler.current
-    val titleContent = item.zhihuQuestionTitleContent()
-    val bodyContent = item.zhihuBodyContent()
-    val isQuestion = item.statusKey.id.startsWith("question:")
+    val zhihuType = item.zhihuContentType()
+    val titleContent =
+        when (zhihuType) {
+            ZhihuStatusType.Pin -> null
+            else -> item.zhihuQuestionTitleContent()
+        }
+    val bodyContent =
+        when (zhihuType) {
+            ZhihuStatusType.Pin -> item.content
+            else -> item.zhihuBodyContent()
+        }
+    val isQuestion = zhihuType == ZhihuStatusType.Question
+    val isAnswer = zhihuType == ZhihuStatusType.Answer
     Column(
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -767,16 +777,23 @@ private fun ZhihuDetailStatusComponent(
             return@Column
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider()
-        Spacer(modifier = Modifier.height(16.dp))
+        if (isAnswer) {
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+        } else {
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         item.user?.let { user ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                AvatarComponent(data = user.avatar)
+                AvatarComponent(
+                    data = user.avatar,
+                    size = if (isAnswer) 48.dp else 40.dp,
+                )
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -799,7 +816,7 @@ private fun ZhihuDetailStatusComponent(
                 }
             }
         }
-        item.zhihuVoteupCount()?.takeIf { it > 0 }?.let {
+        item.zhihuVoteupCount()?.takeIf { isAnswer && it > 0 }?.let {
             Spacer(modifier = Modifier.height(16.dp))
             PlatformText(
                 text = "$it 人赞同了该回答 ›",
@@ -837,6 +854,21 @@ private fun ZhihuDetailStatusComponent(
         }
     }
 }
+
+private enum class ZhihuStatusType {
+    Answer,
+    Article,
+    Pin,
+    Question,
+}
+
+private fun UiTimelineV2.Post.zhihuContentType(): ZhihuStatusType =
+    when {
+        statusKey.id.startsWith("answer:") -> ZhihuStatusType.Answer
+        statusKey.id.startsWith("article:") -> ZhihuStatusType.Article
+        statusKey.id.startsWith("pin:") -> ZhihuStatusType.Pin
+        else -> ZhihuStatusType.Question
+    }
 
 private fun UiTimelineV2.Post.zhihuQuestionTitleContent(): UiRichText? {
     val title = content.renderRuns.firstOrNull() as? RenderContent.Text ?: return null

@@ -1,5 +1,7 @@
 package dev.dimension.flare.ui.screen.status
 
+import android.widget.Toast
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
@@ -18,6 +20,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import compose.icons.FontAwesomeIcons
@@ -41,6 +46,7 @@ import dev.dimension.flare.ui.component.status.status
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.presenter.invoke
+import dev.dimension.flare.ui.presenter.status.GlobalStatusCollectionPresenter
 import dev.dimension.flare.ui.presenter.status.StatusContextPresenter
 import kotlinx.coroutines.launch
 import moe.tlaster.precompose.molecule.producePresenter
@@ -52,9 +58,15 @@ internal fun StatusScreen(
     onBack: () -> Unit,
     accountType: AccountType,
 ) {
+    val context = LocalContext.current
     val isBigScreen = isBigScreen()
     val state by producePresenter(statusKey.toString()) {
         statusPresenter(accountType = accountType, statusKey = statusKey)
+    }
+    val collectionState by producePresenter("global_status_collection") {
+        remember {
+            GlobalStatusCollectionPresenter()
+        }.invoke()
     }
     val currentPost = state.state.current.takeSuccess() as? UiTimelineV2.Post
     val isZhihuStatus = currentPost?.platformType == PlatformType.Zhihu || statusKey.host == zhihuWebHost
@@ -94,7 +106,15 @@ internal fun StatusScreen(
                 },
             )
         },
-        modifier = Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
+        modifier =
+            Modifier
+                .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection)
+                .threeFingerSwipeRight {
+                    currentPost?.let {
+                        collectionState.addFavorite(it)
+                        Toast.makeText(context, "已收藏", Toast.LENGTH_SHORT).show()
+                    }
+                },
     ) {
         RefreshContainer(
             onRefresh = state::refresh,
@@ -128,6 +148,44 @@ internal fun StatusScreen(
         )
     }
 }
+
+private fun Modifier.threeFingerSwipeRight(onSwipeRight: () -> Unit): Modifier =
+    pointerInput(onSwipeRight) {
+        awaitEachGesture {
+            var dragX = 0f
+            var dragY = 0f
+            var tracking = false
+            var triggered = false
+            val threshold = 80.dp.toPx()
+            val crossAxisSlop = 48.dp.toPx()
+            while (true) {
+                val event = awaitPointerEvent()
+                val pressed = event.changes.filter { it.pressed }
+                if (pressed.isEmpty()) break
+                if (pressed.size >= 3) {
+                    tracking = true
+                    dragX +=
+                        pressed
+                            .take(3)
+                            .map { it.positionChange().x }
+                            .average()
+                            .toFloat()
+                    dragY +=
+                        pressed
+                            .take(3)
+                            .map { it.positionChange().y }
+                            .average()
+                            .toFloat()
+                    pressed.forEach { it.consume() }
+                }
+                if (tracking && !triggered && dragX >= threshold && kotlin.math.abs(dragY) <= crossAxisSlop) {
+                    triggered = true
+                    onSwipeRight()
+                    break
+                }
+            }
+        }
+    }
 
 @Composable
 private fun statusPresenter(

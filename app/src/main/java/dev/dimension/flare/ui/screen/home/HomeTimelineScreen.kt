@@ -9,6 +9,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LeadingIconTab
 import androidx.compose.material3.LocalContentColor
@@ -49,6 +52,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -56,7 +61,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -69,7 +76,6 @@ import compose.icons.fontawesomeicons.Solid
 import compose.icons.fontawesomeicons.solid.AnglesUp
 import compose.icons.fontawesomeicons.solid.Bars
 import compose.icons.fontawesomeicons.solid.Sliders
-import compose.icons.fontawesomeicons.solid.TableList
 import dev.dimension.flare.R
 import dev.dimension.flare.common.onSuccess
 import dev.dimension.flare.data.model.BottomBarBehavior
@@ -101,7 +107,10 @@ import dev.dimension.flare.ui.presenter.home.LoggedInPresenter
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.presenter.rememberTimelineItemPresenterWithLazyListState
 import dev.dimension.flare.ui.theme.screenHorizontalPadding
+import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.launch
@@ -327,19 +336,36 @@ private fun TimelineTabFanButton(
     visible: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+    var wheelPosition by remember { mutableFloatStateOf(selectedPage.toFloat()) }
     val progress by animateFloatAsState(
         targetValue = if (expanded) 1f else 0f,
-        label = "timeline_tab_fan_progress",
+        label = "timeline_tab_wheel_progress",
     )
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val ringCount = ((tabs.size + 4) / 5).coerceAtLeast(1)
-    val maxRadiusDp = (88 + (ringCount - 1) * 64).dp
-    val containerSize = (maxRadiusDp.value * 2 + 128).dp
+    val viewportSize = 340.dp
+    val fabSize = 56.dp
+    val wheelBleed = 16.dp
+    val viewportSizePx = with(density) { viewportSize.toPx() }
+    val centerInsetPx = with(density) { (fabSize / 2).toPx() }
+    val wheelBleedPx = with(density) { wheelBleed.toPx() }
+    val wheelRadiusPx = with(density) { 100.dp.toPx() }
+    val ringStrokePx = with(density) { 72.dp.toPx() }
+    val itemHalfWidthPx = with(density) { 36.dp.toPx() }
+    val itemHalfHeightPx = with(density) { 22.dp.toPx() }
+    val slotAngleDegrees = 26f
+    val centerAngleDegrees = 218f
+    val ringColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+    val ringHighlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
     LaunchedEffect(visible) {
         if (!visible) {
             expanded = false
+        }
+    }
+    LaunchedEffect(expanded, selectedPage, tabs.size) {
+        if (expanded) {
+            wheelPosition = selectedPage.toFloat()
         }
     }
 
@@ -351,71 +377,128 @@ private fun TimelineTabFanButton(
         Box(
             modifier =
                 modifier
-                    .padding(end = 8.dp, bottom = 8.dp)
-                    .size(containerSize),
+                    .size(viewportSize),
             contentAlignment = Alignment.BottomEnd,
         ) {
-            tabs.forEachIndexed { index, tab ->
-                val ring = index / 5
-                val ringStart = ring * 5
-                val ringIndex = index - ringStart
-                val ringSize = minOf(5, tabs.size - ringStart)
-                val angleDegrees =
-                    if (ringSize <= 1) {
-                        180.0
-                    } else {
-                        90.0 + 180.0 * ringIndex / (ringSize - 1)
-                    }
-                val angleRadians = Math.toRadians(angleDegrees)
-                val radius = with(density) { (88 + ring * 64).dp.toPx() }
-                val offsetX = (cos(angleRadians) * radius * progress).roundToInt()
-                val offsetY = (sin(angleRadians) * radius * progress).roundToInt()
-
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = fadeIn() + scaleIn(initialScale = 0.8f),
-                    exit = fadeOut() + scaleOut(targetScale = 0.8f),
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn() + scaleIn(initialScale = 0.88f),
+                exit = fadeOut() + scaleOut(targetScale = 0.88f),
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = wheelBleed, y = wheelBleed)
+                        .zIndex(1f),
+            ) {
+                Box(
                     modifier =
                         Modifier
-                            .offset { IntOffset(offsetX, offsetY) }
-                            .zIndex(index + 1f),
+                            .size(viewportSize)
+                            .pointerInput(tabs.size) {
+                                detectDragGestures { change, _ ->
+                                    val center =
+                                        androidx.compose.ui.geometry.Offset(
+                                            size.width - centerInsetPx - wheelBleedPx,
+                                            size.height - centerInsetPx - wheelBleedPx,
+                                        )
+                                    val previous = change.previousPosition - center
+                                    val current = change.position - center
+                                    val previousAngle = atan2(previous.y, previous.x) * 180f / PI.toFloat()
+                                    val currentAngle = atan2(current.y, current.x) * 180f / PI.toFloat()
+                                    var delta = currentAngle - previousAngle
+                                    if (delta > 180f) {
+                                        delta -= 360f
+                                    } else if (delta < -180f) {
+                                        delta += 360f
+                                    }
+                                    wheelPosition -= delta / slotAngleDegrees
+                                    change.consume()
+                                }
+                            },
+                    contentAlignment = Alignment.BottomEnd,
                 ) {
-                    Surface(
-                        onClick = {
-                            expanded = false
-                            scope.launch {
-                                pagerState.scrollToPage(index)
-                            }
-                        },
-                        shape = CircleShape,
-                        color =
-                            if (index == selectedPage) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                        contentColor =
-                            if (index == selectedPage) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        tonalElevation = 6.dp,
-                        shadowElevation = 6.dp,
-                        modifier =
-                            Modifier
-                                .size(48.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier.size(48.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            TabIcon(
-                                accountType = tab.account,
-                                icon = tab.metaData.icon,
-                                title = tab.metaData.title,
-                                modifier = Modifier.size(22.dp),
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val wheelCenter =
+                            androidx.compose.ui.geometry.Offset(
+                                size.width - centerInsetPx - wheelBleedPx,
+                                size.height - centerInsetPx - wheelBleedPx,
                             )
+                        drawCircle(
+                            color = ringColor,
+                            center = wheelCenter,
+                            radius = wheelRadiusPx,
+                            style = Stroke(width = ringStrokePx),
+                        )
+                        drawCircle(
+                            color = ringHighlightColor,
+                            center = wheelCenter,
+                            radius = wheelRadiusPx,
+                            style = Stroke(width = ringStrokePx * 0.34f),
+                        )
+                    }
+                    val baseIndex = floor(wheelPosition).toInt()
+                    val fraction = wheelPosition - baseIndex
+                    (-3..3).forEach { slot ->
+                        val index = (baseIndex + slot).floorMod(tabs.size)
+                        val tab = tabs[index]
+                        val slotProgress = slot - fraction
+                        val angleRadians = Math.toRadians((centerAngleDegrees + slotProgress * slotAngleDegrees).toDouble())
+                        val centerX =
+                            viewportSizePx - centerInsetPx - wheelBleedPx +
+                                cos(angleRadians) * wheelRadiusPx * progress
+                        val centerY =
+                            viewportSizePx - centerInsetPx - wheelBleedPx +
+                                sin(angleRadians) * wheelRadiusPx * progress
+                        val offsetX = (centerX - itemHalfWidthPx).roundToInt()
+                        val offsetY = (centerY - itemHalfHeightPx).roundToInt()
+                        Surface(
+                            onClick = {
+                                expanded = false
+                                scope.launch {
+                                    pagerState.scrollToPage(index)
+                                }
+                            },
+                            shape = CircleShape,
+                            color =
+                                if (index == selectedPage) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                },
+                            contentColor =
+                                if (index == selectedPage) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            tonalElevation = 6.dp,
+                            shadowElevation = 6.dp,
+                            modifier =
+                                Modifier
+                                    .align(Alignment.TopStart)
+                                    .offset { IntOffset(offsetX, offsetY) }
+                                    .size(width = 72.dp, height = 44.dp),
+                        ) {
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                TabIcon(
+                                    accountType = tab.account,
+                                    icon = tab.metaData.icon,
+                                    title = tab.metaData.title,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                TabTitle(
+                                    tab.metaData.title,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
                         }
                     }
                 }
@@ -426,19 +509,28 @@ private fun TimelineTabFanButton(
                     expanded = !expanded
                 },
                 shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.size(56.dp),
+                elevation =
+                    FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 0.dp,
+                    ),
+                modifier =
+                    Modifier
+                        .size(56.dp)
+                        .zIndex(2f),
             ) {
-                FAIcon(
-                    imageVector = FontAwesomeIcons.Solid.TableList,
-                    contentDescription = stringResource(R.string.home_timeline_quick_tabs),
-                    modifier = Modifier.size(20.dp),
-                )
+                val iconColor = LocalContentColor.current
+                Canvas(modifier = Modifier.size(22.dp)) {
+                    drawCircle(
+                        color = iconColor,
+                        style = Stroke(width = 3.dp.toPx()),
+                    )
+                }
             }
         }
     }
 }
+
+private fun Int.floorMod(size: Int): Int = ((this % size) + size) % size
 
 @Composable
 internal fun TimelineItemContent(

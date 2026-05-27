@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Solid
 import compose.icons.fontawesomeicons.solid.Bars
+import compose.icons.fontawesomeicons.solid.Bookmark
 import compose.icons.fontawesomeicons.solid.ClockRotateLeft
 import compose.icons.fontawesomeicons.solid.Gear
 import compose.icons.fontawesomeicons.solid.Pen
@@ -335,18 +336,33 @@ internal fun HomeScreen(afterInit: () -> Unit) {
                                 },
                             )
                             item(
-                                selected = currentRoute is Route.Settings.LocalHistory,
+                                selected = currentRoute is Route.Footprints,
                                 onClick = {
-                                    state.navigate(Route.Settings.LocalHistory)
+                                    state.navigate(Route.Footprints)
                                 },
                                 icon = {
                                     FAIcon(
                                         imageVector = FontAwesomeIcons.Solid.ClockRotateLeft,
-                                        contentDescription = stringResource(id = R.string.settings_local_history_title),
+                                        contentDescription = "足迹",
                                     )
                                 },
                                 label = {
-                                    Text(text = stringResource(id = R.string.settings_local_history_title))
+                                    Text(text = "足迹")
+                                },
+                            )
+                            item(
+                                selected = currentRoute is Route.Favorites,
+                                onClick = {
+                                    state.navigate(Route.Favorites)
+                                },
+                                icon = {
+                                    FAIcon(
+                                        imageVector = FontAwesomeIcons.Solid.Bookmark,
+                                        contentDescription = "收藏",
+                                    )
+                                },
+                                label = {
+                                    Text(text = "收藏")
                                 },
                             )
                         }
@@ -445,18 +461,33 @@ internal fun HomeScreen(afterInit: () -> Unit) {
                                 },
                             )
                             item(
-                                selected = currentRoute is Route.Settings.LocalHistory,
+                                selected = currentRoute is Route.Footprints,
                                 onClick = {
-                                    state.navigate(Route.Settings.LocalHistory)
+                                    state.navigate(Route.Footprints)
                                 },
                                 icon = {
                                     FAIcon(
                                         imageVector = FontAwesomeIcons.Solid.ClockRotateLeft,
-                                        contentDescription = stringResource(id = R.string.settings_local_history_title),
+                                        contentDescription = "足迹",
                                     )
                                 },
                                 label = {
-                                    Text(text = stringResource(id = R.string.settings_local_history_title))
+                                    Text(text = "足迹")
+                                },
+                            )
+                            item(
+                                selected = currentRoute is Route.Favorites,
+                                onClick = {
+                                    state.navigate(Route.Favorites)
+                                },
+                                icon = {
+                                    FAIcon(
+                                        imageVector = FontAwesomeIcons.Solid.Bookmark,
+                                        contentDescription = "收藏",
+                                    )
+                                },
+                                label = {
+                                    Text(text = "收藏")
                                 },
                             )
                         }
@@ -571,7 +602,8 @@ private fun presenter(uriHandler: UriHandler) =
                             Route.Settings.Main,
                             Route.DraftBox,
                             Route.Rss.Sources,
-                            Route.Settings.LocalHistory,
+                            Route.Footprints,
+                            Route.Favorites,
                         )
                 }
             }

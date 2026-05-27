@@ -147,10 +147,11 @@ public class StatusContextPresenter(
         val current by currentStatusFlow.flattenUiState()
         val listState = timelinePresenter.body()
         current.onSuccess {
-            remember {
+            remember(it) {
                 LogStatusHistoryPresenter(
                     accountType = accountType,
                     statusKey = statusKey,
+                    status = it,
                 )
             }.body()
         }
