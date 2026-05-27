@@ -1,5 +1,8 @@
 package dev.dimension.flare.ui.screen.home
 
+import android.app.Activity
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
@@ -31,14 +34,17 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
@@ -100,6 +106,7 @@ import moe.tlaster.precompose.molecule.producePresenter
 )
 @Composable
 internal fun HomeScreen(afterInit: () -> Unit) {
+    val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val state by producePresenter { presenter(uriHandler = uriHandler) }
     val hapticFeedback = LocalHapticFeedback.current
@@ -124,6 +131,26 @@ internal fun HomeScreen(afterInit: () -> Unit) {
                 NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(
                     currentWindowAdaptiveInfoV2(),
                 )
+            var lastBackPressAt by remember { mutableLongStateOf(0L) }
+            BackHandler {
+                if (state.canGoBack()) {
+                    state.goBack()
+                    lastBackPressAt = 0L
+                } else {
+                    val now = System.currentTimeMillis()
+                    if (now - lastBackPressAt <= 2000L) {
+                        (context as? Activity)?.finish()
+                    } else {
+                        lastBackPressAt = now
+                        Toast
+                            .makeText(
+                                context,
+                                context.getString(R.string.home_press_back_again_to_exit),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                    }
+                }
+            }
             Box {
                 NavigationSuiteScaffold2(
                     wideNavigationRailState = state.wideNavigationRailState,
@@ -593,6 +620,8 @@ private fun presenter(uriHandler: UriHandler) =
             fun goBack() {
                 topLevelBackStack.takeSuccess()?.removeLast()
             }
+
+            fun canGoBack(): Boolean = topLevelBackStack.takeSuccess()?.canRemoveLast() == true
 
             fun openDrawer() {
                 scope.launch {

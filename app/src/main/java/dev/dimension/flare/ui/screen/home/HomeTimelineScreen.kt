@@ -2,9 +2,15 @@ package dev.dimension.flare.ui.screen.home
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,44 +22,55 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContent
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LeadingIconTab
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SecondaryScrollableTabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Solid
 import compose.icons.fontawesomeicons.solid.AnglesUp
 import compose.icons.fontawesomeicons.solid.Bars
 import compose.icons.fontawesomeicons.solid.Sliders
+import compose.icons.fontawesomeicons.solid.TableList
 import dev.dimension.flare.R
 import dev.dimension.flare.common.onSuccess
 import dev.dimension.flare.data.model.BottomBarBehavior
@@ -65,6 +82,7 @@ import dev.dimension.flare.ui.component.FAIcon
 import dev.dimension.flare.ui.component.FlareScaffold
 import dev.dimension.flare.ui.component.FlareTopAppBar
 import dev.dimension.flare.ui.component.Glassify
+import dev.dimension.flare.ui.component.LocalBottomBarHeight
 import dev.dimension.flare.ui.component.LocalBottomBarShowing
 import dev.dimension.flare.ui.component.RefreshContainer
 import dev.dimension.flare.ui.component.TabIcon
@@ -84,6 +102,10 @@ import dev.dimension.flare.ui.presenter.home.LoggedInPresenter
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.presenter.rememberTimelineItemPresenterWithLazyListState
 import dev.dimension.flare.ui.theme.screenHorizontalPadding
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlinx.coroutines.launch
 import moe.tlaster.precompose.molecule.producePresenter
 
@@ -115,25 +137,22 @@ internal fun HomeTimelineScreen(
                     state.pagerState.onSuccess { pagerState ->
                         state.tabState.onSuccess { tabs ->
                             if (tabs.any()) {
+                                val selectedPage by remember(pagerState, tabs.size) {
+                                    derivedStateOf {
+                                        pagerState.settledPage.coerceIn(0, tabs.lastIndex)
+                                    }
+                                }
                                 SecondaryScrollableTabRow(
                                     containerColor = Color.Transparent,
                                     modifier =
                                         Modifier
                                             .fillMaxWidth(),
-                                    selectedTabIndex =
-                                        minOf(
-                                            pagerState.currentPage,
-                                            tabs.lastIndex,
-                                        ),
+                                    selectedTabIndex = selectedPage,
                                     edgePadding = 0.dp,
                                     divider = {},
                                     indicator = {
                                         TabRowIndicator(
-                                            selectedIndex =
-                                                minOf(
-                                                    pagerState.currentPage,
-                                                    tabs.lastIndex,
-                                                ),
+                                            selectedIndex = selectedPage,
                                         )
                                     },
                                     minTabWidth = 48.dp,
@@ -144,10 +163,10 @@ internal fun HomeTimelineScreen(
                                                 modifier = Modifier.clip(CircleShape),
                                                 selectedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                                                 unselectedContentColor = LocalContentColor.current,
-                                                selected = index == pagerState.currentPage,
+                                                selected = index == selectedPage,
                                                 onClick = {
                                                     scope.launch {
-                                                        pagerState.scrollToPage(index)
+                                                        pagerState.animateScrollToPage(index)
                                                     }
                                                 },
                                                 text = {
@@ -237,14 +256,61 @@ internal fun HomeTimelineScreen(
                 },
             )
         },
+        floatingActionButton = {
+            state.pagerState.onSuccess { pagerState ->
+                state.tabState.onSuccess { tabs ->
+                    if (tabs.size > 1) {
+                        val selectedPage by remember(pagerState, tabs.size) {
+                            derivedStateOf {
+                                pagerState.settledPage.coerceIn(0, tabs.lastIndex)
+                            }
+                        }
+                        TimelineTabFanButton(
+                            tabs = tabs,
+                            pagerState = pagerState,
+                            selectedPage = selectedPage,
+                            visible =
+                                loggedInState.isLoggedIn.takeSuccess() == true &&
+                                    LocalBottomBarHeight.current > 48.dp,
+                        )
+                    }
+                }
+            }
+        },
         modifier = Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
     ) { contentPadding ->
         state.pagerState.onSuccess { pagerState ->
             state.tabState.onSuccess { tabState ->
+                val selectedPage by remember(pagerState, tabState.size) {
+                    derivedStateOf {
+                        if (tabState.isEmpty()) {
+                            0
+                        } else {
+                            pagerState.settledPage.coerceIn(0, tabState.lastIndex)
+                        }
+                    }
+                }
                 LaunchedEffect(pagerState.currentPage >= tabState.size) {
                     if (pagerState.currentPage >= tabState.size) {
                         scope.launch {
                             pagerState.scrollToPage(0)
+                        }
+                    }
+                }
+                LaunchedEffect(pagerState, tabState.size) {
+                    snapshotFlow {
+                        Triple(
+                            pagerState.isScrollInProgress,
+                            pagerState.targetPage,
+                            pagerState.currentPageOffsetFraction,
+                        )
+                    }.collect { (isScrollInProgress, targetPage, currentPageOffsetFraction) ->
+                        if (
+                            !isScrollInProgress &&
+                            tabState.isNotEmpty() &&
+                            abs(currentPageOffsetFraction) > 0.001f
+                        ) {
+                            pagerState.animateScrollToPage(targetPage.coerceIn(0, tabState.lastIndex))
                         }
                     }
                 }
@@ -262,10 +328,133 @@ internal fun HomeTimelineScreen(
                             contentPadding = contentPadding,
                             modifier = Modifier.fillMaxWidth(),
                             changeLogState = state.changeLogState,
-                            isCurrentlyVisible = pagerState.currentPage == index,
+                            isCurrentlyVisible = selectedPage == index,
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimelineTabFanButton(
+    tabs: List<TimelineTabItem>,
+    pagerState: PagerState,
+    selectedPage: Int,
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val progress by animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        label = "timeline_tab_fan_progress",
+    )
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val ringCount = ((tabs.size + 4) / 5).coerceAtLeast(1)
+    val maxRadiusDp = (88 + (ringCount - 1) * 64).dp
+    val anchorLiftPx = with(density) { (maxRadiusDp + 64.dp).toPx() }
+    val containerSize = (maxRadiusDp.value * 2 + 128).dp
+    LaunchedEffect(visible) {
+        if (!visible) {
+            expanded = false
+        }
+    }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+        exit = fadeOut() + scaleOut(targetScale = 0.8f),
+    ) {
+        Box(
+            modifier =
+                modifier
+                    .padding(end = 8.dp, bottom = 8.dp)
+                    .size(containerSize),
+            contentAlignment = Alignment.BottomEnd,
+        ) {
+            tabs.forEachIndexed { index, tab ->
+                val ring = index / 5
+                val ringStart = ring * 5
+                val ringIndex = index - ringStart
+                val ringSize = minOf(5, tabs.size - ringStart)
+                val angleDegrees =
+                    if (ringSize <= 1) {
+                        180.0
+                    } else {
+                        90.0 + 180.0 * ringIndex / (ringSize - 1)
+                    }
+                val angleRadians = Math.toRadians(angleDegrees)
+                val radius = with(density) { (88 + ring * 64).dp.toPx() }
+                val offsetX = (cos(angleRadians) * radius * progress).roundToInt()
+                val offsetY = ((-anchorLiftPx - sin(angleRadians) * radius) * progress).roundToInt()
+
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                    exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                    modifier =
+                        Modifier
+                            .offset { IntOffset(offsetX, offsetY) }
+                            .zIndex(index + 1f),
+                ) {
+                    Surface(
+                        onClick = {
+                            expanded = false
+                            scope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        },
+                        shape = CircleShape,
+                        color =
+                            if (index == selectedPage) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            },
+                        contentColor =
+                            if (index == selectedPage) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        tonalElevation = 6.dp,
+                        shadowElevation = 6.dp,
+                        modifier =
+                            Modifier
+                                .size(48.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier.size(48.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            TabIcon(
+                                accountType = tab.account,
+                                icon = tab.metaData.icon,
+                                title = tab.metaData.title,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            FloatingActionButton(
+                onClick = {
+                    expanded = !expanded
+                },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(56.dp),
+            ) {
+                FAIcon(
+                    imageVector = FontAwesomeIcons.Solid.TableList,
+                    contentDescription = stringResource(R.string.home_timeline_quick_tabs),
+                    modifier = Modifier.size(20.dp),
+                )
             }
         }
     }

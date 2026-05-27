@@ -662,6 +662,19 @@ private fun XhsImage.toUiMedia(): UiMedia.Image? {
 
 private fun XhsVideo.toUiMedia(fallbackCover: XhsImage? = null): UiMedia.Video? {
     val stream = media?.stream
+    val variants =
+        stream
+            ?.allItems()
+            .orEmpty()
+            .mapNotNull { item ->
+                val url = item.bestUrl().takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                UiMedia.VideoVariant(
+                    url = url,
+                    height = item.height?.toFloat() ?: 0f,
+                    width = item.width?.toFloat() ?: 0f,
+                )
+            }.distinctBy { it.url }
+            .sortedByDescending { it.height }
     val item =
         stream?.h264?.firstWithUrl()
             ?: stream?.h265?.firstWithUrl()
@@ -675,6 +688,7 @@ private fun XhsVideo.toUiMedia(fallbackCover: XhsImage? = null): UiMedia.Video? 
         height = item.height?.toFloat() ?: cover?.height?.toFloat() ?: 9f,
         width = item.width?.toFloat() ?: cover?.width?.toFloat() ?: 16f,
         customHeaders = xhsMediaHeaders,
+        variants = variants,
     )
 }
 
@@ -720,6 +734,9 @@ private fun List<dev.dimension.flare.data.network.xiaohongshu.model.XhsVideoStre
 private fun dev.dimension.flare.data.network.xiaohongshu.model.XhsVideoStreamItem.bestUrl(): String =
     firstNotBlank(masterUrl, url, backupUrls.firstOrNull())
         .normalizeXhsMediaUrl()
+
+private fun dev.dimension.flare.data.network.xiaohongshu.model.XhsVideoStream.allItems() =
+    h264 + h265 + h266 + av1
 
 private fun XhsImage.bestUrl(): String =
     firstNotBlank(

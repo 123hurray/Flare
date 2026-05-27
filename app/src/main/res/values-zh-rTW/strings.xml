@@ -2,6 +2,8 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="login_button">登入</string>
     <string name="navigate_back">返回</string>
+    <string name="home_press_back_again_to_exit">再次返回退出</string>
+    <string name="home_timeline_quick_tabs">快捷切換分頁</string>
     <string name="home_tab_home_title">首頁</string>
     <string name="home_tab_notifications_title">通知</string>
     <string name="home_tab_me_title">我</string>

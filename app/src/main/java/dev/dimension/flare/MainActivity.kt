@@ -1,7 +1,10 @@
 package dev.dimension.flare
 
 import android.content.Context
+import android.content.Intent
+import android.app.assist.AssistContent
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -16,6 +19,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dev.dimension.flare.common.VideoDownloadHelper
 import dev.dimension.flare.data.network.xiaohongshu.XhsAndroidWebSigner
 import dev.dimension.flare.ui.AppContainer
+import dev.dimension.flare.ui.assist.AssistContentState
 import dev.dimension.flare.ui.component.platform.LocalWifiState
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
@@ -55,6 +59,14 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         videoDownloadHelper.onPause()
+    }
+
+    override fun onProvideAssistContent(outContent: AssistContent) {
+        super.onProvideAssistContent(outContent)
+        val webUri = AssistContentState.webUri ?: return
+        val uri = Uri.parse(webUri)
+        outContent.setWebUri(uri)
+        outContent.setIntent(Intent(Intent.ACTION_VIEW, uri))
     }
 
     override fun onDestroy() {

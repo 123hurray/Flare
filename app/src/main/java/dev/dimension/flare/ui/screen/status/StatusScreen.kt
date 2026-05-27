@@ -121,6 +121,7 @@ internal fun StatusScreen(
                     status(
                         state.state.listState,
                         detailStatusKey = statusKey,
+                        commentStyle = true,
                     )
                 }
             },

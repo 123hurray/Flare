@@ -18,10 +18,15 @@ import dev.dimension.flare.model.PlatformSpec
 import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.PlatformTypeMetadata
 import dev.dimension.flare.model.vvo
+import dev.dimension.flare.model.vvoHost
+import dev.dimension.flare.model.vvoHostLong
+import dev.dimension.flare.model.vvoHostShort
 import dev.dimension.flare.ui.model.UiIcon
 import dev.dimension.flare.ui.model.UiInstanceMetadata
+import io.ktor.http.Url
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
 internal data object VvoPlatformSpec : PlatformSpec {
     override val type = PlatformType.VVo
@@ -34,7 +39,16 @@ internal data object VvoPlatformSpec : PlatformSpec {
 
     override fun agreementUrl(host: String): String? = null
 
-    override fun deepLinkPatterns(host: String): ImmutableList<DeepLinkPattern<out DeepLinkMapping.Type>> = persistentListOf()
+    override fun deepLinkPatterns(host: String): ImmutableList<DeepLinkPattern<out DeepLinkMapping.Type>> =
+        listOf(
+            "https://$vvoHost/status/{id}",
+            "https://$vvoHost/detail/{id}",
+            "https://$vvoHostLong/{handle}/{id}",
+            "https://www.$vvoHostLong/{handle}/{id}",
+            "https://$vvoHostShort/{handle}/{id}",
+        ).map {
+            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url(it))
+        }.toImmutableList()
 
     override fun defaultTimelineTabs(accountKey: MicroBlogKey): ImmutableList<TimelineTabItem> =
         persistentListOf(

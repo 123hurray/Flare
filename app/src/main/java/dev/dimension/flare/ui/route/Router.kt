@@ -6,6 +6,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.platform.LocalUriHandler
@@ -15,6 +16,13 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.scene.DialogSceneStrategy
 import androidx.navigation3.ui.NavDisplay
+import dev.dimension.flare.model.AccountType
+import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.vvo
+import dev.dimension.flare.model.vvoHost
+import dev.dimension.flare.model.vvoHostLong
+import dev.dimension.flare.model.vvoHostShort
+import dev.dimension.flare.ui.assist.AssistContentState
 import dev.dimension.flare.ui.component.BottomSheetSceneStrategy
 import dev.dimension.flare.ui.component.platform.isBigScreen
 import dev.dimension.flare.ui.screen.bluesky.blueskyEntryBuilder
@@ -51,6 +59,15 @@ internal fun Router(
     val listDetailStrategy = rememberListDetailSceneStrategy<NavKey>()
     val uriHandler = LocalUriHandler.current
     val isBigScreen = isBigScreen()
+    val assistWebUri = backStack.lastOrNull()?.assistWebUri()
+    DisposableEffect(assistWebUri) {
+        AssistContentState.webUri = assistWebUri
+        onDispose {
+            if (AssistContentState.webUri == assistWebUri) {
+                AssistContentState.webUri = null
+            }
+        }
+    }
     NavDisplay(
         sceneStrategies =
             remember {
@@ -108,3 +125,19 @@ internal fun Router(
             },
     )
 }
+
+private fun Route.assistWebUri(): String? =
+    when (this) {
+        is Route.Status.Detail -> statusKey.vvoStatusAssistWebUri(accountType)
+        is Route.Status.VVOStatus -> statusKey.vvoStatusAssistWebUri(accountType)
+        else -> null
+    }
+
+private fun MicroBlogKey.vvoStatusAssistWebUri(accountType: AccountType): String? {
+    val accountHost = (accountType as? AccountType.Specific)?.accountKey?.host ?: host
+    if (accountHost !in vvoHosts) return null
+    if (id.startsWith("comment:")) return null
+    return "https://$vvoHost/detail/$id"
+}
+
+private val vvoHosts = setOf(vvo, vvoHost, vvoHostShort, vvoHostLong, "vvo.social")

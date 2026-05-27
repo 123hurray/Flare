@@ -39,6 +39,15 @@ public sealed interface UiMedia {
 
     @Serializable
     @Immutable
+    public data class VideoVariant internal constructor(
+        val url: String,
+        val width: Float = 0f,
+        val height: Float = 0f,
+        val bitrate: Int? = null,
+    )
+
+    @Serializable
+    @Immutable
     public data class Video internal constructor(
         override val url: String,
         val thumbnailUrl: String,
@@ -46,6 +55,7 @@ public sealed interface UiMedia {
         val height: Float,
         val width: Float,
         override val customHeaders: SerializableImmutableMap<String, String>? = null,
+        val variants: List<VideoVariant> = emptyList(),
     ) : UiMedia {
         val aspectRatio: Float
             get() = (width / (height.takeUnless { it == 0f } ?: 1f)).takeUnless { it == 0f } ?: 1f

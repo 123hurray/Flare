@@ -12,8 +12,10 @@ import dev.dimension.flare.data.network.xqt.model.Admin
 import dev.dimension.flare.data.network.xqt.model.AudioSpace
 import dev.dimension.flare.data.network.xqt.model.Entities
 import dev.dimension.flare.data.network.xqt.model.GetProfileSpotlightsQuery200Response
+import dev.dimension.flare.data.network.xqt.model.InboxConversationTimelineMessageDataAttachmentMediaVideoVariant
 import dev.dimension.flare.data.network.xqt.model.InstructionUnion
 import dev.dimension.flare.data.network.xqt.model.Media
+import dev.dimension.flare.data.network.xqt.model.MediaVideoInfoVariant
 import dev.dimension.flare.data.network.xqt.model.NoteTweetResultRichTextTag
 import dev.dimension.flare.data.network.xqt.model.TimelineAddEntries
 import dev.dimension.flare.data.network.xqt.model.TimelineAddToModule
@@ -592,16 +594,22 @@ internal fun Tweet.renderStatus(
                         }
 
                         Media.Type.video, Media.Type.animatedGif -> {
+                            val variants = media.videoInfo?.variants.toTimelineVideoVariants()
                             UiMedia.Video(
                                 url =
-                                    media.videoInfo
-                                        ?.variants
-                                        ?.maxByOrNull { it.bitrate ?: 0 }
-                                        ?.url ?: "",
+                                    variants
+                                        .maxByOrNull { it.bitrate ?: 0 }
+                                        ?.url
+                                        ?: media.videoInfo
+                                            ?.variants
+                                            ?.firstOrNull { it.url.isNotBlank() }
+                                            ?.url
+                                        ?: "",
                                 thumbnailUrl = media.mediaUrlHttps,
                                 height = media.originalInfo.height.toFloat(),
                                 width = media.originalInfo.width.toFloat(),
                                 description = media.ext_alt_text,
+                                variants = variants,
                             )
                         }
                     }
@@ -1166,6 +1174,7 @@ private fun MessageContent.XQT.Message.render(
                                 "Cookie" to credential.chocolate,
                                 "Referer" to "https://${accountKey.host}/",
                             ),
+                        variants = data.attachment.video.videoInfo.variants.toDmVideoVariants(),
                     ),
                 )
             }
@@ -1925,3 +1934,29 @@ private fun List<TwitterArticleInlineStyleRange>.hasStyle(
 
 private fun List<dev.dimension.flare.data.network.xqt.model.TwitterArticleEntityEntry>.entityValue(key: Int): TwitterArticleEntity? =
     getOrNull(key)?.value ?: firstOrNull { it.key == key.toString() }?.value
+
+private fun List<MediaVideoInfoVariant>?.toTimelineVideoVariants(): List<UiMedia.VideoVariant> =
+    orEmpty()
+        .filter { it.contentType.startsWith("video/", ignoreCase = true) && it.url.isNotBlank() }
+        .distinctBy { it.url }
+        .sortedByDescending { it.bitrate ?: 0 }
+        .map {
+            UiMedia.VideoVariant(
+                url = it.url,
+                bitrate = it.bitrate,
+            )
+        }
+
+private fun List<InboxConversationTimelineMessageDataAttachmentMediaVideoVariant>?.toDmVideoVariants(): List<UiMedia.VideoVariant> =
+    orEmpty()
+        .filter {
+            it.contentType?.startsWith("video/", ignoreCase = true) == true &&
+                !it.url.isNullOrBlank()
+        }.distinctBy { it.url }
+        .sortedByDescending { it.bitrate ?: 0 }
+        .map {
+            UiMedia.VideoVariant(
+                url = it.url.orEmpty(),
+                bitrate = it.bitrate,
+            )
+        }

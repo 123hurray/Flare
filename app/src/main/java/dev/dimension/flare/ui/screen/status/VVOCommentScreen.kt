@@ -88,12 +88,12 @@ internal fun VVOCommentScreen(
                         item {
                             state.state.root
                                 .onSuccess {
-                                    StatusItem(item = it)
+                                    StatusItem(item = it, commentStyle = true)
                                 }.onLoading {
                                     StatusItem(item = null)
                                 }
                         }
-                        status(state.state.list)
+                        status(state.state.list, commentStyle = true)
                     }
                 },
             )

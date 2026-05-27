@@ -47,6 +47,7 @@ import kotlin.native.HiddenFromObjC
 public fun LazyStaggeredGridScope.status(
     pagingState: PagingState<UiTimelineV2>,
     detailStatusKey: MicroBlogKey? = null,
+    commentStyle: Boolean = false,
 ): Unit =
     with(pagingState) {
         onSuccess {
@@ -78,6 +79,7 @@ public fun LazyStaggeredGridScope.status(
                         StatusItem(
                             item,
                             detailStatusKey = detailStatusKey,
+                            commentStyle = commentStyle && item is UiTimelineV2.Post && item.statusKey != detailStatusKey,
 //                        modifier =
 //                        Modifier
 //                            .let {
@@ -236,6 +238,7 @@ public fun StatusItem(
     item: UiTimelineV2?,
     modifier: Modifier = Modifier,
     detailStatusKey: MicroBlogKey? = null,
+    commentStyle: Boolean = false,
 ) {
     if (item == null) {
         Column(
@@ -251,6 +254,7 @@ public fun StatusItem(
         UiTimelineComponent(
             item = item,
             detailStatusKey = detailStatusKey,
+            commentStyle = commentStyle,
             modifier = modifier,
         )
     }

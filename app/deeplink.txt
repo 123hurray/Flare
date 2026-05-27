@@ -1,5 +1,9 @@
 x.com
 twitter.com
+m.weibo.cn
+weibo.cn
+weibo.com
+www.weibo.com
 bsky.app
 pawoo.net
 mastodon.social

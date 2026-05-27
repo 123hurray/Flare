@@ -167,10 +167,14 @@ public fun CommonStatusComponent(
     showMedia: Boolean = true,
     maxLines: Int? = null,
     showExpandButton: Boolean = true,
+    commentStyle: Boolean = false,
 ) {
     val uriHandler = LocalUriHandler.current
     LaunchedEffect(item.platformType, item.statusKey, item.content.raw, item.images, isDetail) {
-        if (item.platformType == PlatformType.Xiaohongshu || (isDetail && item.platformType == PlatformType.Zhihu && item.images.isNotEmpty())) {
+        if (
+            item.platformType == PlatformType.Xiaohongshu ||
+            (isDetail && item.platformType == PlatformType.Zhihu && item.images.isNotEmpty())
+        ) {
             StatusMediaRouteCache.put(item)
         }
     }
@@ -178,6 +182,13 @@ public fun CommonStatusComponent(
         ZhihuDetailStatusComponent(
             item = item,
             showExpandButton = showExpandButton,
+            modifier = modifier,
+        )
+        return
+    }
+    if (commentStyle && !isDetail && !isQuote) {
+        CompactCommentStatusComponent(
+            item = item,
             modifier = modifier,
         )
         return
@@ -484,6 +495,230 @@ public fun CommonStatusComponent(
             }
         }
     }
+}
+
+@Composable
+private fun CompactCommentStatusComponent(
+    item: UiTimelineV2.Post,
+    modifier: Modifier = Modifier,
+) {
+    val uriHandler = LocalUriHandler.current
+    val user = item.user
+    val replyAction =
+        item.actions
+            .filterIsInstance<ActionMenu.Item>()
+            .firstOrNull {
+                val type = (it.text as? ActionMenu.Item.Text.Localized)?.type
+                (type == ActionMenu.Item.Text.Localized.Type.Reply || type == ActionMenu.Item.Text.Localized.Type.Comment) &&
+                    (it.count?.value ?: 0L) > item.quote.size
+            }
+    Row(
+        modifier =
+            Modifier
+                .clickable {
+                    item.onClicked.invoke(
+                        ClickContext(
+                            launcher = { url ->
+                                uriHandler.openUri(url)
+                            },
+                        ),
+                    )
+                }.then(modifier),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        user?.let {
+            AvatarComponent(
+                it.avatar,
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clickable {
+                            it.onClicked.invoke(
+                                ClickContext(
+                                    launcher = { url ->
+                                        uriHandler.openUri(url)
+                                    },
+                                ),
+                            )
+                        },
+            )
+        } ?: Spacer(modifier = Modifier.size(36.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            user?.let {
+                RichText(
+                    text = it.name,
+                    color = PlatformTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!item.content.isEmpty) {
+                StatusContentComponent(
+                    content = item.content,
+                    contentWarning = item.contentWarning,
+                    poll = item.poll,
+                    maxLines = Int.MAX_VALUE,
+                    showExpandButton = false,
+                    onExpandClick = null,
+                )
+            }
+            CommentMetaAndActions(item)
+            if (item.quote.isNotEmpty() || replyAction != null) {
+                CompactChildComments(
+                    comments = item.quote,
+                    moreAction = replyAction,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentMetaAndActions(item: UiTimelineV2.Post) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (item.hasKnownCreatedAt()) {
+                DateTimeText(
+                    item.createdAt,
+                    style = PlatformTheme.typography.caption,
+                    color = PlatformTheme.colorScheme.caption,
+                )
+            }
+            item.sourceChannel?.name?.takeIf { it.isNotBlank() }?.let {
+                PlatformText(
+                    text = it,
+                    style = PlatformTheme.typography.caption,
+                    color = PlatformTheme.colorScheme.caption,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        CompositionLocalProvider(
+            PlatformContentColor provides PlatformTheme.colorScheme.caption,
+            PlatformTextStyle provides PlatformTheme.typography.caption,
+        ) {
+            StatusActions(item.actions)
+        }
+    }
+}
+
+@Composable
+private fun CompactChildComments(
+    comments: ImmutableList<UiTimelineV2.Post>,
+    moreAction: ActionMenu.Item?,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(PlatformTheme.shapes.small)
+                .background(PlatformTheme.colorScheme.caption.copy(alpha = 0.08f))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        comments.fastForEach { comment ->
+            CompactChildComment(comment)
+        }
+        moreAction?.let {
+            MoreChildCommentsAction(it)
+        }
+    }
+}
+
+@Composable
+private fun CompactChildComment(item: UiTimelineV2.Post) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item.user?.let {
+            AvatarComponent(
+                it.avatar,
+                modifier = Modifier.size(24.dp),
+            )
+        } ?: Spacer(modifier = Modifier.size(24.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            item.user?.let {
+                RichText(
+                    text = it.name,
+                    color = PlatformTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            StatusContentComponent(
+                content = item.content,
+                contentWarning = item.contentWarning,
+                poll = item.poll,
+                maxLines = Int.MAX_VALUE,
+                showExpandButton = false,
+                onExpandClick = null,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (item.hasKnownCreatedAt()) {
+                    DateTimeText(
+                        item.createdAt,
+                        style = PlatformTheme.typography.caption,
+                        color = PlatformTheme.colorScheme.caption,
+                    )
+                }
+                item.sourceChannel?.name?.takeIf { it.isNotBlank() }?.let {
+                    PlatformText(
+                        text = it,
+                        style = PlatformTheme.typography.caption,
+                        color = PlatformTheme.colorScheme.caption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoreChildCommentsAction(action: ActionMenu.Item) {
+    val uriHandler = LocalUriHandler.current
+    val count = action.count?.value ?: 0L
+    val text =
+        if (count > 0L) {
+            "共${action.count?.humanized ?: count.toString()}条回复"
+        } else {
+            "更多回复"
+        }
+    PlatformText(
+        text = "$text ›",
+        color = PlatformTheme.colorScheme.primary,
+        style = PlatformTheme.typography.body,
+        modifier =
+            Modifier.clickable {
+                action.onClicked.invoke(
+                    ClickContext(
+                        launcher = { url ->
+                            uriHandler.openUri(url)
+                        },
+                    ),
+                )
+            },
+    )
 }
 
 @Composable

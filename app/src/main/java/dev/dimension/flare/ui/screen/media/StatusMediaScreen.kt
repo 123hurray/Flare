@@ -1,9 +1,13 @@
 package dev.dimension.flare.ui.screen.media
 
 import android.Manifest
+import android.app.Activity
 import android.content.ClipData
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -17,6 +21,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +49,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
@@ -57,6 +64,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -64,16 +72,21 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -81,8 +94,12 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.state.rememberPlayPauseButtonState
@@ -103,6 +120,7 @@ import compose.icons.fontawesomeicons.solid.Download
 import compose.icons.fontawesomeicons.solid.Pause
 import compose.icons.fontawesomeicons.solid.Play
 import compose.icons.fontawesomeicons.solid.ShareNodes
+import compose.icons.fontawesomeicons.solid.Tv
 import compose.icons.fontawesomeicons.solid.Xmark
 import dev.dimension.flare.R
 import dev.dimension.flare.common.VideoDownloadHelper
@@ -200,6 +218,25 @@ internal fun StatusMediaScreen(
     LaunchedEffect(pagerState.currentPage) {
         state.setCurrentPage(pagerState.currentPage)
     }
+    val configuration = LocalConfiguration.current
+    val activity = remember(context) { context.findActivity() }
+    val currentMedia = state.medias.takeSuccess()?.getOrNull(state.currentPage)
+    val isCurrentVideo = currentMedia is UiMedia.Video
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    var videoFullscreen by rememberSaveable { mutableStateOf(false) }
+    val landscapeVideoMode = isCurrentVideo && (videoFullscreen || isLandscape)
+    VideoFullscreenEffect(
+        activity = activity,
+        enabled = videoFullscreen,
+    )
+    LaunchedEffect(isCurrentVideo) {
+        if (!isCurrentVideo) {
+            videoFullscreen = false
+        }
+    }
+    BackHandler(enabled = videoFullscreen) {
+        videoFullscreen = false
+    }
     FlareTheme(darkTheme = true) {
         val swiperState =
             rememberSwiperState(
@@ -267,11 +304,18 @@ internal fun StatusMediaScreen(
                                                     },
                                                     setLockPager = {
                                                         if (pagerState.currentPage == index) {
-                                                            if (state.lockPager != it) {
-                                                                if (!isBigScreen) {
-                                                                    state.setShowUi(!it)
+                                                            if (state.lockPager != it.locked) {
+                                                                if (it.locked) {
+                                                                    if (!isBigScreen) {
+                                                                        state.setShowUi(false)
+                                                                    }
+                                                                    state.setLockPager(true)
+                                                                } else {
+                                                                    state.setLockPager(false)
+                                                                    if (!isBigScreen && it.showUiOnUnlock) {
+                                                                        state.setShowUi(true)
+                                                                    }
                                                                 }
-                                                                state.setLockPager(it)
                                                             }
                                                         }
                                                     },
@@ -283,27 +327,138 @@ internal fun StatusMediaScreen(
                                                     },
                                                 )
                                             } else if (media is UiMedia.Video) {
-                                                VideoPlayer(
-                                                    uri = media.url,
-                                                    previewUri = media.thumbnailUrl,
-                                                    contentDescription = media.description,
-                                                    customHeaders = media.customHeaders,
-                                                    aspectRatio = media.aspectRatio,
-                                                    autoPlay = true,
-                                                    onClick = {
-                                                        state.setShowUi(!state.showUi)
-                                                    },
-                                                    showControls = true,
-                                                    keepScreenOn = true,
-                                                    muted = false,
-                                                    contentScale = ContentScale.Fit,
-                                                    onLongClick = {
-                                                        hapticFeedback.performHapticFeedback(
-                                                            HapticFeedbackType.LongPress,
+                                                val qualityOptions =
+                                                    remember(media) {
+                                                        media.qualityOptions()
+                                                    }
+                                                var selectedQuality by remember(media.url, qualityOptions) {
+                                                    mutableStateOf(qualityOptions.first())
+                                                }
+                                                var videoPlaybackSpeed by rememberSaveable(media.url) {
+                                                    mutableStateOf(1f)
+                                                }
+                                                var videoZoom by remember(media.url) {
+                                                    mutableFloatStateOf(1f)
+                                                }
+                                                var videoOffsetX by remember(media.url) {
+                                                    mutableFloatStateOf(0f)
+                                                }
+                                                var videoOffsetY by remember(media.url) {
+                                                    mutableFloatStateOf(0f)
+                                                }
+                                                var videoViewportSize by remember(media.url) {
+                                                    mutableStateOf(IntSize.Zero)
+                                                }
+                                                LaunchedEffect(videoZoom, landscapeVideoMode) {
+                                                    state.setLockPager(landscapeVideoMode && videoZoom > 1.02f)
+                                                }
+                                                LaunchedEffect(videoZoom, videoViewportSize) {
+                                                    videoOffsetX = videoOffsetX.coerceVideoOffset(videoZoom, videoViewportSize.width)
+                                                    videoOffsetY = videoOffsetY.coerceVideoOffset(videoZoom, videoViewportSize.height)
+                                                }
+                                                Box(
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxSize()
+                                                            .clipToBounds(),
+                                                ) {
+                                                    VideoPlayer(
+                                                        uri = selectedQuality.url,
+                                                        previewUri = media.thumbnailUrl,
+                                                        contentDescription = media.description,
+                                                        customHeaders = media.customHeaders,
+                                                        aspectRatio = media.aspectRatio,
+                                                        autoPlay = true,
+                                                        onClick = {
+                                                            state.setShowUi(!state.showUi)
+                                                        },
+                                                        showControls = true,
+                                                        keepScreenOn = true,
+                                                        muted = false,
+                                                        contentScale = ContentScale.Fit,
+                                                        enableSpeedGesture = !landscapeVideoMode,
+                                                        videoScale = videoZoom,
+                                                        videoTranslationX = videoOffsetX,
+                                                        videoTranslationY = videoOffsetY,
+                                                        playbackSpeed = videoPlaybackSpeed,
+                                                        modifier =
+                                                            Modifier
+                                                                .fillMaxSize()
+                                                                .onSizeChanged {
+                                                                    videoViewportSize = it
+                                                                },
+                                                        onLongClick = {
+                                                            hapticFeedback.performHapticFeedback(
+                                                                HapticFeedbackType.LongPress,
+                                                            )
+                                                            state.setShowSheet(true)
+                                                        },
+                                                    )
+                                                    VideoGestureLayer(
+                                                        isLandscape = landscapeVideoMode,
+                                                        onTap = {
+                                                            state.setShowUi(!state.showUi)
+                                                        },
+                                                        onTransform = { pan, zoom ->
+                                                            val nextZoom = (videoZoom * zoom).coerceIn(1f, 3f)
+                                                            videoZoom = nextZoom
+                                                            videoOffsetX =
+                                                                (videoOffsetX + pan.x)
+                                                                    .coerceVideoOffset(nextZoom, videoViewportSize.width)
+                                                            videoOffsetY =
+                                                                (videoOffsetY + pan.y)
+                                                                    .coerceVideoOffset(nextZoom, videoViewportSize.height)
+                                                        },
+                                                        modifier = Modifier.fillMaxSize(),
+                                                    )
+                                                    if (state.showUi && landscapeVideoMode) {
+                                                        Glassify(
+                                                            modifier =
+                                                                Modifier
+                                                                    .align(Alignment.BottomCenter)
+                                                                    .systemBarsPadding()
+                                                                    .padding(horizontal = 24.dp, vertical = 10.dp)
+                                                                    .fillMaxWidth(),
+                                                            color = Color.Black.copy(alpha = 0.48f),
+                                                            contentColor = Color.White,
+                                                        ) {
+                                                            PlayerControl(
+                                                                surfaceBindingManager.player,
+                                                                modifier =
+                                                                    Modifier
+                                                                        .fillMaxWidth()
+                                                                        .padding(horizontal = 8.dp),
+                                                            )
+                                                        }
+                                                    }
+                                                    if (state.showUi || !landscapeVideoMode) {
+                                                        VideoFloatingControls(
+                                                            isLandscape = landscapeVideoMode,
+                                                            qualityOptions = qualityOptions,
+                                                            selectedQuality = selectedQuality,
+                                                            onQualitySelected = {
+                                                                selectedQuality = it
+                                                            },
+                                                            playbackSpeed = videoPlaybackSpeed,
+                                                            onPlaybackSpeedSelected = {
+                                                                videoPlaybackSpeed = it
+                                                            },
+                                                            zoom = videoZoom,
+                                                            onZoomChange = {
+                                                                videoZoom = it
+                                                                videoOffsetX = videoOffsetX.coerceVideoOffset(it, videoViewportSize.width)
+                                                                videoOffsetY = videoOffsetY.coerceVideoOffset(it, videoViewportSize.height)
+                                                            },
+                                                            onEnterFullscreen = {
+                                                                videoFullscreen = true
+                                                            },
+                                                            onExitFullscreen = {
+                                                                videoFullscreen = false
+                                                            },
+                                                            modifier = Modifier.fillMaxSize(),
                                                         )
-                                                        state.setShowSheet(true)
-                                                    },
-                                                )
+                                                    }
+                                                }
                                             } else if (media is UiMedia.Audio) {
                                                 VideoPlayer(
                                                     uri = media.url,
@@ -329,11 +484,18 @@ internal fun StatusMediaScreen(
                                                     description = null,
                                                     onClick = { /*TODO*/ },
                                                     setLockPager = {
-                                                        if (state.lockPager != it) {
-                                                            if (!isBigScreen) {
-                                                                state.setShowUi(!it)
+                                                        if (state.lockPager != it.locked) {
+                                                            if (it.locked) {
+                                                                if (!isBigScreen) {
+                                                                    state.setShowUi(false)
+                                                                }
+                                                                state.setLockPager(true)
+                                                            } else {
+                                                                state.setLockPager(false)
+                                                                if (!isBigScreen && it.showUiOnUnlock) {
+                                                                    state.setShowUi(true)
+                                                                }
                                                             }
-                                                            state.setLockPager(it)
                                                         }
                                                     },
                                                     modifier =
@@ -355,7 +517,7 @@ internal fun StatusMediaScreen(
                             }
                         }
                         androidx.compose.animation.AnimatedVisibility(
-                            visible = state.showUi,
+                            visible = state.showUi && !landscapeVideoMode,
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
@@ -449,7 +611,7 @@ internal fun StatusMediaScreen(
                             val content = status as? UiTimelineV2.Post
                             if (content is UiTimelineV2.Post) {
                                 androidx.compose.animation.AnimatedVisibility(
-                                    visible = state.showUi,
+                                    visible = state.showUi && !landscapeVideoMode,
                                     modifier =
                                         Modifier
                                             .align(Alignment.BottomCenter),
@@ -548,8 +710,8 @@ internal fun StatusMediaScreen(
                                                                     ),
                                                                 ).clickable {
                                                                     toStatusDetail()
-                                                                },
-                                                        maxLines = 3,
+                                                        },
+                                                        maxLines = 4,
                                                         showExpandButton = false,
                                                         isDetail = true,
                                                     )
@@ -561,7 +723,7 @@ internal fun StatusMediaScreen(
                             }
                         }
                     }
-                    if (isBigScreen) {
+                    if (isBigScreen && !landscapeVideoMode) {
                         AnimatedVisibility(state.showUi) {
                             Surface(
                                 modifier =
@@ -717,6 +879,330 @@ internal fun StatusMediaScreen(
     }
 }
 
+private data class VideoQualityOption(
+    val label: String,
+    val url: String,
+)
+
+private fun UiMedia.Video.qualityOptions(): List<VideoQualityOption> {
+    val options =
+        variants
+            .filter { it.url.isNotBlank() }
+            .distinctBy { it.url }
+            .sortedWith(
+                compareByDescending<UiMedia.VideoVariant> { it.height }
+                    .thenByDescending { it.bitrate ?: 0 },
+            ).mapIndexed { index, variant ->
+                VideoQualityOption(
+                    label = variant.qualityLabel(index),
+                    url = variant.url,
+                )
+            }.ifEmpty {
+                listOf(
+                    VideoQualityOption(
+                        label = "原始",
+                        url = url,
+                    ),
+                )
+            }
+    return if (options.any { it.url == url }) {
+        options
+    } else {
+        listOf(VideoQualityOption("原始", url)) + options
+    }
+}
+
+private fun UiMedia.VideoVariant.qualityLabel(index: Int): String =
+    when {
+        height > 0f && (bitrate ?: 0) > 0 -> "${height.toInt()}P ${bitrate.orZeroKbps()}K"
+        height > 0f -> "${height.toInt()}P"
+        (bitrate ?: 0) > 0 -> "${bitrate.orZeroKbps()}K"
+        index == 0 -> "原始"
+        else -> "线路 ${index + 1}"
+    }
+
+private fun Int?.orZeroKbps(): Int = ((this ?: 0) / 1000).coerceAtLeast(1)
+
+@Composable
+private fun VideoGestureLayer(
+    isLandscape: Boolean,
+    onTap: () -> Unit,
+    onTransform: (pan: Offset, zoom: Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier =
+            modifier
+                .pointerInput(onTap) {
+                    detectTapGestures(
+                        onTap = {
+                            onTap()
+                        },
+                    )
+                }.then(
+                    if (isLandscape) {
+                        Modifier.pointerInput(onTransform) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                onTransform(pan, zoom)
+                            }
+                        }
+                    } else {
+                        Modifier
+                    },
+                ),
+    )
+}
+
+private val videoPlaybackSpeeds = listOf(0.1f, 0.2f, 0.5f, 1f, 2f, 3f, 5f)
+
+@Composable
+private fun VideoFloatingControls(
+    isLandscape: Boolean,
+    qualityOptions: List<VideoQualityOption>,
+    selectedQuality: VideoQualityOption,
+    onQualitySelected: (VideoQualityOption) -> Unit,
+    playbackSpeed: Float,
+    onPlaybackSpeedSelected: (Float) -> Unit,
+    zoom: Float,
+    onZoomChange: (Float) -> Unit,
+    onEnterFullscreen: () -> Unit,
+    onExitFullscreen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (isLandscape) {
+        Row(
+            modifier =
+                modifier
+                    .systemBarsPadding()
+                    .padding(12.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Spacer(modifier = Modifier.weight(1f))
+            VideoQualityMenu(
+                qualityOptions = qualityOptions,
+                selectedQuality = selectedQuality,
+                onQualitySelected = onQualitySelected,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            VideoSpeedMenu(
+                playbackSpeed = playbackSpeed,
+                onPlaybackSpeedSelected = onPlaybackSpeedSelected,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Glassify(
+                onClick = {
+                    onZoomChange(nextVideoZoom(zoom))
+                },
+                color = Color.Black.copy(alpha = 0.48f),
+                contentColor = Color.White,
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Text(
+                    text = "${zoom.oneDecimal()}x",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Glassify(
+                onClick = onExitFullscreen,
+                modifier = Modifier.size(40.dp),
+                color = Color.Black.copy(alpha = 0.48f),
+                contentColor = Color.White,
+                shape = CircleShape,
+            ) {
+                FAIcon(
+                    FontAwesomeIcons.Solid.Xmark,
+                    contentDescription = "退出横屏",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    } else {
+        Box(modifier = modifier) {
+            Glassify(
+                onClick = onEnterFullscreen,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                        .size(40.dp),
+                color = Color.Black.copy(alpha = 0.48f),
+                contentColor = Color.White,
+                shape = CircleShape,
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    FAIcon(
+                        FontAwesomeIcons.Solid.Tv,
+                        contentDescription = "横屏全屏",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoSpeedMenu(
+    playbackSpeed: Float,
+    onPlaybackSpeedSelected: (Float) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Glassify(
+            onClick = {
+                expanded = true
+            },
+            color = Color.Black.copy(alpha = 0.48f),
+            contentColor = Color.White,
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text(
+                text = "${playbackSpeed.speedLabel()}x",
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = {
+                expanded = false
+            },
+        ) {
+            videoPlaybackSpeeds.forEach { speed ->
+                DropdownMenuItem(
+                    text = {
+                        Text("${speed.speedLabel()}x")
+                    },
+                    onClick = {
+                        onPlaybackSpeedSelected(speed)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoQualityMenu(
+    qualityOptions: List<VideoQualityOption>,
+    selectedQuality: VideoQualityOption,
+    onQualitySelected: (VideoQualityOption) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Glassify(
+            onClick = {
+                expanded = true
+            },
+            color = Color.Black.copy(alpha = 0.48f),
+            contentColor = Color.White,
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text(
+                text = selectedQuality.label,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = {
+                expanded = false
+            },
+        ) {
+            qualityOptions.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(option.label)
+                    },
+                    onClick = {
+                        onQualitySelected(option)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun nextVideoZoom(current: Float): Float =
+    when {
+        current < 1.25f -> 1.5f
+        current < 1.75f -> 2f
+        current < 2.5f -> 3f
+        else -> 1f
+    }
+
+private fun Float.coerceVideoOffset(
+    zoom: Float,
+    viewport: Int,
+): Float {
+    if (zoom <= 1.02f || viewport <= 0) {
+        return 0f
+    }
+    val maxOffset = viewport * (zoom - 1f) / 2f
+    return coerceIn(-maxOffset, maxOffset)
+}
+
+private fun Float.oneDecimal(): String =
+    if (this % 1f == 0f) {
+        toInt().toString()
+    } else {
+        "%.1f".format(this)
+    }
+
+private fun Float.speedLabel(): String =
+    if (this % 1f == 0f) {
+        toInt().toString()
+    } else {
+        toString().trimEnd('0').trimEnd('.')
+    }
+
+@Composable
+private fun VideoFullscreenEffect(
+    activity: Activity?,
+    enabled: Boolean,
+) {
+    DisposableEffect(activity, enabled) {
+        if (activity == null || !enabled) {
+            onDispose { }
+        } else {
+            val window = activity.window
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            WindowInsetsControllerCompat(window, window.decorView).apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            }
+            onDispose {
+                if (!activity.isChangingConfigurations) {
+                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+                }
+            }
+        }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -814,21 +1300,32 @@ private fun ImageItem(
     description: String?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    setLockPager: (Boolean) -> Unit,
+    setLockPager: (ImagePagerLockState) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     val zoomableState =
         rememberZoomableState(zoomSpec = ZoomSpec(maxZoomFactor = 10f))
+    var keepUiHiddenOnNextUnlock by remember {
+        mutableStateOf(false)
+    }
     LaunchedEffect(zoomableState.zoomFraction) {
-        zoomableState.zoomFraction?.let {
-            setLockPager(it > 0.01f)
-        } ?: setLockPager(false)
+        val locked = (zoomableState.zoomFraction ?: 0f) > 0.01f
+        setLockPager(
+            ImagePagerLockState(
+                locked = locked,
+                showUiOnUnlock = !keepUiHiddenOnNextUnlock,
+            ),
+        )
+        if (!locked) {
+            keepUiHiddenOnNextUnlock = false
+        }
     }
     BackHandler(
         enabled = (zoomableState.zoomFraction ?: 0f) > 0.01f,
     ) {
         scope.launch {
+            keepUiHiddenOnNextUnlock = true
             zoomableState.resetZoom()
         }
     }
@@ -933,6 +1430,11 @@ private fun ImageItem(
         }
     }
 }
+
+private data class ImagePagerLockState(
+    val locked: Boolean,
+    val showUiOnUnlock: Boolean,
+)
 
 @OptIn(ExperimentalCoilApi::class)
 @Composable

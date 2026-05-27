@@ -4,6 +4,7 @@ package dev.dimension.flare.ui.component
 
 import android.content.Context
 import android.os.Build
+import android.view.TextureView
 import android.view.WindowManager
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedContent
@@ -44,6 +45,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.core.content.getSystemService
@@ -56,7 +58,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.modifiers.resizeWithContentScale
 import androidx.media3.ui.compose.state.rememberPresentationState
 import compose.icons.FontAwesomeIcons
@@ -91,6 +92,11 @@ public fun VideoPlayer(
     contentScale: ContentScale = ContentScale.Crop,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
+    enableSpeedGesture: Boolean = true,
+    videoScale: Float = 1f,
+    videoTranslationX: Float = 0f,
+    videoTranslationY: Float = 0f,
+    playbackSpeed: Float = 1f,
     autoPlay: Boolean = true,
     remainingTimeContent: @Composable (BoxScope.(Long) -> Unit)? = null,
     loadingPlaceholder: @Composable BoxScope.() -> Unit = {
@@ -228,6 +234,9 @@ public fun VideoPlayer(
                     }
                 }
             }
+            LaunchedEffect(player, playbackSpeed) {
+                player.setPlaybackSpeed(playbackSpeed)
+            }
             LaunchedEffect(player) {
                 while (true) {
                     isLoaded = player.isPlaying || player.currentPosition > 0L
@@ -250,12 +259,18 @@ public fun VideoPlayer(
                             .resizeWithContentScale(
                                 contentScale = contentScale,
                                 sourceSizeDp = playerState.videoSizeDp,
-                            ).videoSpeedGesture(
-                                player = player,
-                                longPressTimeoutMillis = viewConfiguration.longPressTimeoutMillis,
-                                speedLockDistancePx = speedLockDistancePx,
-                                onClick = onClick,
                             ).let {
+                                if (enableSpeedGesture) {
+                                    it.videoSpeedGesture(
+                                        player = player,
+                                        longPressTimeoutMillis = viewConfiguration.longPressTimeoutMillis,
+                                        speedLockDistancePx = speedLockDistancePx,
+                                        onClick = onClick,
+                                    )
+                                } else {
+                                    it.tapGesture(onClick)
+                                }
+                            }.let {
                                 if (keepScreenOn) {
                                     it.keepScreenOn()
                                 } else {
@@ -277,9 +292,21 @@ public fun VideoPlayer(
                     Box(
                         modifier = playerModifier,
                     ) {
-                        PlayerSurface(
-                            player = player,
+                        AndroidView(
+                            factory = { context ->
+                                TextureView(context)
+                            },
                             modifier = Modifier.fillMaxSize(),
+                            update = { view ->
+                                if (view.tag != player) {
+                                    player.setVideoTextureView(view)
+                                    view.tag = player
+                                }
+                                view.scaleX = videoScale
+                                view.scaleY = videoScale
+                                view.translationX = videoTranslationX
+                                view.translationY = videoTranslationY
+                            },
                         )
                         remainingTimeContent?.invoke(this, remainingTime)
                     }
@@ -291,7 +318,18 @@ public fun VideoPlayer(
             }
         }
     }
-}
+    }
+
+private fun Modifier.tapGesture(onClick: (() -> Unit)?): Modifier =
+    pointerInput(onClick) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false)
+            val up = waitForUpOrCancellation()
+            if (up != null) {
+                onClick?.invoke()
+            }
+        }
+    }
 
 private fun Modifier.videoSpeedGesture(
     player: ExoPlayer,
@@ -393,6 +431,8 @@ public class SurfaceBindingManager(
 
     private val candidates = mutableMapOf<Binding, Candidate>()
     private var activeBinding: Binding? = null
+    private var currentUri: String? = null
+    private var currentHeaders: Map<String, String> = emptyMap()
 
     internal fun register(
         uri: String,
@@ -447,7 +487,9 @@ public class SurfaceBindingManager(
             if (best != null) {
                 // Check if we are switching to a candidate with the SAME URI
                 val oldCandidate = candidates[oldBinding]
-                val sameUri = oldCandidate?.uri == best.uri && oldCandidate.customHeaders == best.customHeaders
+                val sameUri =
+                    oldCandidate?.uri == best.uri && oldCandidate.customHeaders == best.customHeaders ||
+                        currentUri == best.uri && currentHeaders == best.customHeaders
 
                 if (!sameUri) {
                     val dataSourceFactory =
@@ -460,11 +502,14 @@ public class SurfaceBindingManager(
                     player.setMediaSource(mediaSource)
                     player.setPlaybackSpeed(1f)
                     player.prepare()
+                    currentUri = best.uri
+                    currentHeaders = best.customHeaders
                     player.play()
                     // Notify bindings
                 } else {
                     // Same URI: Seamless handover
                     // Do nothing to the player state (it keeps playing)
+                    player.play()
                 }
 
                 oldCandidate?.callback?.invoke(null)
