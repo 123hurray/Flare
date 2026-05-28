@@ -40,6 +40,9 @@ public class LogStatusHistoryPresenter(
     @Composable
     override fun body(): State {
         LaunchedEffect(statusKey, accountType, status) {
+            if (statusKey.id.startsWith("comment:")) {
+                return@LaunchedEffect
+            }
             cacheDatabase.connect {
                 val current = status
                 if (current != null) {

@@ -74,7 +74,16 @@ internal class ZhihuService(
                     ZhihuContentType.Answer ->
                         requestJson("https://www.zhihu.com/api/v4/answers/${key.id}?include=author,content,voteup_count,comment_count,excerpt,question,created_time")
                     ZhihuContentType.Article ->
-                        requestJson("https://www.zhihu.com/api/v4/articles/${key.id}?include=author,content,voteup_count,comment_count,excerpt,created")
+                        requestFirstJson(
+                            "detail",
+                            statusId,
+                            listOf(
+                                "https://api.zhihu.com/v4/articles/${key.id}?include=author,content,voteup_count,comment_count,excerpt,created,updated",
+                                "https://www.zhihu.com/api/v4/articles/${key.id}?include=author,content,voteup_count,comment_count,excerpt,created,updated",
+                                "https://api.zhihu.com/v4/articles/${key.id}",
+                                "https://www.zhihu.com/api/v4/articles/${key.id}",
+                            ),
+                        )
                     ZhihuContentType.Pin ->
                         requestJson("https://www.zhihu.com/api/v4/pins/${key.id}")
                     ZhihuContentType.Question -> error("Question detail should be loaded from answers feed")
@@ -199,6 +208,23 @@ internal class ZhihuService(
             )
         }
         return JSON.decodeFromString(body)
+    }
+
+    private suspend fun requestFirstJson(
+        scope: String,
+        id: String,
+        urls: List<String>,
+    ): JsonObject {
+        var lastError: Throwable? = null
+        urls.forEach { url ->
+            runCatching {
+                return requestJson(url)
+            }.onFailure {
+                println("ZhihuService: $scope candidate failed id=$id url=$url message=${it.message}")
+                lastError = it
+            }
+        }
+        throw lastError ?: IllegalStateException("No Zhihu $scope candidates for $id")
     }
 
     private fun io.ktor.client.request.HttpRequestBuilder.zhihuHeaders(
@@ -418,8 +444,8 @@ private fun JsonObject.toFeedContent(): ZhihuContent? {
             ?.string("intent_url")
             ?: feedContent["title"].objectOrNull()?.get("action").objectOrNull()?.string("intent_url")
     val intentKey = intentUrl?.let { ZhihuContentKey.parseOrNull(it) }
-    val type = extra?.string("type")?.toZhihuContentType() ?: intentKey?.type ?: return null
-    val id = extra?.string("id")?.normalizeZhihuContentId(type) ?: intentKey?.id ?: return null
+    val type = intentKey?.type ?: extra?.string("type")?.toZhihuContentType() ?: return null
+    val id = intentKey?.id ?: extra?.string("id")?.normalizeZhihuContentId(type) ?: return null
     val questionId = intentUrl?.let { Regex("/question/(\\d+)").find(it)?.groupValues?.getOrNull(1) }
     val createdTime =
         string("id")

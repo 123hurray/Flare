@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.paging.Pager
 import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.filter
 import androidx.paging.map
 import dev.dimension.flare.common.PagingState
 import dev.dimension.flare.common.toPagingState
@@ -17,8 +18,14 @@ import dev.dimension.flare.data.datasource.microblog.paging.TimelinePagingMapper
 import dev.dimension.flare.data.datasource.microblog.pagingConfig
 import dev.dimension.flare.data.datastore.AppDataStore
 import dev.dimension.flare.data.translation.TranslationSettingsSupport
+import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.presenter.PresenterBase
+import dev.dimension.flare.ui.render.RenderContent
+import dev.dimension.flare.ui.render.RenderRun
+import dev.dimension.flare.ui.render.uiRichTextOf
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -73,12 +80,15 @@ public class GlobalStatusTimelinePresenter(
                                     )
                             }
                         }.flow.map { pagingData ->
-                            pagingData.map {
+                            pagingData.filter {
+                                pagingKey != LogStatusHistoryPresenter.FOOTPRINTS_PAGING_KEY ||
+                                    !it.status.data.statusKey.id.startsWith("comment:")
+                            }.map {
                                 TimelinePagingMapper.toUi(
                                     item = it,
                                     pagingKey = pagingKey,
                                     translationDisplayOptions = translationDisplayOptions,
-                                )
+                                ).asGlobalStatusTimelineItem(pagingKey)
                             }
                         }
                     }
@@ -111,3 +121,67 @@ public class GlobalStatusTimelinePresenter(
         }
     }
 }
+
+private fun UiTimelineV2.asGlobalStatusTimelineItem(pagingKey: String): UiTimelineV2 =
+    when {
+        pagingKey != LogStatusHistoryPresenter.FAVORITES_PAGING_KEY -> this
+        this !is UiTimelineV2.Post -> this
+        platformType != PlatformType.Zhihu -> this
+        !statusKey.id.startsWith("article:") -> this
+        else -> toZhihuArticleSummary()
+    }
+
+private fun UiTimelineV2.Post.toZhihuArticleSummary(): UiTimelineV2.Post {
+    val title = content.renderRuns.firstOrNull() as? RenderContent.Text
+    val titleText =
+        title
+            ?.plainText()
+            ?.trim()
+            .orEmpty()
+    val bodyText =
+        content
+            .renderRuns
+            .drop(if (titleText.isNotBlank()) 1 else 0)
+            .filterIsInstance<RenderContent.Text>()
+            .joinToString("\n") { it.plainText().trim() }
+            .trim()
+            .takeIf { it.isNotBlank() }
+            ?.ellipsize(180)
+    val renderRuns =
+        listOfNotNull(
+            title,
+            bodyText?.let {
+                RenderContent.Text(
+                    runs = persistentListOf(RenderRun.Text(it)),
+                )
+            },
+        )
+    if (renderRuns.isEmpty()) return copy(images = images.take(6).toImmutableList())
+    val raw = listOf(titleText, bodyText.orEmpty()).filter { it.isNotBlank() }.joinToString("\n\n")
+    return copy(
+        content =
+            uiRichTextOf(
+                renderRuns = renderRuns,
+                raw = raw,
+                innerText = raw,
+                imageUrls = persistentListOf(),
+                sourceLanguages = sourceLanguages,
+            ),
+        images = images.take(6).toImmutableList(),
+    )
+}
+
+private fun RenderContent.Text.plainText(): String =
+    runs.joinToString(separator = "") {
+        when (it) {
+            is RenderRun.Text -> it.text
+            else -> ""
+        }
+    }
+
+private fun String.ellipsize(maxLength: Int): String =
+    if (length <= maxLength) {
+        this
+    } else {
+        take(maxLength).trimEnd() + "..."
+    }

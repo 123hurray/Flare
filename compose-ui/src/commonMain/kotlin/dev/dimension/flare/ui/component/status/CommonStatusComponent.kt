@@ -331,14 +331,23 @@ public fun CommonStatusComponent(
             }
             if (isDetail) {
                 SelectionContainer {
-                    StatusContentComponent(
-                        content = item.content,
-                        contentWarning = item.contentWarning,
-                        poll = item.poll,
-                        maxLines = Int.MAX_VALUE,
-                        showExpandButton = showExpandButton,
-                        onExpandClick = null,
-                    )
+                    CompositionLocalProvider(
+                        PlatformTextStyle provides
+                            if (item.platformType == PlatformType.Dongqiudi) {
+                                PlatformTheme.typography.h4
+                            } else {
+                                PlatformTextStyle.current
+                            },
+                    ) {
+                        StatusContentComponent(
+                            content = item.content,
+                            contentWarning = item.contentWarning,
+                            poll = item.poll,
+                            maxLines = Int.MAX_VALUE,
+                            showExpandButton = showExpandButton,
+                            onExpandClick = null,
+                        )
+                    }
                 }
             } else {
                 StatusContentComponent(
@@ -768,6 +777,7 @@ private fun ZhihuDetailStatusComponent(
                     RichText(
                         text = bodyContent,
                         modifier = Modifier.fillMaxWidth(),
+                        textStyle = PlatformTheme.typography.h4,
                         onBlockImageClick = { url ->
                             openStatusRichTextImage(item, url, uriHandler)
                         },
@@ -837,6 +847,7 @@ private fun ZhihuDetailStatusComponent(
                     onBlockImageClick = { url ->
                         openStatusRichTextImage(item, url, uriHandler)
                     },
+                    textStyle = PlatformTheme.typography.h4,
                 )
             }
         }
@@ -1702,6 +1713,7 @@ private fun StatusContentComponent(
     onExpandClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     onBlockImageClick: ((String) -> Unit)? = null,
+    textStyle: androidx.compose.ui.text.TextStyle = PlatformTextStyle.current,
 ) {
     var expanded by rememberSaveable {
         mutableStateOf(false)
@@ -1747,6 +1759,7 @@ private fun StatusContentComponent(
                     RichText(
                         text = content,
                         modifier = Modifier.fillMaxWidth(),
+                        textStyle = textStyle,
                         maxLines =
                             if (expanded || maxLines == Int.MAX_VALUE) {
                                 Int.MAX_VALUE

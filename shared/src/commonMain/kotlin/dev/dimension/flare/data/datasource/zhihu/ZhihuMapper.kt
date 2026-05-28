@@ -203,7 +203,7 @@ private fun ZhihuContent.toTitleContent(
                         ),
                 ),
             ),
-        block = RenderBlockStyle(headingLevel = if (detail) 3 else 4),
+        block = RenderBlockStyle(headingLevel = if (detail) 5 else 4),
     )
 }
 

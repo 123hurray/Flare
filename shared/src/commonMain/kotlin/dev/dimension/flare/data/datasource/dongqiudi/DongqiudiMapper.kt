@@ -35,7 +35,7 @@ internal fun DongqiudiArticle.toUiTimeline(
     val content =
         bodyHtml
             ?.toArticleHtml()
-            ?.let { parseHtml("<h2>$title</h2>$it").toUi(sourceLanguages) }
+            ?.let { parseHtml("<h5>$title</h5>$it").toUi(sourceLanguages) }
             ?: listOf(title, description)
                 .filter { it.isNotBlank() }
                 .joinToString("\n")
