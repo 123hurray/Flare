@@ -23,7 +23,18 @@ internal fun EntryProviderScope<NavKey>.statusEntryBuilder(
         StatusScreen(
             statusKey = args.statusKey,
             accountType = args.accountType,
-            onBack = onBack
+            onBack = onBack,
+            onAgent = { platform, text ->
+                navigate(
+                    Route.Agent.Chat(
+                        sourceRoute = "status",
+                        statusKey = args.statusKey,
+                        accountType = args.accountType,
+                        selectedStatusPlatform = platform,
+                        selectedStatusText = text,
+                    ),
+                )
+            },
         )
     }
 
@@ -39,7 +50,18 @@ internal fun EntryProviderScope<NavKey>.statusEntryBuilder(
         VVOStatusScreen(
             statusKey = args.statusKey,
             accountType = args.accountType,
-            onBack = onBack
+            onBack = onBack,
+            onAgent = { platform, text ->
+                navigate(
+                    Route.Agent.Chat(
+                        sourceRoute = "status",
+                        statusKey = args.statusKey,
+                        accountType = args.accountType,
+                        selectedStatusPlatform = platform,
+                        selectedStatusText = text,
+                    ),
+                )
+            },
         )
     }
 

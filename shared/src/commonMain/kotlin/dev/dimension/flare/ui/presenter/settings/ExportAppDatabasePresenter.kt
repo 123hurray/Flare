@@ -29,6 +29,10 @@ public class ExportAppDatabasePresenter :
                 keywordFilters = appDatabase.keywordFilterDao().selectAll().first(),
                 searchHistories = appDatabase.searchHistoryDao().select().first(),
                 rssSources = appDatabase.rssSourceDao().getAll().first(),
+                agentConversations = appDatabase.agentDao().conversationSnapshot(),
+                agentMessages = appDatabase.agentDao().allMessages(),
+                agentEvents = appDatabase.agentDao().allEvents(),
+                agentArtifacts = appDatabase.agentDao().allArtifacts(),
             )
         return export.encodeJson()
     }

@@ -10,6 +10,7 @@ import androidx.room3.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
 import dev.dimension.flare.data.database.app.dao.AccountDao
+import dev.dimension.flare.data.database.app.dao.AgentDao
 import dev.dimension.flare.data.database.app.dao.ApplicationDao
 import dev.dimension.flare.data.database.app.dao.DraftDao
 import dev.dimension.flare.data.database.app.dao.KeywordFilterDao
@@ -26,8 +27,12 @@ import dev.dimension.flare.data.database.app.dao.SearchHistoryDao
         dev.dimension.flare.data.database.app.model.DbKeywordFilter::class,
         dev.dimension.flare.data.database.app.model.DbSearchHistory::class,
         dev.dimension.flare.data.database.app.model.DbRssSources::class,
+        dev.dimension.flare.data.database.app.model.DbAgentConversation::class,
+        dev.dimension.flare.data.database.app.model.DbAgentMessage::class,
+        dev.dimension.flare.data.database.app.model.DbAgentEvent::class,
+        dev.dimension.flare.data.database.app.model.DbAgentArtifact::class,
     ],
-    version = 10,
+    version = 11,
     autoMigrations = [
         AutoMigration(
             from = 3,
@@ -73,6 +78,8 @@ internal abstract class AppDatabase : RoomDatabase() {
 
     abstract fun rssSourceDao(): RssSourceDao
 
+    abstract fun agentDao(): AgentDao
+
     companion object {
         val MIGRATION_8_9 =
             object : Migration(8, 9) {
@@ -94,6 +101,62 @@ internal abstract class AppDatabase : RoomDatabase() {
                     connection.execSQL(
                         "ALTER TABLE DbKeywordFilter ADD COLUMN is_regex INTEGER NOT NULL DEFAULT 0",
                     )
+                }
+            }
+        val MIGRATION_10_11 =
+            object : Migration(10, 11) {
+                override suspend fun migrate(connection: SQLiteConnection) {
+                    connection.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS DbAgentConversation (
+                            id TEXT NOT NULL PRIMARY KEY,
+                            title TEXT NOT NULL,
+                            status TEXT NOT NULL,
+                            created_at INTEGER NOT NULL,
+                            updated_at INTEGER NOT NULL
+                        )
+                        """.trimIndent(),
+                    )
+                    connection.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS DbAgentMessage (
+                            id TEXT NOT NULL PRIMARY KEY,
+                            conversation_id TEXT NOT NULL,
+                            role TEXT NOT NULL,
+                            text TEXT NOT NULL,
+                            created_at INTEGER NOT NULL,
+                            FOREIGN KEY(conversation_id) REFERENCES DbAgentConversation(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                        )
+                        """.trimIndent(),
+                    )
+                    connection.execSQL("CREATE INDEX IF NOT EXISTS index_DbAgentMessage_conversation_id ON DbAgentMessage(conversation_id)")
+                    connection.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS DbAgentEvent (
+                            id TEXT NOT NULL PRIMARY KEY,
+                            conversation_id TEXT NOT NULL,
+                            message_id TEXT,
+                            type TEXT NOT NULL,
+                            payload_json TEXT NOT NULL,
+                            created_at INTEGER NOT NULL,
+                            FOREIGN KEY(conversation_id) REFERENCES DbAgentConversation(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                        )
+                        """.trimIndent(),
+                    )
+                    connection.execSQL("CREATE INDEX IF NOT EXISTS index_DbAgentEvent_conversation_id ON DbAgentEvent(conversation_id)")
+                    connection.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS DbAgentArtifact (
+                            id TEXT NOT NULL PRIMARY KEY,
+                            message_id TEXT NOT NULL,
+                            type TEXT NOT NULL,
+                            payload_json TEXT NOT NULL,
+                            created_at INTEGER NOT NULL,
+                            FOREIGN KEY(message_id) REFERENCES DbAgentMessage(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                        )
+                        """.trimIndent(),
+                    )
+                    connection.execSQL("CREATE INDEX IF NOT EXISTS index_DbAgentArtifact_message_id ON DbAgentArtifact(message_id)")
                 }
             }
     }

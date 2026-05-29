@@ -261,6 +261,20 @@ internal sealed interface Route : NavKey {
     data object Favorites : Route
 
     @Serializable
+    sealed interface Agent : Route {
+        @Serializable
+        data class Chat(
+            val conversationId: String? = null,
+            val initialText: String? = null,
+            val sourceRoute: String? = null,
+            val statusKey: MicroBlogKey? = null,
+            val accountType: AccountType? = null,
+            val selectedStatusPlatform: String? = null,
+            val selectedStatusText: String? = null,
+        ) : Agent
+    }
+
+    @Serializable
     sealed interface Profile : Route {
         @Serializable
         data class User(

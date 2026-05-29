@@ -50,6 +50,11 @@ public class ImportAppDatabasePresenter(
             if (export.rssSources.isNotEmpty()) {
                 appDatabase.rssSourceDao().insertAll(export.rssSources)
             }
+
+            export.agentConversations.forEach { appDatabase.agentDao().insertConversation(it) }
+            export.agentMessages.forEach { appDatabase.agentDao().insertMessage(it) }
+            export.agentEvents.forEach { appDatabase.agentDao().insertEvent(it) }
+            export.agentArtifacts.forEach { appDatabase.agentDao().insertArtifact(it) }
         }
     }
 

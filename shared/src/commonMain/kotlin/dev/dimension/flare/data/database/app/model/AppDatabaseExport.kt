@@ -9,4 +9,8 @@ internal data class AppDatabaseExport(
     val keywordFilters: List<DbKeywordFilter> = emptyList(),
     val searchHistories: List<DbSearchHistory> = emptyList(),
     val rssSources: List<DbRssSources> = emptyList(),
+    val agentConversations: List<DbAgentConversation> = emptyList(),
+    val agentMessages: List<DbAgentMessage> = emptyList(),
+    val agentEvents: List<DbAgentEvent> = emptyList(),
+    val agentArtifacts: List<DbAgentArtifact> = emptyList(),
 )

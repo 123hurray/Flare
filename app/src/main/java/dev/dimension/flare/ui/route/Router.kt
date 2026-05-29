@@ -25,6 +25,7 @@ import dev.dimension.flare.model.vvoHostShort
 import dev.dimension.flare.ui.assist.AssistContentState
 import dev.dimension.flare.ui.component.BottomSheetSceneStrategy
 import dev.dimension.flare.ui.component.platform.isBigScreen
+import dev.dimension.flare.ui.screen.agent.agentEntryBuilder
 import dev.dimension.flare.ui.screen.bluesky.blueskyEntryBuilder
 import dev.dimension.flare.ui.screen.compose.composeEntryBuilder
 import dev.dimension.flare.ui.screen.dm.dmEntryBuilder
@@ -111,6 +112,7 @@ internal fun Router(
         entryProvider =
             entryProvider {
                 homeEntryBuilder(navigate, onBack, openDrawer, uriHandler = uriHandler)
+                agentEntryBuilder(navigate, onBack)
                 blueskyEntryBuilder(navigate, onBack)
                 composeEntryBuilder(navigate, onBack)
                 dmEntryBuilder(navigate, onBack, navigationState)

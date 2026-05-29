@@ -1,5 +1,6 @@
 package dev.dimension.flare.ui.screen.status
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
@@ -41,6 +43,7 @@ import dev.dimension.flare.data.model.BottomBarBehavior
 import dev.dimension.flare.data.model.LocalAppearanceSettings
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.ui.common.threeFingerSwipeHorizontal
 import dev.dimension.flare.ui.common.isExpanded
 import dev.dimension.flare.ui.component.BackButton
 import dev.dimension.flare.ui.component.FAIcon
@@ -56,7 +59,9 @@ import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.onError
 import dev.dimension.flare.ui.model.onLoading
 import dev.dimension.flare.ui.model.onSuccess
+import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.presenter.invoke
+import dev.dimension.flare.ui.presenter.status.GlobalStatusCollectionPresenter
 import dev.dimension.flare.ui.presenter.status.VVOStatusDetailPresenter
 import dev.dimension.flare.ui.presenter.status.VVOStatusDetailState
 import dev.dimension.flare.ui.theme.screenHorizontalPadding
@@ -68,13 +73,21 @@ internal fun VVOStatusScreen(
     statusKey: MicroBlogKey,
     onBack: () -> Unit,
     accountType: AccountType,
+    onAgent: (platform: String?, text: String?) -> Unit,
 ) {
+    val context = LocalContext.current
     val state by producePresenter(key = "status_detail_${statusKey}_$accountType") {
         presenter(
             statusKey = statusKey,
             accountType = accountType,
         )
     }
+    val collectionState by producePresenter("global_status_collection") {
+        remember {
+            GlobalStatusCollectionPresenter()
+        }.invoke()
+    }
+    val currentPost = state.status.takeSuccess() as? UiTimelineV2.Post
     val windowInfo = currentWindowAdaptiveInfoV2()
     val windowSize =
         with(LocalDensity.current) {
@@ -101,7 +114,23 @@ internal fun VVOStatusScreen(
                 },
             )
         },
-        modifier = Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
+        modifier =
+            Modifier
+                .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection)
+                .threeFingerSwipeHorizontal(
+                    onSwipeLeft = {
+                        onAgent(
+                            currentPost?.platformType?.name?.toAgentPlatformName(),
+                            currentPost?.content?.innerText,
+                        )
+                    },
+                    onSwipeRight = {
+                        currentPost?.let {
+                            collectionState.addFavorite(it)
+                            Toast.makeText(context, "已收藏", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                ),
     ) { contentPadding ->
         Row {
             if (bigScreen) {
@@ -152,6 +181,18 @@ internal fun VVOStatusScreen(
         }
     }
 }
+
+private fun String.toAgentPlatformName(): String =
+    when (lowercase()) {
+        "vvo" -> "微博"
+        "xiaohongshu" -> "小红书"
+        "xqt" -> "X"
+        "jike" -> "即刻"
+        "dongqiudi" -> "懂球帝"
+        "zhihu" -> "知乎"
+        "rss" -> "RSS"
+        else -> this
+    }
 
 @Composable
 private fun StatusContent(

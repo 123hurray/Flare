@@ -110,6 +110,7 @@ fun NavigationSuiteScaffold2(
     secondaryItems: NavigationSuiteScope2.() -> Unit,
     wideNavigationRailState: WideNavigationRailState,
     modifier: Modifier = Modifier,
+    showNavigationSuite: Boolean = true,
     bottomBarAutoHideEnabled: Boolean = true,
     showFab: Boolean = true,
     onFabClicked: () -> Unit = {},
@@ -183,6 +184,21 @@ fun NavigationSuiteScaffold2(
                 }
             }
         }
+    if (!showNavigationSuite) {
+        Surface(
+            modifier = modifier,
+            color = containerColor,
+            contentColor = contentColor,
+        ) {
+            CompositionLocalProvider(
+                LocalBottomBarHeight provides 0.dp,
+                LocalBottomBarShowing provides false,
+            ) {
+                content.invoke()
+            }
+        }
+        return
+    }
     Surface(
         modifier =
             modifier

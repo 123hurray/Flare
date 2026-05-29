@@ -1,0 +1,349 @@
+package dev.dimension.flare.ui.presenter.agent
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import dev.dimension.flare.data.agent.AgentConversationRepository
+import dev.dimension.flare.data.agent.AgentConversationStatus
+import dev.dimension.flare.data.agent.AgentConversationSummary
+import dev.dimension.flare.data.agent.AgentConversationItemView
+import dev.dimension.flare.data.agent.AgentNativeArtifact
+import dev.dimension.flare.data.agent.AgentRunRequest
+import dev.dimension.flare.data.agent.AgentRuntime
+import dev.dimension.flare.data.agent.AgentSourceContext
+import dev.dimension.flare.data.agent.FlareAgentEvent
+import dev.dimension.flare.data.repository.AccountRepository
+import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.ui.presenter.PresenterBase
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.launch
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
+
+public class AgentChatPresenter(
+    private val initialConversationId: String? = null,
+    private val sourceContext: AgentSourceContext = AgentSourceContext(),
+) : PresenterBase<AgentChatPresenter.State>(),
+    KoinComponent {
+    private val repository: AgentConversationRepository by inject()
+    private val accountRepository: AccountRepository by inject()
+    private val runtime: AgentRuntime by inject()
+
+    @Immutable
+    public interface State {
+        public val conversationId: String?
+        public val conversations: ImmutableList<AgentConversationSummary>
+        public val conversationItems: ImmutableList<AgentConversationItemView>
+        public val draftStreamingText: String
+        public val streamingArtifacts: ImmutableList<AgentNativeArtifact>
+        public val availablePlatforms: ImmutableList<String>
+        public val selectedPlatforms: ImmutableList<String>
+        public val selectedStatusPlatform: String?
+        public val selectedStatusText: String?
+        public val selectedText: String?
+        public val includeStatusContext: Boolean
+        public val includeSelectedTextContext: Boolean
+        public val isRunning: Boolean
+        public val statusText: String?
+        public val errorText: String?
+
+        public fun send(text: String)
+
+        public fun togglePlatform(platform: String)
+
+        public fun clearPlatforms()
+
+        public fun dismissStatusContext()
+
+        public fun dismissSelectedTextContext()
+
+        public fun openConversation(id: String)
+
+        public fun startNewConversation()
+
+        public fun deleteConversation(id: String)
+    }
+
+    @Composable
+    override fun body(): State {
+        val scope = rememberCoroutineScope()
+        var conversationId by remember { mutableStateOf(initialConversationId) }
+        val conversations by repository.conversations.collectAsState(emptyList())
+        val conversationItems by repository.conversationItems(conversationId).collectAsState(emptyList())
+        val accounts by accountRepository.allAccounts.collectAsState(emptyList())
+        val availablePlatforms =
+            remember(accounts, sourceContext.feedSnapshot) {
+                accounts
+                    .map { it.platformType.name.toAgentPlatformName() }
+                    .plus(sourceContext.feedSnapshot.mapNotNull { it.platform?.toAgentPlatformName() })
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinctBy { it.lowercase() }
+            }
+        var draftStreamingText by remember { mutableStateOf("") }
+        val streamingArtifacts = remember { mutableStateListOf<AgentNativeArtifact>() }
+        var isRunning by remember { mutableStateOf(false) }
+        var statusText by remember { mutableStateOf<String?>(null) }
+        var errorText by remember { mutableStateOf<String?>(null) }
+        val selectedPlatforms = remember { mutableStateListOf<String>() }
+        var includeStatusContext by remember(sourceContext.selectedStatusText) {
+            mutableStateOf(!sourceContext.selectedStatusText.isNullOrBlank())
+        }
+        var includeSelectedTextContext by remember(sourceContext.selectedText) {
+            mutableStateOf(!sourceContext.selectedText.isNullOrBlank())
+        }
+
+        fun sendInternal(text: String) {
+            if (text.isBlank() || isRunning) return
+            scope.launch {
+                val includeStatusInThisRun = includeStatusContext && !sourceContext.selectedStatusText.isNullOrBlank()
+                val includeSelectedTextInThisRun = includeSelectedTextContext && !sourceContext.selectedText.isNullOrBlank()
+                val contextArtifacts =
+                    buildContextArtifacts(
+                        platform = sourceContext.selectedStatusPlatform,
+                        statusText = sourceContext.selectedStatusText,
+                        includeStatusContext = includeStatusInThisRun,
+                        selectedText = sourceContext.selectedText,
+                        includeSelectedTextContext = includeSelectedTextInThisRun,
+                        statusKey = sourceContext.statusKey,
+                    )
+                val userTextForModel =
+                    text.withAgentContext(
+                        platform = sourceContext.selectedStatusPlatform,
+                        statusText = sourceContext.selectedStatusText,
+                        includeStatusContext = includeStatusInThisRun,
+                        selectedText = sourceContext.selectedText,
+                        includeSelectedTextContext = includeSelectedTextInThisRun,
+                    )
+                val id = repository.ensureConversation(conversationId, text)
+                conversationId = id
+                repository.addUserMessage(id, text, contextArtifacts)
+                val history = repository.history(id)
+                includeStatusContext = false
+                includeSelectedTextContext = false
+                draftStreamingText = ""
+                streamingArtifacts.clear()
+                statusText = null
+                errorText = null
+                isRunning = true
+                repository.setStatus(id, AgentConversationStatus.Active)
+                val completedText = StringBuilder()
+                val completedArtifacts = mutableListOf<AgentNativeArtifact>()
+                runtime
+                    .runConversation(
+                        request =
+                            AgentRunRequest(
+                                conversationId = id,
+                                userText = userTextForModel,
+                                sourceContext =
+                                    sourceContext.copy(
+                                        selectedText = null,
+                                        allowedPlatforms = selectedPlatforms.toList(),
+                                    ),
+                            ),
+                        history = history,
+                    ).collect { event ->
+                        repository.recordEvent(id, null, event)
+                        when (event) {
+                            is FlareAgentEvent.AssistantTextDelta -> {
+                                draftStreamingText += event.text
+                                completedText.append(event.text)
+                            }
+
+                            is FlareAgentEvent.AssistantTextComplete -> {
+                                draftStreamingText = event.text
+                                completedText.clear()
+                                completedText.append(event.text)
+                            }
+
+                            is FlareAgentEvent.NativeArtifactEmitted -> {
+                                streamingArtifacts += event.artifact
+                                completedArtifacts += event.artifact
+                            }
+
+                            is FlareAgentEvent.ReasoningStatus -> {
+                                statusText = event.text
+                            }
+
+                            is FlareAgentEvent.ToolCallStarted -> {
+                                statusText = event.description
+                            }
+
+                            is FlareAgentEvent.ToolCallCompleted -> {
+                                statusText = if (event.isError) "${event.description}失败" else event.description
+                            }
+
+                            is FlareAgentEvent.RequiresUserInput -> {
+                                repository.addAssistantMessage(id, event.prompt, completedArtifacts)
+                                repository.setStatus(id, AgentConversationStatus.Paused)
+                                draftStreamingText = ""
+                                isRunning = false
+                            }
+
+                            FlareAgentEvent.Completed -> {
+                                repository.addAssistantMessage(id, completedText.toString(), completedArtifacts)
+                                repository.setStatus(id, AgentConversationStatus.Completed)
+                                draftStreamingText = ""
+                                streamingArtifacts.clear()
+                                statusText = null
+                                isRunning = false
+                            }
+
+                            is FlareAgentEvent.Failed -> {
+                                errorText = event.message
+                                repository.setStatus(id, AgentConversationStatus.Failed)
+                                isRunning = false
+                            }
+                        }
+                    }
+                isRunning = false
+            }
+        }
+
+        return object : State {
+            override val conversationId = conversationId
+            override val conversations = conversations.toImmutableList()
+            override val conversationItems = conversationItems.toImmutableList()
+            override val draftStreamingText = draftStreamingText
+            override val streamingArtifacts = streamingArtifacts.toImmutableList()
+            override val availablePlatforms = availablePlatforms.toImmutableList()
+            override val selectedPlatforms = selectedPlatforms.toImmutableList()
+            override val selectedStatusPlatform = sourceContext.selectedStatusPlatform
+            override val selectedStatusText = sourceContext.selectedStatusText
+            override val selectedText = sourceContext.selectedText
+            override val includeStatusContext = includeStatusContext
+            override val includeSelectedTextContext = includeSelectedTextContext
+            override val isRunning = isRunning
+            override val statusText = statusText
+            override val errorText = errorText
+
+            override fun send(text: String) {
+                sendInternal(text)
+            }
+
+            override fun togglePlatform(platform: String) {
+                if (selectedPlatforms.contains(platform)) {
+                    selectedPlatforms.remove(platform)
+                } else {
+                    selectedPlatforms += platform
+                }
+            }
+
+            override fun clearPlatforms() {
+                selectedPlatforms.clear()
+            }
+
+            override fun dismissStatusContext() {
+                includeStatusContext = false
+            }
+
+            override fun dismissSelectedTextContext() {
+                includeSelectedTextContext = false
+            }
+
+            override fun openConversation(id: String) {
+                if (isRunning) return
+                conversationId = id
+                draftStreamingText = ""
+                streamingArtifacts.clear()
+                statusText = null
+                errorText = null
+            }
+
+            override fun startNewConversation() {
+                if (isRunning) return
+                conversationId = null
+                draftStreamingText = ""
+                streamingArtifacts.clear()
+                statusText = null
+                errorText = null
+            }
+
+            override fun deleteConversation(id: String) {
+                scope.launch {
+                    repository.deleteConversation(id)
+                    if (conversationId == id) {
+                        conversationId = null
+                        draftStreamingText = ""
+                        streamingArtifacts.clear()
+                        statusText = null
+                        errorText = null
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun String.withAgentContext(
+    platform: String?,
+    statusText: String?,
+    includeStatusContext: Boolean,
+    selectedText: String?,
+    includeSelectedTextContext: Boolean,
+): String =
+    buildString {
+        if (includeStatusContext && !statusText.isNullOrBlank()) {
+            append("当前用户选择的帖子：")
+            append("平台：")
+            append(platform?.takeIf { it.isNotBlank() } ?: "未知")
+            append('\n')
+            append("正文：")
+            append(statusText)
+            append("\n\n")
+        }
+        if (includeSelectedTextContext && !selectedText.isNullOrBlank()) {
+            append("用户引用的文本：")
+            append(selectedText)
+            append("\n\n")
+        }
+        append(this@withAgentContext)
+    }
+
+private fun buildContextArtifacts(
+    platform: String?,
+    statusText: String?,
+    includeStatusContext: Boolean,
+    selectedText: String?,
+    includeSelectedTextContext: Boolean,
+    statusKey: MicroBlogKey?,
+): List<AgentNativeArtifact> =
+    buildList {
+        if (includeStatusContext && !statusText.isNullOrBlank()) {
+            add(
+                AgentNativeArtifact.StatusContextRef(
+                    id = "status-context-${statusKey?.host.orEmpty()}-${statusKey?.id.orEmpty()}-${statusText.hashCode()}",
+                    platform = platform,
+                    text = statusText,
+                    statusKey = statusKey,
+                ),
+            )
+        }
+        if (includeSelectedTextContext && !selectedText.isNullOrBlank()) {
+            add(
+                AgentNativeArtifact.TextQuoteRef(
+                    id = "text-quote-${selectedText.hashCode()}",
+                    text = selectedText,
+                ),
+            )
+        }
+    }
+
+private fun String.toAgentPlatformName(): String =
+    when (lowercase()) {
+        "vvo" -> "微博"
+        "xiaohongshu" -> "小红书"
+        "xqt" -> "X"
+        "jike" -> "即刻"
+        "dongqiudi" -> "懂球帝"
+        "zhihu" -> "知乎"
+        "rss" -> "RSS"
+        else -> this
+    }

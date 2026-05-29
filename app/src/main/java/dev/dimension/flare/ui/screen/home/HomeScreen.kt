@@ -1,6 +1,7 @@
 package dev.dimension.flare.ui.screen.home
 
 import android.app.Activity
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -74,6 +75,7 @@ import dev.dimension.flare.data.model.TabItem
 import dev.dimension.flare.data.model.TimelineTabItem
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.ui.common.OnNewIntent
+import dev.dimension.flare.ui.common.threeFingerSwipeLeft
 import dev.dimension.flare.ui.component.AvatarComponent
 import dev.dimension.flare.ui.component.FAIcon
 import dev.dimension.flare.ui.component.InAppNotificationComponent
@@ -123,7 +125,18 @@ internal fun HomeScreen(afterInit: () -> Unit) {
             OnNewIntent(
                 withOnCreateIntent = true,
             ) {
-                it.dataString?.let { url -> state.deeplinkPresenter.handle(url) }
+                if (it.action == Intent.ACTION_PROCESS_TEXT) {
+                    it.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.takeIf { text -> text.isNotBlank() }?.let { text ->
+                        state.navigate(
+                            Route.Agent.Chat(
+                                initialText = text,
+                                sourceRoute = "selection",
+                            ),
+                        )
+                    }
+                } else {
+                    it.dataString?.let { url -> state.deeplinkPresenter.handle(url) }
+                }
             }
             LaunchedEffect(Unit) {
                 afterInit.invoke()
@@ -152,11 +165,23 @@ internal fun HomeScreen(afterInit: () -> Unit) {
                     }
                 }
             }
+            val currentStackRoute = state.topLevelBackStack.takeSuccess()?.currentKey ?: currentRoute
             Box {
                 NavigationSuiteScaffold2(
                     wideNavigationRailState = state.wideNavigationRailState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .threeFingerSwipeLeft {
+                                state.navigate(
+                                    Route.Agent.Chat(
+                                        sourceRoute = "home",
+                                        accountType = (currentRoute as? Route.WithAccountType)?.accountType,
+                                    ),
+                                )
+                            },
                     bottomBarAutoHideEnabled = state.navigationState.bottomBarAutoHideEnabled,
+                    showNavigationSuite = currentStackRoute !is Route.Agent,
                     layoutType = layoutType,
                     showFab =
                         state.loggedInState.takeSuccess() == true &&

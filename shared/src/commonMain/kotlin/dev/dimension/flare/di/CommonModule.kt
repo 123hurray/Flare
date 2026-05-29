@@ -2,6 +2,10 @@ package dev.dimension.flare.di
 
 import dev.dimension.flare.data.database.provideAppDatabase
 import dev.dimension.flare.data.database.provideCacheDatabase
+import dev.dimension.flare.data.agent.AgentConversationRepository
+import dev.dimension.flare.data.agent.AgentRuntime
+import dev.dimension.flare.data.agent.FlareAgentTools
+import dev.dimension.flare.data.agent.KoogAgentRuntime
 import dev.dimension.flare.data.datasource.nostr.DatabaseNostrCache
 import dev.dimension.flare.data.datasource.nostr.NostrCache
 import dev.dimension.flare.data.network.ai.AiCompletionService
@@ -59,6 +63,9 @@ internal val commonModule =
         }
         singleOf(::ComposeUseCase)
         singleOf(::SearchHistoryRepository)
+        singleOf(::AgentConversationRepository)
+        singleOf(::FlareAgentTools)
+        single<AgentRuntime> { KoogAgentRuntime(get(), get()) }
         singleOf(::SettingsRepository)
         singleOf(::Readability)
         singleOf(::OpenAIService)
