@@ -137,11 +137,13 @@ public sealed interface AgentNativeArtifact {
 @Serializable
 public data class AgentTimelineItem(
     val id: String,
+    val referenceId: String? = null,
     val kind: String,
     val title: String? = null,
     val text: String,
     val authorName: String? = null,
     val authorHandle: String? = null,
+    val authorAvatarUrl: String? = null,
     val platform: String? = null,
     val createdAtEpochMillis: Long? = null,
     val accountType: AccountType? = null,

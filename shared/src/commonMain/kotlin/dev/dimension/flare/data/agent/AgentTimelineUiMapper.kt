@@ -9,6 +9,7 @@ import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.render.toUi
 import dev.dimension.flare.ui.render.toUiPlainText
+import dev.dimension.flare.ui.route.DeeplinkRoute
 import kotlinx.collections.immutable.persistentListOf
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -29,7 +30,7 @@ public fun AgentTimelineItem.toUiTimelinePost(): UiTimelineV2.Post {
             UiProfile(
                 key = userKey,
                 handle = UiHandle(raw = author, host = key.host),
-                avatar = "",
+                avatar = authorAvatarUrl.orEmpty(),
                 nameInternal = (authorName ?: author).toUiPlainText(),
                 platformType = platformType,
                 clickEvent = ClickEvent.Noop,
@@ -56,7 +57,7 @@ public fun AgentTimelineItem.toUiTimelinePost(): UiTimelineV2.Post {
         visibility = null,
         replyToHandle = null,
         parents = persistentListOf(),
-        clickEvent = ClickEvent.Noop,
+        clickEvent = ClickEvent.Deeplink(DeeplinkRoute.Status.Detail(key, account)),
         accountType = account,
         itemKey = id,
     )

@@ -756,13 +756,40 @@ private fun AgentMessageContent(
             if (item != null) {
                 AgentTimelineCard(item, navigate)
             } else {
-                AgentMarkdownText(match.value, artifacts, navigate)
+                AgentUnresolvedCard(token)
             }
             cursor = match.range.last + 1
         }
         val tail = text.substring(cursor)
         if (tail.isNotBlank() || cursor == 0) {
             AgentMarkdownText(tail, artifacts, navigate)
+        }
+    }
+}
+
+@Composable
+private fun AgentUnresolvedCard(token: AgentReferenceToken) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "未找到对应帖子",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Text(
+                text = "${token.platform} / ${token.id}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
         }
     }
 }
@@ -1248,7 +1275,8 @@ private fun AgentTimelineItem.matchesReference(
     this.platform.matchesPlatform(platform) && matchesReferenceId(id)
 
 private fun AgentTimelineItem.matchesReferenceId(id: String): Boolean =
-    this.id == id ||
+    referenceId == id ||
+        this.id == id ||
         statusKey?.id == id ||
         statusKey?.let { "${it.host}:${it.id}" } == id
 

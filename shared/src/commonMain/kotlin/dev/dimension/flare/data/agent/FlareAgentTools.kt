@@ -143,10 +143,10 @@ internal class FlareAgentTools(
                                 )
                             }
                             }
-                    val items = loaded.items
+                    val items = loaded.items.withReferenceIds()
                     AgentToolResult(
                         text =
-                            AgentItemsResponse(items = items, warnings = loaded.warnings).encodeJson(),
+                            AgentItemsResponse(items = items.toModelItems(), warnings = loaded.warnings).encodeJson(),
                         artifacts = items.map { AgentNativeArtifact.FeedCardRef(id = "artifact-${it.id}", item = it) },
                     )
                 }
@@ -208,15 +208,16 @@ internal class FlareAgentTools(
                 .filterByPlatform(platform, allowedPlatforms)
                 .distinctBy { it.id }
                 .take(limit)
+                .withReferenceIds()
         return AgentToolResult(
             text =
                 AgentSearchResponse(
                     query = query,
                     platform = platform ?: "ALL",
-                    items = items,
+                    items = items.toModelItems(),
                     warnings = loaded.warnings,
                 ).encodeJson(),
-            artifacts = items.take(8).map { AgentNativeArtifact.FeedCardRef(id = "artifact-${it.id}", item = it) },
+            artifacts = items.map { AgentNativeArtifact.FeedCardRef(id = "artifact-${it.id}", item = it) },
         )
     }
 
@@ -276,12 +277,12 @@ internal class FlareAgentTools(
                     it.statusKey == statusKey
                 }
             }.getOrNull()
-        val compact = item?.toAgentTimelineItem()
+        val compact = item?.toAgentTimelineItem()?.withReferenceId(0, mutableSetOf())
         return if (compact == null) {
             AgentToolResult("No detail found for ${statusKey.id}@${statusKey.host}", isError = true)
         } else {
             AgentToolResult(
-                text = compact.encodeJson(),
+                text = AgentDetailResponse(item = compact.toModelItem()).encodeJson(),
                 artifacts =
                     listOf(
                         AgentNativeArtifact.FeedCardRef(
@@ -340,6 +341,7 @@ private fun UiTimelineV2.toAgentTimelineItem(): AgentTimelineItem =
                 title = title,
                 text = description.orEmpty().compactForAgent(),
                 authorName = source.name,
+                authorAvatarUrl = source.icon,
                 platform = "RSS",
                 createdAtEpochMillis = actualCreatedAt?.value?.toEpochMilliseconds(),
                 accountType = accountType,
@@ -356,6 +358,7 @@ private fun UiTimelineV2.toAgentTimelineItem(): AgentTimelineItem =
                 text = content.innerText.compactForAgent(),
                 authorName = user?.name?.innerText,
                 authorHandle = user?.handle?.raw,
+                authorAvatarUrl = user?.avatar,
                 platform = platformType.name.toAgentPlatformName(),
                 createdAtEpochMillis = createdAt.value.toEpochMilliseconds(),
                 accountType = accountType,
@@ -372,6 +375,7 @@ private fun UiTimelineV2.toAgentTimelineItem(): AgentTimelineItem =
                 text = value.description?.innerText?.compactForAgent().orEmpty(),
                 authorName = value.name.innerText,
                 authorHandle = value.handle.raw,
+                authorAvatarUrl = value.avatar,
                 platform = value.platformType.name.toAgentPlatformName(),
                 createdAtEpochMillis = createdAt.value.toEpochMilliseconds(),
                 accountType = accountType,
@@ -386,6 +390,9 @@ private fun UiTimelineV2.toAgentTimelineItem(): AgentTimelineItem =
                 kind = "user_list",
                 title = users.joinToString { it.name.innerText }.take(120),
                 text = post?.content?.innerText?.compactForAgent().orEmpty(),
+                authorName = users.firstOrNull()?.name?.innerText,
+                authorHandle = users.firstOrNull()?.handle?.raw,
+                authorAvatarUrl = users.firstOrNull()?.avatar,
                 platform = post?.platformType?.name?.toAgentPlatformName(),
                 createdAtEpochMillis = createdAt.value.toEpochMilliseconds(),
                 accountType = accountType,
@@ -402,6 +409,7 @@ private fun UiTimelineV2.toAgentTimelineItem(): AgentTimelineItem =
                 text = type.toString().compactForAgent(),
                 authorName = user?.name?.innerText,
                 authorHandle = user?.handle?.raw,
+                authorAvatarUrl = user?.avatar,
                 createdAtEpochMillis = createdAt.value.toEpochMilliseconds(),
                 accountType = accountType,
                 statusKey = statusKey,
@@ -594,7 +602,7 @@ private data class AgentToolLoadResult(
 
 @kotlinx.serialization.Serializable
 private data class AgentItemsResponse(
-    val items: List<AgentTimelineItem>,
+    val items: List<AgentModelTimelineItem>,
     val warnings: List<String> = emptyList(),
 )
 
@@ -602,11 +610,146 @@ private data class AgentItemsResponse(
 private data class AgentSearchResponse(
     val query: String,
     val platform: String,
-    val items: List<AgentTimelineItem>,
+    val items: List<AgentModelTimelineItem>,
     val warnings: List<String> = emptyList(),
+)
+
+@kotlinx.serialization.Serializable
+private data class AgentDetailResponse(
+    val item: AgentModelTimelineItem,
+)
+
+@kotlinx.serialization.Serializable
+private data class AgentModelTimelineItem(
+    val id: String,
+    val kind: String,
+    val platform: String? = null,
+    val title: String? = null,
+    val text: String,
+    val authorName: String? = null,
+    val authorHandle: String? = null,
+    val authorAvatarUrl: String? = null,
+    val createdAtEpochMillis: Long? = null,
+    val mediaPreviewUrl: String? = null,
 )
 
 @kotlinx.serialization.Serializable
 private data class AgentSubjectGroupResponse(
     val groups: List<AgentNativeArtifact.SubjectGroupRef>,
 )
+
+private fun List<AgentTimelineItem>.toModelItems(): List<AgentModelTimelineItem> = map { it.toModelItem() }
+
+private fun AgentTimelineItem.toModelItem(): AgentModelTimelineItem =
+    AgentModelTimelineItem(
+        id = referenceId ?: id,
+        kind = kind,
+        platform = platform,
+        title = title,
+        text = text,
+        authorName = authorName,
+        authorHandle = authorHandle,
+        authorAvatarUrl = authorAvatarUrl,
+        createdAtEpochMillis = createdAtEpochMillis,
+        mediaPreviewUrl = mediaPreviewUrl,
+    )
+
+private fun List<AgentTimelineItem>.withReferenceIds(): List<AgentTimelineItem> {
+    val used = mutableSetOf<String>()
+    return mapIndexed { index, item ->
+        item.withReferenceId(index, used)
+    }
+}
+
+private fun AgentTimelineItem.withReferenceId(
+    index: Int,
+    used: MutableSet<String>,
+): AgentTimelineItem {
+    var attempt = index
+    while (true) {
+        val value = shortReferenceId(id, platform, attempt)
+        if (used.add(value)) {
+            return copy(referenceId = value)
+        }
+        attempt += 1
+    }
+}
+
+private fun shortReferenceId(
+    id: String,
+    platform: String?,
+    salt: Int,
+): String {
+    val hash = "$platform:$id:$salt".hashCode() and Int.MAX_VALUE
+    val adjective = referenceAdjectives[hash % referenceAdjectives.size]
+    val noun = referenceNouns[(hash / referenceAdjectives.size) % referenceNouns.size]
+    return "${adjective}_$noun"
+}
+
+private val referenceAdjectives =
+    listOf(
+        "amber",
+        "bright",
+        "calm",
+        "clear",
+        "cosmic",
+        "crisp",
+        "daring",
+        "eager",
+        "fancy",
+        "fresh",
+        "gentle",
+        "golden",
+        "happy",
+        "lively",
+        "lucky",
+        "magic",
+        "merry",
+        "nimble",
+        "quiet",
+        "rapid",
+        "royal",
+        "silver",
+        "sunny",
+        "tidy",
+        "urban",
+        "velvet",
+        "vivid",
+        "warm",
+        "wise",
+        "zesty",
+    )
+
+private val referenceNouns =
+    listOf(
+        "anchor",
+        "bridge",
+        "cloud",
+        "comet",
+        "delta",
+        "field",
+        "forest",
+        "harbor",
+        "island",
+        "lantern",
+        "maple",
+        "meadow",
+        "meteor",
+        "orbit",
+        "paper",
+        "pearl",
+        "pilot",
+        "pixel",
+        "river",
+        "signal",
+        "stone",
+        "summit",
+        "thread",
+        "tower",
+        "valley",
+        "violet",
+        "wave",
+        "window",
+        "winter",
+        "zephyr",
+    )
