@@ -56,7 +56,7 @@ internal fun StatusScreen(
     statusKey: MicroBlogKey,
     onBack: () -> Unit,
     accountType: AccountType,
-    onAgent: (platform: String?, text: String?) -> Unit,
+    onAgent: (UiTimelineV2.Post) -> Unit,
 ) {
     val context = LocalContext.current
     val isBigScreen = isBigScreen()
@@ -113,10 +113,7 @@ internal fun StatusScreen(
                 .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection)
                 .threeFingerSwipeHorizontal(
                     onSwipeLeft = {
-                        onAgent(
-                            currentPost?.platformType?.name?.toAgentPlatformName(),
-                            currentPost?.content?.innerText,
-                        )
+                        currentPost?.let(onAgent)
                     },
                     onSwipeRight = {
                         currentPost?.let {

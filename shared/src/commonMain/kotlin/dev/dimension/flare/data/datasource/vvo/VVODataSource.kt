@@ -43,6 +43,7 @@ import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.mapper.render
 import dev.dimension.flare.ui.model.toUi
 import dev.dimension.flare.ui.presenter.compose.ComposeStatus
+import dev.dimension.flare.ui.presenter.home.SearchStatusType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.Flow
@@ -68,6 +69,12 @@ internal class VVODataSource(
                 accountRepository
                     .credentialFlow<UiAccount.VVo.Credential>(accountKey)
                     .map { it.chocolate },
+            onChocolateUpdated = { chocolate ->
+                accountRepository.updateCredential(
+                    accountKey = accountKey,
+                    credential = UiAccount.VVo.Credential(chocolate = chocolate),
+                )
+            },
         )
     }
 
@@ -256,6 +263,16 @@ internal class VVODataSource(
             accountKey = accountKey,
             query = query,
         )
+
+    override fun searchStatus(
+        query: String,
+        type: SearchStatusType,
+    ) = SearchStatusRemoteMediator(
+        service = service,
+        accountKey = accountKey,
+        query = query,
+        type = type,
+    )
 
     override fun searchUser(query: String): RemoteLoader<UiProfile> =
         SearchUserPagingSource(

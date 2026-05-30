@@ -13,6 +13,9 @@ import dev.dimension.flare.ui.screen.status.action.DeleteStatusConfirmDialog
 import dev.dimension.flare.ui.screen.status.action.MastodonReportDialog
 import dev.dimension.flare.ui.screen.status.action.MisskeyReportDialog
 import dev.dimension.flare.ui.screen.status.action.StatusShareSheet
+import dev.dimension.flare.ui.route.DeeplinkRoute
+import dev.dimension.flare.ui.route.toUri
+import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 internal fun EntryProviderScope<NavKey>.statusEntryBuilder(
@@ -24,14 +27,19 @@ internal fun EntryProviderScope<NavKey>.statusEntryBuilder(
             statusKey = args.statusKey,
             accountType = args.accountType,
             onBack = onBack,
-            onAgent = { platform, text ->
+            onAgent = { post ->
                 navigate(
                     Route.Agent.Chat(
                         sourceRoute = "status",
                         statusKey = args.statusKey,
                         accountType = args.accountType,
-                        selectedStatusPlatform = platform,
-                        selectedStatusText = text,
+                        selectedStatusPlatform = post.platformType.name.toAgentPlatformName(),
+                        selectedStatusText = post.content.innerText,
+                        selectedStatusAuthorName = post.user?.name?.innerText,
+                        selectedStatusAuthorHandle = post.user?.handle?.raw,
+                        selectedStatusCreatedAtEpochMillis = post.createdAt.value.toEpochMilliseconds(),
+                        selectedStatusDeeplink = DeeplinkRoute.Status.Detail(post.statusKey, post.accountType).toUri(),
+                        sourceInstanceId = Clock.System.now().toEpochMilliseconds(),
                     ),
                 )
             },
@@ -51,14 +59,19 @@ internal fun EntryProviderScope<NavKey>.statusEntryBuilder(
             statusKey = args.statusKey,
             accountType = args.accountType,
             onBack = onBack,
-            onAgent = { platform, text ->
+            onAgent = { post ->
                 navigate(
                     Route.Agent.Chat(
                         sourceRoute = "status",
                         statusKey = args.statusKey,
                         accountType = args.accountType,
-                        selectedStatusPlatform = platform,
-                        selectedStatusText = text,
+                        selectedStatusPlatform = post.platformType.name.toAgentPlatformName(),
+                        selectedStatusText = post.content.innerText,
+                        selectedStatusAuthorName = post.user?.name?.innerText,
+                        selectedStatusAuthorHandle = post.user?.handle?.raw,
+                        selectedStatusCreatedAtEpochMillis = post.createdAt.value.toEpochMilliseconds(),
+                        selectedStatusDeeplink = DeeplinkRoute.Status.Detail(post.statusKey, post.accountType).toUri(),
+                        sourceInstanceId = Clock.System.now().toEpochMilliseconds(),
                     ),
                 )
             },
@@ -150,3 +163,15 @@ internal fun EntryProviderScope<NavKey>.statusEntryBuilder(
         )
     }
 }
+
+private fun String.toAgentPlatformName(): String =
+    when (lowercase()) {
+        "vvo" -> "微博"
+        "xiaohongshu" -> "小红书"
+        "xqt" -> "X"
+        "jike" -> "即刻"
+        "dongqiudi" -> "懂球帝"
+        "zhihu" -> "知乎"
+        "rss" -> "RSS"
+        else -> this
+    }

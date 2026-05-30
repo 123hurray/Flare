@@ -200,7 +200,14 @@ private fun JikeVideo?.toUiMedia(url: String?): UiMedia.Video? {
 }
 
 internal fun JikeComment.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Post {
-    val statusKey = MicroBlogKey(id, accountKey.host)
+    val statusKey = MicroBlogKey(jikeCommentStatusId(), accountKey.host)
+    val detailStatusKey =
+        if (replyCount > 0 && threadId?.isNotBlank() == true) {
+            statusKey
+        } else {
+            MicroBlogKey(targetId, accountKey.host)
+        }
+    val accountType = AccountType.Specific(accountKey)
     val sourceLanguages = persistentListOf<String>()
     return UiTimelineV2.Post(
         platformType = PlatformType.Jike,
@@ -234,6 +241,13 @@ internal fun JikeComment.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Po
                     icon = UiIcon.Reply,
                     text = ActionMenu.Item.Text.Localized(ActionMenu.Item.Text.Localized.Type.Reply),
                     count = UiNumber(replyCount.toLong()),
+                    clickEvent =
+                        ClickEvent.Deeplink(
+                            DeeplinkRoute.Status.Detail(
+                                accountType = accountType,
+                                statusKey = detailStatusKey,
+                            ),
+                        ),
                 ),
                 ActionMenu.Item(
                     icon = UiIcon.Like,
@@ -256,10 +270,25 @@ internal fun JikeComment.toUiTimeline(accountKey: MicroBlogKey): UiTimelineV2.Po
                 ?.let { runCatching { Instant.parse(it) }.getOrNull() }
                 ?.toUi()
                 ?: Instant.fromEpochMilliseconds(0L).toUi(),
-        clickEvent = ClickEvent.Noop,
-        accountType = AccountType.Specific(accountKey),
+        clickEvent =
+            ClickEvent.Deeplink(
+                DeeplinkRoute.Status.Detail(
+                    accountType = accountType,
+                    statusKey = detailStatusKey,
+                ),
+            ),
+        accountType = accountType,
     )
 }
+
+private fun JikeComment.jikeCommentStatusId(): String =
+    listOf(
+        "comment",
+        targetType,
+        targetId,
+        threadId.orEmpty(),
+        id,
+    ).joinToString(":")
 
 internal fun ActionMenu.Companion.jikeBookmark(
     statusKey: MicroBlogKey,

@@ -30,7 +30,6 @@ import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.collectAsUiState
 import dev.dimension.flare.ui.model.onSuccess
-import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.model.toUi
 import dev.dimension.flare.ui.presenter.PresenterBase
 import kotlinx.collections.immutable.ImmutableList
@@ -61,15 +60,10 @@ public class DiscoverPresenter :
                 it.map { dataSource ->
                     val authenticated = dataSource as UserDataSource
                     val accountKey = dataSource.accountKey
-                    authenticated.userHandler.userById(accountKey.id).toUi()
+                    authenticated.userHandler.userById(accountKey.id).toUi().map { accountKey to it }
                 }
             }.combineLatestFlowLists()
-            .map {
-                it
-                    .mapNotNull {
-                        it.takeSuccess()
-                    }.toImmutableList()
-            }
+            .stableAccountProfiles()
     }
 
     private val selectedAccountFlow by lazy {

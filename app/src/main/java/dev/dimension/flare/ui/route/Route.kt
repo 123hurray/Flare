@@ -271,6 +271,11 @@ internal sealed interface Route : NavKey {
             val accountType: AccountType? = null,
             val selectedStatusPlatform: String? = null,
             val selectedStatusText: String? = null,
+            val selectedStatusAuthorName: String? = null,
+            val selectedStatusAuthorHandle: String? = null,
+            val selectedStatusCreatedAtEpochMillis: Long? = null,
+            val selectedStatusDeeplink: String? = null,
+            val sourceInstanceId: Long? = null,
         ) : Agent
     }
 

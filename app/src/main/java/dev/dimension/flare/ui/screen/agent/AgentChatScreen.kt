@@ -1,8 +1,10 @@
 package dev.dimension.flare.ui.screen.agent
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +24,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -51,6 +55,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -79,7 +84,38 @@ import dev.dimension.flare.ui.component.status.StatusItem
 import dev.dimension.flare.ui.presenter.agent.AgentChatPresenter
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.route.Route
+import kotlin.time.Instant
 import moe.tlaster.precompose.molecule.producePresenter
+import org.commonmark.ext.gfm.strikethrough.Strikethrough
+import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
+import org.commonmark.ext.gfm.tables.TableBlock
+import org.commonmark.ext.gfm.tables.TableBody
+import org.commonmark.ext.gfm.tables.TableCell
+import org.commonmark.ext.gfm.tables.TableHead
+import org.commonmark.ext.gfm.tables.TableRow
+import org.commonmark.ext.gfm.tables.TablesExtension
+import org.commonmark.node.BlockQuote
+import org.commonmark.node.BulletList
+import org.commonmark.node.Code
+import org.commonmark.node.Document
+import org.commonmark.node.Emphasis
+import org.commonmark.node.FencedCodeBlock
+import org.commonmark.node.HardLineBreak
+import org.commonmark.node.Heading
+import org.commonmark.node.HtmlBlock
+import org.commonmark.node.HtmlInline
+import org.commonmark.node.Image
+import org.commonmark.node.IndentedCodeBlock
+import org.commonmark.node.Link
+import org.commonmark.node.ListItem
+import org.commonmark.node.Node
+import org.commonmark.node.OrderedList
+import org.commonmark.node.Paragraph
+import org.commonmark.node.SoftLineBreak
+import org.commonmark.node.StrongEmphasis
+import org.commonmark.node.Text as MarkdownTextNode
+import org.commonmark.node.ThematicBreak
+import org.commonmark.parser.Parser
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,11 +127,28 @@ internal fun AgentChatScreen(
     accountType: AccountType?,
     selectedStatusPlatform: String?,
     selectedStatusText: String?,
+    selectedStatusAuthorName: String?,
+    selectedStatusAuthorHandle: String?,
+    selectedStatusCreatedAtEpochMillis: Long?,
+    selectedStatusDeeplink: String?,
+    sourceInstanceId: Long?,
     onBack: () -> Unit,
     navigate: (Route) -> Unit,
 ) {
     val sourceContext =
-        remember(initialText, sourceRoute, statusKey, accountType, selectedStatusPlatform, selectedStatusText) {
+        remember(
+            initialText,
+            sourceRoute,
+            statusKey,
+            accountType,
+            selectedStatusPlatform,
+            selectedStatusText,
+            selectedStatusAuthorName,
+            selectedStatusAuthorHandle,
+            selectedStatusCreatedAtEpochMillis,
+            selectedStatusDeeplink,
+            sourceInstanceId,
+        ) {
             AgentSourceContext(
                 selectedText = initialText,
                 route = sourceRoute,
@@ -103,14 +156,18 @@ internal fun AgentChatScreen(
                 accountType = accountType,
                 selectedStatusPlatform = selectedStatusPlatform,
                 selectedStatusText = selectedStatusText,
+                selectedStatusAuthorName = selectedStatusAuthorName,
+                selectedStatusAuthorHandle = selectedStatusAuthorHandle,
+                selectedStatusCreatedAtEpochMillis = selectedStatusCreatedAtEpochMillis,
+                selectedStatusDeeplink = selectedStatusDeeplink,
             )
         }
     val presenterKey =
-        "agent_chat_${conversationId}_${statusKey}_${initialText}_${selectedStatusPlatform}_${selectedStatusText.hashCode()}"
+        "agent_chat_${conversationId}_${sourceInstanceId}_${statusKey}_${initialText}_${selectedStatusPlatform}_${selectedStatusText.hashCode()}"
     val state by producePresenter(presenterKey) {
-        remember(conversationId, sourceContext, initialText) {
+        remember(conversationId, sourceContext, initialText, sourceInstanceId) {
             AgentChatPresenter(
-                initialConversationId = conversationId,
+                initialConversationId = if (sourceInstanceId != null) null else conversationId,
                 sourceContext = sourceContext,
             )
         }.invoke()
@@ -150,6 +207,7 @@ internal fun AgentChatScreen(
                         !state.isRunning
                 if (showEmptyState) {
                     AgentEmptyState(
+                        hasStatusContext = state.includeStatusContext && !state.selectedStatusText.isNullOrBlank(),
                         onPrompt = state::send,
                         modifier =
                             Modifier
@@ -345,9 +403,25 @@ private fun String.compactContextPreview(): String =
         .trim()
         .let { if (it.length > 80) it.take(80) + "..." else it }
 
+private fun AgentNativeArtifact.StatusContextRef.statusSubtitle(): String? {
+    val account =
+        listOfNotNull(
+            authorName?.takeIf { it.isNotBlank() },
+            authorHandle?.takeIf { it.isNotBlank() }?.let { handle ->
+                if (authorName == handle) null else handle
+            },
+        ).joinToString(" / ")
+    val createdAt = createdAtEpochMillis?.let { Instant.fromEpochMilliseconds(it).toString() }
+    return listOfNotNull(account, createdAt)
+        .filter { it.isNotBlank() }
+        .joinToString(" · ")
+        .takeIf { it.isNotBlank() }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AgentEmptyState(
+    hasStatusContext: Boolean,
     onPrompt: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -365,9 +439,15 @@ private fun AgentEmptyState(
             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            AgentPromptPill("总结微博最近的AI相关帖子", onPrompt)
-            AgentPromptPill("足球圈有什么大事", onPrompt)
-            AgentPromptPill("知乎有什么值得看的回答", onPrompt)
+            if (hasStatusContext) {
+                AgentPromptPill("查找在Twitter上的原始来源", onPrompt)
+                AgentPromptPill("Twitter上是否有相关讨论", onPrompt)
+                AgentPromptPill("提取帖子里的链接", onPrompt)
+            } else {
+                AgentPromptPill("总结微博最近的AI相关帖子", onPrompt)
+                AgentPromptPill("足球圈有什么大事", onPrompt)
+                AgentPromptPill("知乎有什么值得看的回答", onPrompt)
+            }
         }
     }
 }
@@ -632,6 +712,7 @@ private fun AgentMessageBubble(
         if (isUser) {
             AgentMessageContextArtifacts(
                 artifacts = artifacts,
+                navigate = navigate,
                 modifier = Modifier.widthIn(max = 340.dp),
             )
             Surface(
@@ -658,6 +739,7 @@ private fun AgentMessageBubble(
 @Composable
 private fun AgentMessageContextArtifacts(
     artifacts: List<AgentNativeArtifact>,
+    navigate: (Route) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val contextArtifacts =
@@ -671,7 +753,7 @@ private fun AgentMessageContextArtifacts(
     ) {
         contextArtifacts.forEach { artifact ->
             when (artifact) {
-                is AgentNativeArtifact.StatusContextRef -> AgentStatusContextCard(artifact)
+                is AgentNativeArtifact.StatusContextRef -> AgentStatusContextCard(artifact, navigate)
                 is AgentNativeArtifact.TextQuoteRef -> AgentTextQuoteContextCard(artifact)
                 else -> Unit
             }
@@ -680,11 +762,17 @@ private fun AgentMessageContextArtifacts(
 }
 
 @Composable
-private fun AgentStatusContextCard(artifact: AgentNativeArtifact.StatusContextRef) {
+private fun AgentStatusContextCard(
+    artifact: AgentNativeArtifact.StatusContextRef,
+    navigate: (Route) -> Unit,
+) {
     AgentContextSnapshotCard(
         label = artifact.platform?.takeIf { it.isNotBlank() } ?: "帖子",
         title = "当前用户选择的帖子",
+        subtitle = artifact.statusSubtitle(),
         text = artifact.text,
+        deeplink = artifact.deeplink,
+        navigate = navigate,
     )
 }
 
@@ -702,11 +790,20 @@ private fun AgentContextSnapshotCard(
     label: String,
     title: String,
     text: String,
+    subtitle: String? = null,
+    deeplink: String? = null,
+    navigate: (Route) -> Unit = {},
 ) {
+    val uriHandler = LocalUriHandler.current
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         tonalElevation = 1.dp,
+        modifier =
+            Modifier.clickable(enabled = !deeplink.isNullOrBlank()) {
+                val value = deeplink ?: return@clickable
+                Route.parse(value)?.let(navigate) ?: uriHandler.openUri(value)
+            },
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -724,6 +821,14 @@ private fun AgentContextSnapshotCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.SemiBold,
                 )
+                subtitle?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
                 Text(
                     text = text.compactContextPreview(),
                     style = MaterialTheme.typography.bodySmall,
@@ -741,28 +846,26 @@ private fun AgentMessageContent(
     artifacts: List<AgentNativeArtifact>,
     navigate: (Route) -> Unit,
 ) {
+    val segments = remember(text) { text.toAgentMarkdownSegments() }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        var cursor = 0
-        cardRegex.findAll(text).forEach { match ->
-            val before = text.substring(cursor, match.range.first)
-            if (before.isNotBlank()) {
-                AgentMarkdownText(before, artifacts, navigate)
+        segments.forEach { segment ->
+            when (segment) {
+                is AgentMarkdownSegment.Card -> {
+                    val item = artifacts.resolveItem(segment.token.platform, segment.token.id)
+                    if (item != null) {
+                        AgentTimelineCard(item, navigate)
+                    } else {
+                        AgentUnresolvedCard(segment.token)
+                    }
+                }
+
+                is AgentMarkdownSegment.Markdown -> {
+                    AgentMarkdownText(segment.text, artifacts, navigate)
+                }
             }
-            val token = match.toReferenceToken()
-            val item = artifacts.resolveItem(token.platform, token.id)
-            if (item != null) {
-                AgentTimelineCard(item, navigate)
-            } else {
-                AgentUnresolvedCard(token)
-            }
-            cursor = match.range.last + 1
-        }
-        val tail = text.substring(cursor)
-        if (tail.isNotBlank() || cursor == 0) {
-            AgentMarkdownText(tail, artifacts, navigate)
         }
     }
 }
@@ -820,132 +923,303 @@ private fun AgentMarkdownText(
     artifacts: List<AgentNativeArtifact>,
     navigate: (Route) -> Unit,
 ) {
-    val uriHandler = LocalUriHandler.current
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        text
-            .trim()
-            .lines()
-            .forEach { rawLine ->
-                val line = rawLine.trimEnd()
-                if (line.isBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                } else {
-                    val (content, style) = line.markdownLineStyle()
-                    val annotatedContent = content.markdownInline(artifacts)
-                    ClickableText(
-                        text = annotatedContent,
-                        style = style.copy(color = MaterialTheme.colorScheme.onSurface),
-                        onClick = { offset ->
-                            annotatedContent
-                                .getStringAnnotations(INLINE_DEEPLINK_TAG, offset, offset)
-                                .firstOrNull()
-                                ?.item
-                                ?.let { value ->
-                                    Route.parse(value)?.let(navigate) ?: uriHandler.openUri(value)
-                                }
-                        },
-                    )
-                }
-            }
+    val visibleText = remember(text) { text.withoutTrailingPartialAgentToken().trim() }
+    if (visibleText.isBlank()) {
+        return
+    }
+    val document = remember(visibleText) { agentMarkdownParser.parse(visibleText) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        document.children().forEach { child ->
+            AgentMarkdownBlock(child, artifacts, navigate)
+        }
     }
 }
 
 @Composable
-private fun String.markdownLineStyle(): Pair<String, TextStyle> =
-    when {
-        startsWith("# ") ->
-            drop(2) to MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-        startsWith("## ") ->
-            drop(3) to MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
-        startsWith("### ") ->
-            drop(4) to MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
-        startsWith("- ") ->
-            "• ${drop(2)}" to MaterialTheme.typography.bodyMedium
-        else ->
-            this to MaterialTheme.typography.bodyMedium
+private fun AgentMarkdownBlock(
+    node: Node,
+    artifacts: List<AgentNativeArtifact>,
+    navigate: (Route) -> Unit,
+    depth: Int = 0,
+) {
+    when (node) {
+        is Document -> {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                node.children().forEach { AgentMarkdownBlock(it, artifacts, navigate, depth) }
+            }
+        }
+
+        is Paragraph -> {
+            AgentMarkdownInlineText(
+                nodes = node.children().toList(),
+                artifacts = artifacts,
+                navigate = navigate,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
+        is Heading -> {
+            val style =
+                when (node.level) {
+                    1 -> MaterialTheme.typography.titleLarge
+                    2 -> MaterialTheme.typography.titleMedium
+                    3 -> MaterialTheme.typography.titleSmall
+                    else -> MaterialTheme.typography.bodyLarge
+                }.copy(fontWeight = FontWeight.SemiBold)
+            AgentMarkdownInlineText(
+                nodes = node.children().toList(),
+                artifacts = artifacts,
+                navigate = navigate,
+                style = style,
+            )
+        }
+
+        is BulletList -> {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                node.children().filterIsInstance<ListItem>().forEach { item ->
+                    AgentMarkdownListItem("•", item, artifacts, navigate, depth)
+                }
+            }
+        }
+
+        is OrderedList -> {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                var number = node.startNumber
+                node.children().filterIsInstance<ListItem>().forEach { item ->
+                    AgentMarkdownListItem("${number}.", item, artifacts, navigate, depth)
+                    number += 1
+                }
+            }
+        }
+
+        is BlockQuote -> {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outlineVariant),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    node.children().forEach { AgentMarkdownBlock(it, artifacts, navigate, depth + 1) }
+                }
+            }
+        }
+
+        is FencedCodeBlock -> AgentMarkdownCodeBlock(node.literal, node.info)
+        is IndentedCodeBlock -> AgentMarkdownCodeBlock(node.literal, null)
+        is ThematicBreak -> HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        is HtmlBlock -> {
+            Text(
+                text = node.literal,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        is TableBlock -> AgentMarkdownTable(node, artifacts, navigate)
+        is TableHead, is TableBody, is TableRow, is TableCell -> {
+            node.children().forEach { AgentMarkdownBlock(it, artifacts, navigate, depth) }
+        }
+
+        else -> {
+            if (node.hasChildren()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    node.children().forEach { AgentMarkdownBlock(it, artifacts, navigate, depth) }
+                }
+            }
+        }
     }
+}
 
 @Composable
-private fun String.markdownInline(artifacts: List<AgentNativeArtifact>): AnnotatedString {
-    val linkColor = MaterialTheme.colorScheme.primary
-    return buildAnnotatedString {
-        var index = 0
-        while (index < this@markdownInline.length) {
-            val linkMatch = linkRegex.matchAt(this@markdownInline, index)
-            if (linkMatch != null) {
-                val token = linkMatch.toReferenceToken()
-                val item = artifacts.resolveItem(token.platform, token.id)
-                val label = token.label ?: item?.title ?: item?.authorName ?: token.id
-                val deeplink = item?.deeplink
-                val start = length
-                withStyle(
-                    SpanStyle(
-                        color = linkColor,
-                        textDecoration = TextDecoration.Underline,
-                    ),
-                ) {
-                    append(label)
+private fun AgentMarkdownListItem(
+    marker: String,
+    item: ListItem,
+    artifacts: List<AgentNativeArtifact>,
+    navigate: (Route) -> Unit,
+    depth: Int,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(start = (depth * 12).dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = marker,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.widthIn(min = 18.dp),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item.children().forEach { AgentMarkdownBlock(it, artifacts, navigate, depth + 1) }
+        }
+    }
+}
+
+@Composable
+private fun AgentMarkdownCodeBlock(
+    literal: String,
+    info: String?,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            info?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = literal.trimEnd(),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AgentMarkdownTable(
+    table: TableBlock,
+    artifacts: List<AgentNativeArtifact>,
+    navigate: (Route) -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
+        table.children().forEach { section ->
+            section.children().filterIsInstance<TableRow>().forEach { row ->
+                Row {
+                    row.children().filterIsInstance<TableCell>().forEach { cell ->
+                        Surface(
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.widthIn(min = 120.dp, max = 220.dp),
+                        ) {
+                            Box(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                AgentMarkdownInlineText(
+                                    nodes = cell.children().toList(),
+                                    artifacts = artifacts,
+                                    navigate = navigate,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
                 }
-                if (!deeplink.isNullOrBlank()) {
-                    addStringAnnotation(
-                        tag = INLINE_DEEPLINK_TAG,
-                        annotation = deeplink,
-                        start = start,
-                        end = length,
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentMarkdownInlineText(
+    nodes: List<Node>,
+    artifacts: List<AgentNativeArtifact>,
+    navigate: (Route) -> Unit,
+    style: TextStyle,
+) {
+    val uriHandler = LocalUriHandler.current
+    val linkColor = MaterialTheme.colorScheme.primary
+    val codeBackground = MaterialTheme.colorScheme.surfaceContainerHighest
+    val annotatedContent =
+        remember(nodes, artifacts, linkColor, codeBackground) {
+            buildAnnotatedString {
+                nodes.forEach {
+                    appendMarkdownInlineNode(
+                        node = it,
+                        artifacts = artifacts,
+                        style = AgentInlineStyle(),
+                        linkColor = linkColor,
+                        codeBackground = codeBackground,
                     )
                 }
-                index = linkMatch.range.last + 1
-                continue
             }
-            when {
-                startsWith("**", index) -> {
-                    val end = indexOf("**", startIndex = index + 2)
-                    if (end > index) {
-                        withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
-                            append(substring(index + 2, end))
-                        }
-                        index = end + 2
-                    } else {
-                        append(this@markdownInline[index])
-                        index += 1
+        }
+    if (annotatedContent.text.isNotBlank()) {
+        ClickableText(
+            text = annotatedContent,
+            style = style.copy(color = MaterialTheme.colorScheme.onSurface),
+            onClick = { offset ->
+                annotatedContent
+                    .getStringAnnotations(INLINE_DEEPLINK_TAG, offset, offset)
+                    .firstOrNull()
+                    ?.item
+                    ?.let { value ->
+                        Route.parse(value)?.let(navigate) ?: uriHandler.openUri(value)
                     }
-                }
+            },
+        )
+    }
+}
 
-                startsWith("`", index) -> {
-                    val end = indexOf("`", startIndex = index + 1)
-                    if (end > index) {
-                        withStyle(
-                            SpanStyle(
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                color = androidx.compose.ui.graphics.Color.Unspecified,
-                            ),
-                        ) {
-                            append(substring(index + 1, end))
-                        }
-                        index = end + 1
-                    } else {
-                        append(this@markdownInline[index])
-                        index += 1
-                    }
-                }
+private fun AnnotatedString.Builder.appendMarkdownInlineNode(
+    node: Node,
+    artifacts: List<AgentNativeArtifact>,
+    style: AgentInlineStyle,
+    linkColor: Color,
+    codeBackground: Color,
+) {
+    when (node) {
+        is MarkdownTextNode -> appendMarkdownLiteral(node.literal, artifacts, style, linkColor, codeBackground)
+        is SoftLineBreak -> append("\n")
+        is HardLineBreak -> append("\n")
+        is Code -> appendStyledText(node.literal, style.copy(code = true), linkColor, codeBackground)
+        is Emphasis -> node.children().forEach {
+            appendMarkdownInlineNode(it, artifacts, style.copy(italic = true), linkColor, codeBackground)
+        }
 
-                startsWith("*", index) -> {
-                    val end = indexOf("*", startIndex = index + 1)
-                    if (end > index) {
-                        withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                            append(substring(index + 1, end))
-                        }
-                        index = end + 1
-                    } else {
-                        append(this@markdownInline[index])
-                        index += 1
-                    }
-                }
+        is StrongEmphasis -> node.children().forEach {
+            appendMarkdownInlineNode(it, artifacts, style.copy(bold = true), linkColor, codeBackground)
+        }
 
-                else -> {
-                    append(this@markdownInline[index])
-                    index += 1
-                }
+        is Strikethrough -> node.children().forEach {
+            appendMarkdownInlineNode(it, artifacts, style.copy(strike = true), linkColor, codeBackground)
+        }
+
+        is Link -> {
+            val nextStyle = style.copy(url = node.destination)
+            node.children().forEach { appendMarkdownInlineNode(it, artifacts, nextStyle, linkColor, codeBackground) }
+        }
+
+        is Image -> {
+            appendStyledText(node.title?.takeIf { it.isNotBlank() } ?: "图片", style, linkColor, codeBackground)
+        }
+
+        is HtmlInline -> appendStyledText(node.literal, style, linkColor, codeBackground)
+        else -> {
+            if (node.hasChildren()) {
+                node.children().forEach { appendMarkdownInlineNode(it, artifacts, style, linkColor, codeBackground) }
             }
         }
     }
@@ -1024,7 +1298,7 @@ private fun AgentArtifactsContent(
                     )
 
                 is AgentNativeArtifact.SubjectGroupRef -> AgentSubjectGroupCard(artifact, navigate)
-                is AgentNativeArtifact.StatusContextRef -> AgentStatusContextCard(artifact)
+                is AgentNativeArtifact.StatusContextRef -> AgentStatusContextCard(artifact, navigate)
                 is AgentNativeArtifact.TextQuoteRef -> AgentTextQuoteContextCard(artifact)
             }
         }
@@ -1229,16 +1503,74 @@ private data class AgentReferenceToken(
     val label: String?,
 )
 
+private sealed interface AgentMarkdownSegment {
+    data class Markdown(
+        val text: String,
+    ) : AgentMarkdownSegment
+
+    data class Card(
+        val token: AgentReferenceToken,
+    ) : AgentMarkdownSegment
+}
+
+private data class AgentInlineStyle(
+    val bold: Boolean = false,
+    val italic: Boolean = false,
+    val strike: Boolean = false,
+    val code: Boolean = false,
+    val url: String? = null,
+)
+
 private const val INLINE_DEEPLINK_TAG = "agent_deeplink"
 
-private val referenceRegex = Regex("""\{\{(card|link):([^:|}]+):([^|}]+)(?:\|([^}]+))?\}\}""")
+private val agentMarkdownParser: Parser by lazy {
+    Parser
+        .builder()
+        .extensions(
+            listOf(
+                StrikethroughExtension.create(),
+                TablesExtension.create(),
+            ),
+        )
+        .build()
+}
 private val cardRegex = Regex("""\{\{(card):([^:|}]+):([^|}]+)\}\}""")
 private val linkRegex = Regex("""\{\{(link):([^:|}]+):([^|}]+)\|([^}]+)\}\}""")
 
-private fun Regex.matchAt(
-    input: String,
-    index: Int,
-): MatchResult? = find(input, index)?.takeIf { it.range.first == index }
+private fun String.toAgentMarkdownSegments(): List<AgentMarkdownSegment> {
+    val visibleText = withoutTrailingPartialAgentToken()
+    if (visibleText.isBlank()) {
+        return emptyList()
+    }
+    val segments = mutableListOf<AgentMarkdownSegment>()
+    var cursor = 0
+    cardRegex.findAll(visibleText).forEach { match ->
+        val before = visibleText.substring(cursor, match.range.first)
+        if (before.isNotBlank()) {
+            segments += AgentMarkdownSegment.Markdown(before)
+        }
+        segments += AgentMarkdownSegment.Card(match.toReferenceToken())
+        cursor = match.range.last + 1
+    }
+    val tail = visibleText.substring(cursor)
+    if (tail.isNotBlank()) {
+        segments += AgentMarkdownSegment.Markdown(tail)
+    }
+    return segments
+}
+
+private fun String.withoutTrailingPartialAgentToken(): String {
+    val tokenStart = lastIndexOf("{{")
+    if (tokenStart < 0) {
+        return this
+    }
+    val tokenEnd = indexOf("}}", startIndex = tokenStart)
+    return if (tokenEnd < 0) {
+        substring(0, tokenStart)
+    } else {
+        this
+    }
+}
 
 private fun MatchResult.toReferenceToken(): AgentReferenceToken =
     AgentReferenceToken(
@@ -1247,6 +1579,101 @@ private fun MatchResult.toReferenceToken(): AgentReferenceToken =
         id = groupValues[3],
         label = groupValues.getOrNull(4)?.takeIf { it.isNotBlank() },
     )
+
+private fun Node.children(): Sequence<Node> =
+    sequence {
+        var child = firstChild
+        while (child != null) {
+            yield(child)
+            child = child.next
+        }
+    }
+
+private fun Node.hasChildren(): Boolean = firstChild != null
+
+private fun AnnotatedString.Builder.appendMarkdownLiteral(
+    literal: String,
+    artifacts: List<AgentNativeArtifact>,
+    style: AgentInlineStyle,
+    linkColor: Color,
+    codeBackground: Color,
+) {
+    var index = 0
+    while (index < literal.length) {
+        val linkMatch = linkRegex.find(literal, index)?.takeIf { it.range.first == index }
+        if (linkMatch != null) {
+            val token = linkMatch.toReferenceToken()
+            val item = artifacts.resolveItem(token.platform, token.id)
+            val label = token.label ?: item?.title ?: item?.authorName ?: token.id
+            val deeplink = item?.deeplink
+            appendStyledText(
+                text = label,
+                style = style.copy(url = deeplink),
+                linkColor = linkColor,
+                codeBackground = codeBackground,
+            )
+            index = linkMatch.range.last + 1
+        } else {
+            val nextToken = literal.indexOf("{{link:", startIndex = index).takeIf { it >= 0 } ?: literal.length
+            if (nextToken == index) {
+                appendStyledText(
+                    text = literal.substring(index),
+                    style = style,
+                    linkColor = linkColor,
+                    codeBackground = codeBackground,
+                )
+                return
+            }
+            appendStyledText(
+                text = literal.substring(index, nextToken),
+                style = style,
+                linkColor = linkColor,
+                codeBackground = codeBackground,
+            )
+            index = nextToken
+        }
+    }
+}
+
+private fun AnnotatedString.Builder.appendStyledText(
+    text: String,
+    style: AgentInlineStyle,
+    linkColor: Color,
+    codeBackground: Color,
+) {
+    if (text.isEmpty()) {
+        return
+    }
+    val start = length
+    val spanStyle =
+        SpanStyle(
+            color = if (style.url != null) linkColor else Color.Unspecified,
+            fontWeight = if (style.bold) FontWeight.SemiBold else null,
+            fontStyle = if (style.italic) FontStyle.Italic else null,
+            fontFamily = if (style.code) FontFamily.Monospace else null,
+            background = if (style.code) codeBackground else Color.Unspecified,
+            textDecoration = style.textDecoration(),
+        )
+    withStyle(spanStyle) {
+        append(text)
+    }
+    style.url?.takeIf { it.isNotBlank() }?.let { url ->
+        addStringAnnotation(
+            tag = INLINE_DEEPLINK_TAG,
+            annotation = url,
+            start = start,
+            end = length,
+        )
+    }
+}
+
+private fun AgentInlineStyle.textDecoration(): TextDecoration? =
+    when {
+        url != null && strike -> TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
+        url != null -> TextDecoration.Underline
+        strike -> TextDecoration.LineThrough
+        else -> null
+    }
 
 private fun List<AgentNativeArtifact>.resolveItem(
     platform: String,

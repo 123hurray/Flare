@@ -48,6 +48,7 @@ public fun LazyStaggeredGridScope.status(
     pagingState: PagingState<UiTimelineV2>,
     detailStatusKey: MicroBlogKey? = null,
     commentStyle: Boolean = false,
+    maxLines: Int? = null,
 ): Unit =
     with(pagingState) {
         onSuccess {
@@ -80,6 +81,7 @@ public fun LazyStaggeredGridScope.status(
                             item,
                             detailStatusKey = detailStatusKey,
                             commentStyle = commentStyle && item is UiTimelineV2.Post && item.statusKey != detailStatusKey,
+                            maxLines = maxLines,
 //                        modifier =
 //                        Modifier
 //                            .let {
@@ -239,6 +241,7 @@ public fun StatusItem(
     modifier: Modifier = Modifier,
     detailStatusKey: MicroBlogKey? = null,
     commentStyle: Boolean = false,
+    maxLines: Int? = null,
 ) {
     if (item == null) {
         Column(
@@ -255,6 +258,7 @@ public fun StatusItem(
             item = item,
             detailStatusKey = detailStatusKey,
             commentStyle = commentStyle,
+            maxLines = maxLines,
             modifier = modifier,
         )
     }

@@ -98,9 +98,19 @@ internal class DongqiudiDataSource(
         mediaOnly: Boolean,
     ): RemoteLoader<UiTimelineV2> = notSupported()
 
-    override fun searchStatus(query: String): RemoteLoader<UiTimelineV2> = notSupported()
+    override fun searchStatus(query: String): RemoteLoader<UiTimelineV2> =
+        DongqiudiSearchStatusRemoteLoader(
+            accountKey = accountKey,
+            service = service,
+            query = query,
+        )
 
-    override fun searchUser(query: String): RemoteLoader<UiProfile> = notSupported()
+    override fun searchUser(query: String): RemoteLoader<UiProfile> =
+        DongqiudiSearchUserRemoteLoader(
+            accountKey = accountKey,
+            service = service,
+            query = query,
+        )
 
     override fun discoverUsers(): RemoteLoader<UiProfile> = notSupported()
 
@@ -218,6 +228,55 @@ private class DongqiudiContextRemoteLoader(
         return PagingResult(
             data = listOf(detail) + comments,
             endOfPaginationReached = true,
+        )
+    }
+}
+
+private class DongqiudiSearchStatusRemoteLoader(
+    private val accountKey: MicroBlogKey,
+    private val service: DongqiudiService,
+    private val query: String,
+) : RemoteLoader<UiTimelineV2> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val pageNumber = (request as? PagingRequest.Append)?.nextKey?.toIntOrNull() ?: 1
+        val page = service.searchArticles(query, pageNumber)
+        val items =
+            page.items
+                .filter { it.id.isNotBlank() }
+                .map { it.withResolvedAuthor(service) }
+                .map { it.toUiTimeline(accountKey, detail = false) }
+        return PagingResult(
+            data = items,
+            nextKey = page.nextUrl,
+            endOfPaginationReached = page.nextUrl.isNullOrBlank() || items.isEmpty(),
+        )
+    }
+}
+
+private class DongqiudiSearchUserRemoteLoader(
+    private val accountKey: MicroBlogKey,
+    private val service: DongqiudiService,
+    private val query: String,
+) : RemoteLoader<UiProfile> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiProfile> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val pageNumber = (request as? PagingRequest.Append)?.nextKey?.toIntOrNull() ?: 1
+        val page = service.searchUsers(query, pageNumber)
+        return PagingResult(
+            data = page.items.map { it.toUiProfile(accountKey) },
+            nextKey = page.nextPage?.toString(),
+            endOfPaginationReached = page.nextPage == null || page.items.isEmpty(),
         )
     }
 }

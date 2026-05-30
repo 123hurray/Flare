@@ -29,6 +29,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.jsonObject
@@ -42,6 +43,9 @@ internal data class VVOResponse<T>(
     val ok: Long? = null,
     @SerialName("http_code")
     val httpCode: Long? = null,
+    val errno: String? = null,
+    val msg: String? = null,
+    val url: String? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -53,6 +57,9 @@ internal class VVOResponseSerializer<T>(
             element("data", dataSer.descriptor.nullable)
             element<Long?>("ok")
             element<Long?>("http_code")
+            element<String?>("errno")
+            element<String?>("msg")
+            element<String?>("url")
         }
 
     override fun deserialize(decoder: Decoder): VVOResponse<T> {
@@ -71,8 +78,11 @@ internal class VVOResponseSerializer<T>(
 
         val ok = obj["ok"]?.jsonPrimitive?.longOrNull
         val httpCode = obj["http_code"]?.jsonPrimitive?.longOrNull
+        val errno = obj["errno"]?.jsonPrimitive?.contentOrNull
+        val msg = obj["msg"]?.jsonPrimitive?.contentOrNull
+        val url = obj["url"]?.jsonPrimitive?.contentOrNull
 
-        return VVOResponse(data, ok, httpCode)
+        return VVOResponse(data, ok, httpCode, errno, msg, url)
     }
 
     override fun serialize(
@@ -89,6 +99,9 @@ internal class VVOResponseSerializer<T>(
                 value.data?.let { put("data", json.encodeToJsonElement(dataSer, it)) }
                 value.ok?.let { put("ok", JsonPrimitive(it)) }
                 value.httpCode?.let { put("http_code", JsonPrimitive(it)) }
+                value.errno?.let { put("errno", JsonPrimitive(it)) }
+                value.msg?.let { put("msg", JsonPrimitive(it)) }
+                value.url?.let { put("url", JsonPrimitive(it)) }
             }
         jsonEncoder.encodeJsonElement(obj)
     }

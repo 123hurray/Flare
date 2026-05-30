@@ -73,7 +73,7 @@ internal fun VVOStatusScreen(
     statusKey: MicroBlogKey,
     onBack: () -> Unit,
     accountType: AccountType,
-    onAgent: (platform: String?, text: String?) -> Unit,
+    onAgent: (UiTimelineV2.Post) -> Unit,
 ) {
     val context = LocalContext.current
     val state by producePresenter(key = "status_detail_${statusKey}_$accountType") {
@@ -119,10 +119,7 @@ internal fun VVOStatusScreen(
                 .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection)
                 .threeFingerSwipeHorizontal(
                     onSwipeLeft = {
-                        onAgent(
-                            currentPost?.platformType?.name?.toAgentPlatformName(),
-                            currentPost?.content?.innerText,
-                        )
+                        currentPost?.let(onAgent)
                     },
                     onSwipeRight = {
                         currentPost?.let {

@@ -220,6 +220,12 @@ public data class RequireReLoginException(
     val platformType: PlatformType,
 ) : Exception("Login required.")
 
+@Immutable
+public data class VVOCaptchaRequiredException(
+    val accountKey: MicroBlogKey,
+    val url: String,
+) : Exception("Weibo verification required.")
+
 @Composable
 internal fun accountProvider(
     accountType: AccountType,

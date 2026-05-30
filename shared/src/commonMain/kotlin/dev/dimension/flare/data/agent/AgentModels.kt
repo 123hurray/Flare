@@ -14,6 +14,10 @@ public data class AgentSourceContext(
     val statusKey: MicroBlogKey? = null,
     val selectedStatusPlatform: String? = null,
     val selectedStatusText: String? = null,
+    val selectedStatusAuthorName: String? = null,
+    val selectedStatusAuthorHandle: String? = null,
+    val selectedStatusCreatedAtEpochMillis: Long? = null,
+    val selectedStatusDeeplink: String? = null,
     val feedSnapshot: List<AgentTimelineItem> = emptyList(),
     val allowedPlatforms: List<String> = emptyList(),
 )
@@ -124,6 +128,10 @@ public sealed interface AgentNativeArtifact {
         val platform: String?,
         val text: String,
         val statusKey: MicroBlogKey? = null,
+        val authorName: String? = null,
+        val authorHandle: String? = null,
+        val createdAtEpochMillis: Long? = null,
+        val deeplink: String? = null,
     ) : AgentNativeArtifact
 
     @Serializable

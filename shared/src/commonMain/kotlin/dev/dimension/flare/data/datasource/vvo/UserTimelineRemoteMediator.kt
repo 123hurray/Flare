@@ -5,6 +5,8 @@ import dev.dimension.flare.data.datasource.microblog.paging.CacheableRemoteLoade
 import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
 import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.network.vvo.VVOService
+import dev.dimension.flare.data.network.vvo.model.ContainerInfo
+import dev.dimension.flare.data.network.vvo.model.Status
 import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
@@ -48,17 +50,10 @@ internal class UserTimelineRemoteMediator(
                 platformType = PlatformType.VVo,
             )
         }
+        val st = config.data.st
 
         if (containerid == null) {
-            containerid =
-                service
-                    .getContainerIndex(type = "uid", value = userKey.id)
-                    .data
-                    ?.tabsInfo
-                    ?.tabs
-                    ?.firstOrNull {
-                        it.tabType == vvo
-                    }?.containerid
+            containerid = service.getContainerIndex(type = "uid", value = userKey.id).data?.timelineContainerId(userKey.id)
         }
 
         val response =
@@ -87,15 +82,40 @@ internal class UserTimelineRemoteMediator(
                 }
             }
 
-        val data =
+        var statuses =
             response.data
                 ?.cards
-                ?.mapNotNull { it.mblog }
+                .orEmpty()
+                .extractStatuses()
+
+        if (request is PagingRequest.Refresh && statuses.isEmpty()) {
+            val fallbackContainerId = fallbackTimelineContainerId(userKey.id)
+            if (containerid != fallbackContainerId) {
+                val fallback =
+                    service.getContainerIndex(
+                        type = "uid",
+                        value = userKey.id,
+                        containerId = fallbackContainerId,
+                    )
+                val fallbackStatuses = fallback.data?.cards.orEmpty().extractStatuses()
+                if (fallbackStatuses.isNotEmpty()) {
+                    containerid = fallbackContainerId
+                    statuses = fallbackStatuses
+                }
+            }
+        }
+
+        if (request is PagingRequest.Refresh && statuses.isEmpty() && st != null) {
+            statuses = service.profileInfo(userKey.id, st).data?.statuses.orEmpty()
+        }
+
+        val data =
+            statuses
                 .orEmpty()
                 .map { it.render(accountKey) }
 
         return PagingResult(
-            endOfPaginationReached = response.data?.cardlistInfo?.sinceID == null,
+            endOfPaginationReached = response.data?.cardlistInfo?.sinceID == null || data.isEmpty(),
             data = data,
             nextKey =
                 response.data
@@ -105,3 +125,26 @@ internal class UserTimelineRemoteMediator(
         )
     }
 }
+
+private fun ContainerInfo.timelineContainerId(userId: String): String =
+    tabsInfo
+        ?.tabs
+        .orEmpty()
+        .firstOrNull {
+            it.containerid?.isNotBlank() == true &&
+                (
+                    it.tabType == vvo ||
+                        it.tabKey == vvo ||
+                        it.title == "微博" ||
+                        it.title == "主页"
+                )
+        }?.containerid
+        ?: cardlistInfo?.containerid?.takeIf { it.isNotBlank() }
+        ?: fallbackTimelineContainerId(userId)
+
+private fun fallbackTimelineContainerId(userId: String): String = "107603$userId"
+
+private fun List<dev.dimension.flare.data.network.vvo.model.Card>.extractStatuses(): List<Status> =
+    flatMap { card ->
+        listOfNotNull(card.mblog) + card.cardGroup.orEmpty().mapNotNull { it.mblog }
+    }

@@ -244,6 +244,7 @@ private val zhihuCookieAllowList =
         "tst",
         "capsion_ticket",
         "__snaker__id",
+        "__zse_ck",
     )
 
 private fun readZhihuCookies(): Map<String, String> {

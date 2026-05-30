@@ -1,7 +1,18 @@
 package dev.dimension.flare.data.network.vvo.model
 
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 
 @Serializable
 internal data class ProfileData(
@@ -71,7 +82,9 @@ internal data class Card(
     val itemid: String? = null,
     val scheme: String? = null,
     val mblog: Status? = null,
+    val user: User? = null,
     @SerialName("card_group")
+    @Serializable(with = CardGroupListSerializer::class)
     val cardGroup: List<CardGroup>? = null,
 )
 
@@ -81,6 +94,35 @@ internal data class CardGroup(
     val user: User? = null,
     val mblog: Status? = null,
 )
+
+private object CardGroupListSerializer : KSerializer<List<CardGroup>?> {
+    private val listSerializer = ListSerializer(CardGroup.serializer())
+    private val itemSerializer = CardGroup.serializer()
+
+    override val descriptor: SerialDescriptor = listSerializer.descriptor
+
+    @OptIn(ExperimentalSerializationApi::class)
+    override fun serialize(
+        encoder: Encoder,
+        value: List<CardGroup>?,
+    ) {
+        if (value == null) {
+            encoder.encodeNull()
+        } else {
+            listSerializer.serialize(encoder, value)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): List<CardGroup>? {
+        val jsonDecoder = decoder as? JsonDecoder ?: return listSerializer.deserialize(decoder)
+        return when (val element = jsonDecoder.decodeJsonElement()) {
+            JsonNull -> null
+            is JsonArray -> jsonDecoder.json.decodeFromJsonElement(listSerializer, element)
+            is JsonObject -> listOf(jsonDecoder.json.decodeFromJsonElement(itemSerializer, element))
+            else -> null
+        }
+    }
+}
 
 @Serializable
 internal data class TabsInfo(

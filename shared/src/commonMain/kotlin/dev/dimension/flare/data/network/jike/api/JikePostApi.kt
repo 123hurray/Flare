@@ -14,6 +14,7 @@ import dev.dimension.flare.data.network.jike.model.JikePostActionRequest
 import dev.dimension.flare.data.network.jike.model.JikePostActionResponse
 import dev.dimension.flare.data.network.jike.model.JikeResponse
 import dev.dimension.flare.data.network.jike.model.JikeSearchRequest
+import dev.dimension.flare.data.network.jike.model.JikeThreadCommentsRequest
 import dev.dimension.flare.data.network.jike.model.JikeTimelineRequest
 import dev.dimension.flare.data.network.jike.model.JikeTopic
 import dev.dimension.flare.data.network.jike.model.JikeTopicTimelineRequest
@@ -80,6 +81,16 @@ internal interface JikePostApi {
     @POST("1.0/comments/listPrimary")
     suspend fun getPrimaryComments(
         @Body request: JikeCommentsRequest,
+        @Header("Content-Type") contentType: String = "application/json",
+    ): JikeResponse<List<JikeComment>>
+
+    /**
+     * Get comments in a comment thread.
+     * POST /1.0/comments/list
+     */
+    @POST("1.0/comments/list")
+    suspend fun getThreadComments(
+        @Body request: JikeThreadCommentsRequest,
         @Header("Content-Type") contentType: String = "application/json",
     ): JikeResponse<List<JikeComment>>
 

@@ -27,7 +27,6 @@ import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.collectAsUiState
 import dev.dimension.flare.ui.model.onSuccess
-import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.model.toUi
 import dev.dimension.flare.ui.presenter.PresenterBase
 import kotlinx.collections.immutable.ImmutableList
@@ -60,15 +59,10 @@ public class SearchPresenter(
                 it.map { dataSource ->
                     val authenticated = dataSource as UserDataSource
                     val accountKey = dataSource.accountKey
-                    authenticated.userHandler.userById(accountKey.id).toUi()
+                    authenticated.userHandler.userById(accountKey.id).toUi().map { accountKey to it }
                 }
             }.combineLatestFlowLists()
-            .map {
-                it
-                    .mapNotNull {
-                        it.takeSuccess()
-                    }.toImmutableList()
-            }
+            .stableAccountProfiles()
     }
 
     private val queryFlow by lazy {
@@ -77,6 +71,10 @@ public class SearchPresenter(
 
     private val selectedAccountFlow by lazy {
         MutableStateFlow<UiProfile?>(null)
+    }
+
+    private val selectedSearchStatusTypeFlow by lazy {
+        MutableStateFlow(SearchStatusType.Comprehensive)
     }
 
     private val selectedAccountTypeFlow: Flow<AccountType> by lazy {
@@ -110,6 +108,7 @@ public class SearchPresenter(
             SearchStatusTimelinePresenter(
                 accountType = accountType,
                 queryFlow = queryFlow,
+                typeFlow = selectedSearchStatusTypeFlow,
             ).createPager(
                 scope = scope,
             )
@@ -126,6 +125,7 @@ public class SearchPresenter(
         val accounts by accountsFlow.collectAsUiState()
         val query by queryFlow.collectAsState()
         val selectedAccount by selectedAccountFlow.collectAsState()
+        val selectedSearchStatusType by selectedSearchStatusTypeFlow.collectAsState()
 
         accounts.onSuccess {
             LaunchedEffect(it.size) {
@@ -146,6 +146,7 @@ public class SearchPresenter(
             override val searching = query.isNotEmpty()
             override val accounts = accounts
             override val selectedAccount = selectedAccount
+            override val selectedSearchStatusType = selectedSearchStatusType
 
             override fun search(new: String) {
                 queryFlow.value = new
@@ -159,6 +160,10 @@ public class SearchPresenter(
             override fun setAccount(profile: UiProfile) {
                 selectedAccountFlow.value = profile
             }
+
+            override fun setSearchStatusType(type: SearchStatusType) {
+                selectedSearchStatusTypeFlow.value = type
+            }
         }
     }
 }
@@ -170,10 +175,13 @@ public interface SearchState {
     public val searching: Boolean
     public val accounts: UiState<ImmutableList<UiProfile>>
     public val selectedAccount: UiProfile?
+    public val selectedSearchStatusType: SearchStatusType
 
     public fun search(new: String)
 
     public suspend fun refreshSuspend()
 
     public fun setAccount(profile: UiProfile)
+
+    public fun setSearchStatusType(type: SearchStatusType)
 }

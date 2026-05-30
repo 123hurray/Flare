@@ -26,6 +26,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import kotlin.time.Instant
 
 public class AgentChatPresenter(
     private val initialConversationId: String? = null,
@@ -109,6 +110,10 @@ public class AgentChatPresenter(
                     buildContextArtifacts(
                         platform = sourceContext.selectedStatusPlatform,
                         statusText = sourceContext.selectedStatusText,
+                        authorName = sourceContext.selectedStatusAuthorName,
+                        authorHandle = sourceContext.selectedStatusAuthorHandle,
+                        createdAtEpochMillis = sourceContext.selectedStatusCreatedAtEpochMillis,
+                        deeplink = sourceContext.selectedStatusDeeplink,
                         includeStatusContext = includeStatusInThisRun,
                         selectedText = sourceContext.selectedText,
                         includeSelectedTextContext = includeSelectedTextInThisRun,
@@ -118,6 +123,9 @@ public class AgentChatPresenter(
                     text.withAgentContext(
                         platform = sourceContext.selectedStatusPlatform,
                         statusText = sourceContext.selectedStatusText,
+                        authorName = sourceContext.selectedStatusAuthorName,
+                        authorHandle = sourceContext.selectedStatusAuthorHandle,
+                        createdAtEpochMillis = sourceContext.selectedStatusCreatedAtEpochMillis,
                         includeStatusContext = includeStatusInThisRun,
                         selectedText = sourceContext.selectedText,
                         includeSelectedTextContext = includeSelectedTextInThisRun,
@@ -285,6 +293,9 @@ public class AgentChatPresenter(
 private fun String.withAgentContext(
     platform: String?,
     statusText: String?,
+    authorName: String?,
+    authorHandle: String?,
+    createdAtEpochMillis: Long?,
     includeStatusContext: Boolean,
     selectedText: String?,
     includeSelectedTextContext: Boolean,
@@ -294,6 +305,12 @@ private fun String.withAgentContext(
             append("当前用户选择的帖子：")
             append("平台：")
             append(platform?.takeIf { it.isNotBlank() } ?: "未知")
+            append('\n')
+            append("账号：")
+            append(formatAgentAccount(authorName, authorHandle))
+            append('\n')
+            append("发帖时间：")
+            append(createdAtEpochMillis?.let { Instant.fromEpochMilliseconds(it).toString() } ?: "未知")
             append('\n')
             append("正文：")
             append(statusText)
@@ -310,6 +327,10 @@ private fun String.withAgentContext(
 private fun buildContextArtifacts(
     platform: String?,
     statusText: String?,
+    authorName: String?,
+    authorHandle: String?,
+    createdAtEpochMillis: Long?,
+    deeplink: String?,
     includeStatusContext: Boolean,
     selectedText: String?,
     includeSelectedTextContext: Boolean,
@@ -323,6 +344,10 @@ private fun buildContextArtifacts(
                     platform = platform,
                     text = statusText,
                     statusKey = statusKey,
+                    authorName = authorName,
+                    authorHandle = authorHandle,
+                    createdAtEpochMillis = createdAtEpochMillis,
+                    deeplink = deeplink,
                 ),
             )
         }
@@ -335,6 +360,20 @@ private fun buildContextArtifacts(
             )
         }
     }
+
+private fun formatAgentAccount(
+    authorName: String?,
+    authorHandle: String?,
+): String {
+    val name = authorName?.takeIf { it.isNotBlank() }
+    val handle = authorHandle?.takeIf { it.isNotBlank() }
+    return when {
+        name != null && handle != null && name != handle -> "$name ($handle)"
+        name != null -> name
+        handle != null -> handle
+        else -> "未知"
+    }
+}
 
 private fun String.toAgentPlatformName(): String =
     when (lowercase()) {

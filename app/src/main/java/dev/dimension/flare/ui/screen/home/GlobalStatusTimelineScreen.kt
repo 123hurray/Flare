@@ -26,6 +26,7 @@ import compose.icons.fontawesomeicons.solid.Trash
 import dev.dimension.flare.common.PagingState
 import dev.dimension.flare.ui.component.FAIcon
 import dev.dimension.flare.ui.component.FlareScaffold
+import dev.dimension.flare.ui.component.LocalComponentAppearance
 import dev.dimension.flare.ui.component.SearchBar
 import dev.dimension.flare.ui.component.searchBarPresenter
 import dev.dimension.flare.ui.component.status.AdaptiveCard
@@ -64,6 +65,7 @@ internal fun GlobalStatusTimelineScreen(
     }
     val lazyListState = rememberLazyStaggeredGridState()
     val canDelete = pagingKey == LogStatusHistoryPresenter.FAVORITES_PAGING_KEY
+    val previewMaxLines = LocalComponentAppearance.current.lineLimit
     FlareScaffold(
         topBar = {
             Box(
@@ -100,13 +102,17 @@ internal fun GlobalStatusTimelineScreen(
                         item = item,
                         index = index,
                         totalCount = listState.itemCount,
+                        maxLines = previewMaxLines,
                         onDelete = {
                             item?.let(state::delete)
                         },
                     )
                 }
             } else {
-                status(state.listState)
+                status(
+                    pagingState = state.listState,
+                    maxLines = previewMaxLines,
+                )
             }
         }
     }
@@ -117,6 +123,7 @@ private fun FavoriteSwipeItem(
     item: UiTimelineV2?,
     index: Int,
     totalCount: Int,
+    maxLines: Int,
     onDelete: () -> Unit,
 ) {
     val swipeState =
@@ -159,7 +166,10 @@ private fun FavoriteSwipeItem(
             totalCount = totalCount,
             respectTimelineMode = true,
             content = {
-                StatusItem(item)
+                StatusItem(
+                    item = item,
+                    maxLines = maxLines,
+                )
             },
         )
     }

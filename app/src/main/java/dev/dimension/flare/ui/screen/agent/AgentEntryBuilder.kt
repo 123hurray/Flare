@@ -17,6 +17,11 @@ internal fun EntryProviderScope<NavKey>.agentEntryBuilder(
             accountType = args.accountType,
             selectedStatusPlatform = args.selectedStatusPlatform,
             selectedStatusText = args.selectedStatusText,
+            selectedStatusAuthorName = args.selectedStatusAuthorName,
+            selectedStatusAuthorHandle = args.selectedStatusAuthorHandle,
+            selectedStatusCreatedAtEpochMillis = args.selectedStatusCreatedAtEpochMillis,
+            selectedStatusDeeplink = args.selectedStatusDeeplink,
+            sourceInstanceId = args.sourceInstanceId,
             onBack = onBack,
             navigate = navigate,
         )

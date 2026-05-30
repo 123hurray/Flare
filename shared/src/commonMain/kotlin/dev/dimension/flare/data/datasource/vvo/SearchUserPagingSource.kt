@@ -16,7 +16,15 @@ internal class SearchUserPagingSource(
     private val query: String,
 ) : RemoteLoader<UiProfile> {
     private val containerId by lazy {
-        "100103type=3&q=$query&t="
+        "100103type=3&q=$normalizedQuery&t="
+    }
+    private val normalizedQuery: String by lazy {
+        query
+            .trim()
+            .removePrefix("@")
+            .substringBefore("@")
+            .takeIf { it.isNotBlank() }
+            ?: query.trim()
     }
 
     override suspend fun load(
@@ -30,6 +38,7 @@ internal class SearchUserPagingSource(
                 platformType = PlatformType.VVo,
             )
         }
+        val st = config.data.st
 
         val page =
             when (request) {
@@ -54,14 +63,22 @@ internal class SearchUserPagingSource(
                 pageType = "searchall",
                 page = page,
             )
-        val users =
+        response.throwCaptchaIfNeeded(accountKey)
+        var users =
             response.data
                 ?.cards
-                ?.flatMap {
-                    it.cardGroup.orEmpty()
-                }?.mapNotNull {
-                    it.user
-                }.orEmpty()
+                .orEmpty()
+                .extractUsers()
+
+        if (request is PagingRequest.Refresh && response.ok == 1L && users.isEmpty() && st != null) {
+            service.getUid(normalizedQuery)?.let { uid ->
+                service.profileInfo(uid, st).data?.user?.let { user ->
+                    users = listOf(user)
+                }
+            }
+        }
+
+        users = users.distinctBy { it.id }
 
         return PagingResult(
             data = users.map { it.render(accountKey = accountKey) },
@@ -69,3 +86,11 @@ internal class SearchUserPagingSource(
         )
     }
 }
+
+private fun List<dev.dimension.flare.data.network.vvo.model.Card>.extractUsers() =
+    flatMap { card ->
+        listOfNotNull(card.user, card.mblog?.user) +
+            card.cardGroup.orEmpty().flatMap { group ->
+                listOfNotNull(group.user, group.mblog?.user)
+            }
+    }

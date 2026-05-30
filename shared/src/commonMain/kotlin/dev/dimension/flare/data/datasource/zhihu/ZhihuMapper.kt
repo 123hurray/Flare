@@ -326,7 +326,12 @@ internal fun ZhihuViewer.toUiProfile(
         banner = null,
         description = headline.takeIf { it.isNotBlank() }?.toUiPlainText(sourceLanguages),
         sourceLanguages = sourceLanguages.toImmutableList(),
-        matrices = UiProfile.Matrices(fansCount = 0, followsCount = 0, statusesCount = 0),
+        matrices =
+            UiProfile.Matrices(
+                fansCount = followerCount,
+                followsCount = followingCount,
+                statusesCount = statusesCount,
+            ),
         mark = persistentListOf(),
         bottomContent = null,
     )

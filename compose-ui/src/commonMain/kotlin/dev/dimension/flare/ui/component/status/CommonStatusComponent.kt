@@ -233,6 +233,19 @@ public fun CommonStatusComponent(
             }
         }
         Column {
+            val dongqiudiDetailTitle =
+                item.contentWarning
+                    ?.takeIf { isDetail && item.platformType == PlatformType.Dongqiudi && it.raw.isNotBlank() }
+            dongqiudiDetailTitle?.let {
+                RichText(
+                    text = it,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = PlatformTheme.typography.h3,
+                    headingFontScale = 1f,
+                    lineHeightScale = 1f,
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
             item.user?.let { user ->
                 val dateContent = @Composable {
                     Row(
@@ -341,11 +354,25 @@ public fun CommonStatusComponent(
                     ) {
                         StatusContentComponent(
                             content = item.content,
-                            contentWarning = item.contentWarning,
+                            contentWarning =
+                                if (item.platformType == PlatformType.Dongqiudi) {
+                                    null
+                                } else {
+                                    item.contentWarning
+                                },
                             poll = item.poll,
                             maxLines = Int.MAX_VALUE,
                             showExpandButton = showExpandButton,
                             onExpandClick = null,
+                            textStyle =
+                                if (item.platformType == PlatformType.Dongqiudi) {
+                                    PlatformTheme.typography.h4
+                                } else {
+                                    PlatformTextStyle.current
+                                },
+                            headingFontScale = if (item.platformType == PlatformType.Dongqiudi) 1f else 1f,
+                            bodyFontScale = if (item.platformType == PlatformType.Dongqiudi) 0.85f else 1f,
+                            lineHeightScale = if (item.platformType == PlatformType.Dongqiudi) 0.9f else 1f,
                         )
                     }
                 }
@@ -648,15 +675,16 @@ private fun CompactChildComments(
 
 @Composable
 private fun CompactChildComment(item: UiTimelineV2.Post) {
+    val nicknameSize = PlatformTheme.typography.body.fontSize.value.takeIf { it > 0f }?.dp ?: 14.dp
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item.user?.let {
             AvatarComponent(
                 it.avatar,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(nicknameSize),
             )
-        } ?: Spacer(modifier = Modifier.size(18.dp))
+        } ?: Spacer(modifier = Modifier.size(nicknameSize))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -760,6 +788,9 @@ private fun ZhihuDetailStatusComponent(
             RichText(
                 text = it,
                 modifier = Modifier.fillMaxWidth(),
+                textStyle = PlatformTheme.typography.h3,
+                headingFontScale = 1f,
+                lineHeightScale = 1f,
             )
         }
         item.sourceChannel?.name?.takeIf { it.isNotBlank() }?.let {
@@ -778,6 +809,8 @@ private fun ZhihuDetailStatusComponent(
                         text = bodyContent,
                         modifier = Modifier.fillMaxWidth(),
                         textStyle = PlatformTheme.typography.h4,
+                        bodyFontScale = 0.8f,
+                        lineHeightScale = 0.8f,
                         onBlockImageClick = { url ->
                             openStatusRichTextImage(item, url, uriHandler)
                         },
@@ -848,6 +881,9 @@ private fun ZhihuDetailStatusComponent(
                         openStatusRichTextImage(item, url, uriHandler)
                     },
                     textStyle = PlatformTheme.typography.h4,
+                    headingFontScale = 0.9f,
+                    bodyFontScale = 0.8f,
+                    lineHeightScale = 0.8f,
                 )
             }
         }
@@ -1714,6 +1750,9 @@ private fun StatusContentComponent(
     modifier: Modifier = Modifier,
     onBlockImageClick: ((String) -> Unit)? = null,
     textStyle: androidx.compose.ui.text.TextStyle = PlatformTextStyle.current,
+    headingFontScale: Float = 1f,
+    bodyFontScale: Float = 1f,
+    lineHeightScale: Float = 1f,
 ) {
     var expanded by rememberSaveable {
         mutableStateOf(false)
@@ -1760,6 +1799,9 @@ private fun StatusContentComponent(
                         text = content,
                         modifier = Modifier.fillMaxWidth(),
                         textStyle = textStyle,
+                        headingFontScale = headingFontScale,
+                        bodyFontScale = bodyFontScale,
+                        lineHeightScale = lineHeightScale,
                         maxLines =
                             if (expanded || maxLines == Int.MAX_VALUE) {
                                 Int.MAX_VALUE

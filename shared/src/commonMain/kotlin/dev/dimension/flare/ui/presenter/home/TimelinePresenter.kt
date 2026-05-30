@@ -31,6 +31,7 @@ import dev.dimension.flare.data.datastore.model.AppSettings
 import dev.dimension.flare.data.datastore.AppDataStore
 import dev.dimension.flare.data.repository.LocalFilterRepository
 import dev.dimension.flare.data.repository.LoginExpiredException
+import dev.dimension.flare.data.repository.VVOCaptchaRequiredException
 import dev.dimension.flare.data.translation.PreTranslationService
 import dev.dimension.flare.data.translation.TranslationSettingsSupport
 import dev.dimension.flare.ui.model.UiTimelineV2
@@ -138,10 +139,10 @@ public abstract class TimelinePresenter :
                         preTranslationService = preTranslationService,
                         notifyError = { e ->
                             println("TimelinePresenter: timeline load error message=${e.message}")
-                            if (e is LoginExpiredException) {
-                                inAppNotification.onError(Message.LoginExpired, e)
-                            } else {
-                                inAppNotification.onError(Message.Timeline, e)
+                            when (e) {
+                                is VVOCaptchaRequiredException -> Unit
+                                is LoginExpiredException -> inAppNotification.onError(Message.LoginExpired, e)
+                                else -> inAppNotification.onError(Message.Timeline, e)
                             }
                         },
                     ),

@@ -6,6 +6,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.encodeURLParameter
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -53,6 +54,42 @@ internal class DongqiudiService {
                 ?: error("Dongqiudi user profile is empty: $userId")
         userProfileCache[userId] = user
         return user
+    }
+
+    suspend fun searchArticles(
+        query: String,
+        page: Int,
+    ): DongqiudiTimelinePage {
+        val root =
+            requestJson(
+                "https://api.dongqiudi.com/search?keywords=${query.encodeURLParameter()}&type=all&page=$page",
+            )
+        val items =
+            root["news"]
+                .arrayOrEmpty()
+                .mapNotNull { it.objectOrNull()?.toArticleSummary() }
+        return DongqiudiTimelinePage(
+            items = items,
+            nextUrl = if (items.isEmpty()) null else (page + 1).toString(),
+        )
+    }
+
+    suspend fun searchUsers(
+        query: String,
+        page: Int,
+    ): DongqiudiUserPage {
+        val root =
+            requestJson(
+                "https://api.dongqiudi.com/search?keywords=${query.encodeURLParameter()}&type=user&page=$page",
+            )
+        val users =
+            root["users"]
+                .arrayOrEmpty()
+                .mapNotNull { it.objectOrNull()?.toSearchUser() }
+        return DongqiudiUserPage(
+            items = users,
+            nextPage = if (users.isEmpty()) null else page + 1,
+        )
     }
 
     suspend fun hotComments(articleId: String): List<DongqiudiComment> {
@@ -167,8 +204,8 @@ internal class DongqiudiService {
     private fun JsonObject.toArticleSummary(): DongqiudiArticle =
         DongqiudiArticle(
             id = string("id").orEmpty(),
-            title = string("title").orEmpty(),
-            description = string("description").orEmpty(),
+            title = string("title").orEmpty().stripDongqiudiHighlightHtml(),
+            description = string("description").orEmpty().stripDongqiudiHighlightHtml(),
             bodyHtml = null,
             thumbnail = string("thumb"),
             commentsTotal = long("comments_total") ?: 0L,
@@ -211,6 +248,19 @@ internal class DongqiudiService {
             id = id,
             name = string("username2") ?: string("username") ?: id,
             avatar = string("avatar").orEmpty(),
+            )
+    }
+
+    private fun JsonObject.toSearchUser(): DongqiudiUser? {
+        val id = string("id")?.takeIf { it.isNotBlank() } ?: return null
+        return DongqiudiUser(
+            id = id,
+            name = (string("username") ?: string("name") ?: id).stripDongqiudiHighlightHtml(),
+            avatar = string("avatar").orEmpty(),
+            description = string("region").orEmpty(),
+            fansCount = 0L,
+            followsCount = 0L,
+            statusesCount = long("up_total") ?: 0L,
         )
     }
 
@@ -298,6 +348,11 @@ internal data class DongqiudiCommentPage(
     val isEnd: Boolean,
 )
 
+internal data class DongqiudiUserPage(
+    val items: List<DongqiudiUser>,
+    val nextPage: Int?,
+)
+
 internal data class DongqiudiArticle(
     val id: String,
     val title: String,
@@ -347,6 +402,9 @@ internal data class DongqiudiAttachment(
 )
 
 private const val DONGQIUDI_USER_AGENT = "Dongqiudi/8.4.0 Android"
+
+private fun String.stripDongqiudiHighlightHtml(): String =
+    replace(Regex("</?(?:font|em)\\b[^>]*>", RegexOption.IGNORE_CASE), "")
 
 private fun JsonObject.string(key: String): String? =
     when (val primitive = get(key) as? JsonPrimitive) {

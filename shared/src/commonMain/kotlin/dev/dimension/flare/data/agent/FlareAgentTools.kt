@@ -7,10 +7,12 @@ import dev.dimension.flare.common.encodeJson
 import dev.dimension.flare.data.datasource.microblog.MicroblogDataSource
 import dev.dimension.flare.data.datasource.microblog.datasource.PostDataSource
 import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
+import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.data.repository.accountServiceFlow
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.route.DeeplinkRoute
 import dev.dimension.flare.ui.route.toUri
@@ -47,6 +49,7 @@ internal class FlareAgentTools(
                             mapOf(
                                 "description" to stringSchema("User-visible reason for reading the current feed snapshot."),
                                 "platform" to platformSchema(platformDescription, platformOptions),
+                                "pages" to integerSchema("Number of pages to load when the captured snapshot is empty. Default 1, maximum 5."),
                             ),
                     ),
             ),
@@ -62,7 +65,47 @@ internal class FlareAgentTools(
                                 "description" to stringSchema("User-visible reason for this search."),
                                 "platform" to platformSchema(platformDescription, platformOptions),
                                 "limit" to integerSchema("Maximum number of compact results. Default 12, maximum 30."),
+                                "pages" to integerSchema("Number of result pages to load per account. Default 1, maximum 5."),
                                 "all_accounts" to booleanSchema("Search every connected account when true. Defaults to true."),
+                            ),
+                    ),
+            ),
+            AgentToolSpec(
+                name = "search_users",
+                description = "Search users across connected social media accounts. $platformDescription",
+                parameters =
+                    schema(
+                        required = listOf("query", "description"),
+                        properties =
+                            mapOf(
+                                "query" to stringSchema("User keyword, display name, or handle."),
+                                "description" to stringSchema("User-visible reason for this user search."),
+                                "platform" to platformSchema(platformDescription, platformOptions),
+                                "limit" to integerSchema("Maximum number of users. Default 12, maximum 30."),
+                                "pages" to integerSchema("Number of result pages to load per account. Default 1, maximum 5."),
+                                "all_accounts" to booleanSchema("Search every connected account when true. Defaults to true."),
+                                "account_id" to stringSchema("Optional account id when all_accounts is false."),
+                                "account_host" to stringSchema("Optional account host when all_accounts is false."),
+                            ),
+                    ),
+            ),
+            AgentToolSpec(
+                name = "search_user_profile_statuses",
+                description = "Search posts from a specific user's profile timeline by locally filtering loaded profile pages. Useful for Weibo, X, Xiaohongshu, and other platforms with profile timelines. $platformDescription",
+                parameters =
+                    schema(
+                        required = listOf("query", "user_id", "user_host", "description"),
+                        properties =
+                            mapOf(
+                                "query" to stringSchema("Keyword to find inside the user's profile posts."),
+                                "user_id" to stringSchema("The target profile key id returned by search_users or a profile item."),
+                                "user_host" to stringSchema("The target profile key host returned by search_users or a profile item."),
+                                "description" to stringSchema("User-visible reason for this profile-post search."),
+                                "platform" to platformSchema(platformDescription, platformOptions),
+                                "limit" to integerSchema("Maximum number of compact results. Default 12, maximum 30."),
+                                "pages" to integerSchema("Number of profile pages to load. Default 3, maximum 10."),
+                                "account_id" to stringSchema("Optional account id to use when opening the source account."),
+                                "account_host" to stringSchema("Optional account host to use when opening the source account."),
                             ),
                     ),
             ),
@@ -79,6 +122,24 @@ internal class FlareAgentTools(
                                 "description" to stringSchema("User-visible reason for loading this detail."),
                                 "account_id" to stringSchema("Optional account id to use when opening the source account."),
                                 "account_host" to stringSchema("Optional account host to use when opening the source account."),
+                            ),
+                    ),
+            ),
+            AgentToolSpec(
+                name = "get_status_comments",
+                description = "Load comments or a comment thread for one status/feed item by account and status key.",
+                parameters =
+                    schema(
+                        required = listOf("status_id", "status_host", "description"),
+                        properties =
+                            mapOf(
+                                "status_id" to stringSchema("The status key id."),
+                                "status_host" to stringSchema("The status key host."),
+                                "description" to stringSchema("User-visible reason for loading comments."),
+                                "account_id" to stringSchema("Optional account id to use when opening the source account."),
+                                "account_host" to stringSchema("Optional account host to use when opening the source account."),
+                                "limit" to integerSchema("Maximum number of compact comments. Default 20, maximum 50."),
+                                "pages" to integerSchema("Number of comment pages to load. Default 1, maximum 10."),
                             ),
                     ),
             ),
@@ -127,6 +188,7 @@ internal class FlareAgentTools(
                 "get_current_feed_snapshot" -> {
                     val args = call.arguments.decodeJson<JsonObject>()
                     val platform = args.platformOrNull(sourceContext)
+                    val pages = (args.int("pages") ?: 1).coerceIn(1, 5)
                     val allowedPlatforms = sourceContext.normalizedAllowedPlatforms()
                     val loaded =
                         sourceContext.feedSnapshot
@@ -140,6 +202,7 @@ internal class FlareAgentTools(
                                     platform = platform,
                                     allowedPlatforms = allowedPlatforms,
                                     limit = 30,
+                                    pages = pages,
                                 )
                             }
                             }
@@ -152,7 +215,10 @@ internal class FlareAgentTools(
                 }
 
                 "search_statuses" -> searchStatuses(call.arguments, sourceContext)
+                "search_users" -> searchUsers(call.arguments, sourceContext)
+                "search_user_profile_statuses" -> searchUserProfileStatuses(call.arguments, sourceContext)
                 "get_status_detail" -> getStatusDetail(call.arguments, sourceContext)
+                "get_status_comments" -> getStatusComments(call.arguments, sourceContext)
                 "aggregate_subjects" -> aggregateSubjects(call.arguments)
                 else -> AgentToolResult("Unknown tool: ${call.name}", isError = true)
             }
@@ -170,6 +236,7 @@ internal class FlareAgentTools(
         val args = arguments.decodeJson<JsonObject>()
         val query = args.string("query")
         val limit = (args.int("limit") ?: 12).coerceIn(1, 30)
+        val pages = (args.int("pages") ?: 1).coerceIn(1, 5)
         val allAccounts = args.boolean("all_accounts") ?: true
         val platform = args.platformOrNull(sourceContext)
         val allowedPlatforms = sourceContext.normalizedAllowedPlatforms()
@@ -199,9 +266,115 @@ internal class FlareAgentTools(
                 .loadInParallel(action = "搜索") { service ->
                     service
                         .searchStatus(query)
-                        .load(pageSize = limit, request = PagingRequest.Refresh)
-                        .data
+                        .loadPages(pageSize = limit, pages = pages)
                 }
+        val items =
+            loaded
+                .items
+                .filterByPlatform(platform, allowedPlatforms)
+                .distinctBy { it.id }
+                .take(limit)
+                .withReferenceIds()
+        return AgentToolResult(
+            text =
+                AgentSearchResponse(
+                    query = query,
+                    platform = platform ?: "ALL",
+                    items = items.toModelItems(),
+                    warnings = loaded.warnings,
+                ).encodeJson(),
+            artifacts = items.map { AgentNativeArtifact.FeedCardRef(id = "artifact-${it.id}", item = it) },
+        )
+    }
+
+    private suspend fun searchUsers(
+        arguments: String,
+        sourceContext: AgentSourceContext,
+    ): AgentToolResult {
+        val args = arguments.decodeJson<JsonObject>()
+        val query = args.string("query")
+        val limit = (args.int("limit") ?: 12).coerceIn(1, 30)
+        val pages = (args.int("pages") ?: 1).coerceIn(1, 5)
+        val allAccounts = args.boolean("all_accounts") ?: true
+        val platform = args.platformOrNull(sourceContext)
+        val allowedPlatforms = sourceContext.normalizedAllowedPlatforms()
+        val services =
+            if (allAccounts) {
+                accountRepository
+                    .allAccounts
+                    .first()
+                    .filter { account ->
+                        account.platformType.name.matchesPlatformScope(platform, allowedPlatforms)
+                    }.map {
+                        it.platformType.name.toAgentPlatformName() to accountRepository.getOrCreateDataSource(it)
+                    }
+            } else {
+                val accountId = args.stringOrNull("account_id")
+                val accountHost = args.stringOrNull("account_host")
+                val accountType =
+                    if (accountId != null && accountHost != null) {
+                        AccountType.Specific(MicroBlogKey(accountId, accountHost))
+                    } else {
+                        AccountType.Guest
+                    }
+                listOf(platform.orEmpty() to accountServiceFlow(accountType, accountRepository).first())
+            }
+        val loaded =
+            services.loadProfilesInParallel(action = "搜索用户") { service ->
+                service
+                    .searchUser(query)
+                    .loadProfilePages(pageSize = limit, pages = pages)
+            }
+        val users =
+            loaded
+                .items
+                .filter { it.platform.matchesPlatformScope(platform, allowedPlatforms) }
+                .distinctBy { "${it.userId}@${it.userHost}" }
+                .take(limit)
+        return AgentToolResult(
+            text =
+                AgentUserSearchResponse(
+                    query = query,
+                    platform = platform ?: "ALL",
+                    users = users,
+                    warnings = loaded.warnings,
+                ).encodeJson(),
+        )
+    }
+
+    private suspend fun searchUserProfileStatuses(
+        arguments: String,
+        sourceContext: AgentSourceContext,
+    ): AgentToolResult {
+        val args = arguments.decodeJson<JsonObject>()
+        val query = args.string("query")
+        val limit = (args.int("limit") ?: 12).coerceIn(1, 30)
+        val pages = (args.int("pages") ?: 3).coerceIn(1, 10)
+        val platform = args.platformOrNull(sourceContext)
+        val allowedPlatforms = sourceContext.normalizedAllowedPlatforms()
+        val userKey = MicroBlogKey(args.string("user_id"), args.string("user_host"))
+        val services =
+            args.stringOrNull("account_id")?.let { id ->
+                args.stringOrNull("account_host")?.let { host ->
+                    listOf(platform.orEmpty() to accountServiceFlow(AccountType.Specific(MicroBlogKey(id, host)), accountRepository).first())
+                }
+            } ?: accountRepository
+                .allAccounts
+                .first()
+                .filter { account ->
+                    account.platformType.name.matchesPlatformScope(platform, allowedPlatforms)
+                }.map {
+                    it.platformType.name.toAgentPlatformName() to accountRepository.getOrCreateDataSource(it)
+                }
+        val loaded =
+            services.loadInParallel(action = "搜索用户主页") { service ->
+                service
+                    .userTimeline(userKey, mediaOnly = false)
+                    .loadPages(pageSize = limit, pages = pages)
+                    .filter { item ->
+                        item.searchText.orEmpty().contains(query, ignoreCase = true)
+                    }
+            }
         val items =
             loaded
                 .items
@@ -225,6 +398,7 @@ internal class FlareAgentTools(
         platform: String?,
         allowedPlatforms: List<String>,
         limit: Int,
+        pages: Int,
     ): AgentToolLoadResult {
         val services =
             accountRepository
@@ -240,8 +414,7 @@ internal class FlareAgentTools(
             .loadInParallel(action = "读取 feed") { service ->
                 service
                     .homeTimeline()
-                    .load(pageSize = limit.coerceIn(1, 30), request = PagingRequest.Refresh)
-                    .data
+                    .loadPages(pageSize = limit.coerceIn(1, 30), pages = pages)
             }
         return loaded.copy(
             items =
@@ -297,6 +470,41 @@ internal class FlareAgentTools(
                     ),
             )
         }
+    }
+
+    private suspend fun getStatusComments(
+        arguments: String,
+        sourceContext: AgentSourceContext,
+    ): AgentToolResult {
+        val args = arguments.decodeJson<JsonObject>()
+        val statusKey = MicroBlogKey(args.string("status_id"), args.string("status_host"))
+        val limit = (args.int("limit") ?: 20).coerceIn(1, 50)
+        val pages = (args.int("pages") ?: 1).coerceIn(1, 10)
+        val accountType =
+            args.stringOrNull("account_id")?.let { id ->
+                args.stringOrNull("account_host")?.let { host ->
+                    AccountType.Specific(MicroBlogKey(id, host))
+                }
+            } ?: sourceContext.accountType ?: AccountType.GuestHost(statusKey.host)
+        val service = accountServiceFlow(accountType, accountRepository).first()
+        val comments =
+            service
+                .context(statusKey)
+                .loadPages(pageSize = limit, pages = pages)
+                .filter { it.statusKey != statusKey }
+                .map { it.toAgentTimelineItem() }
+                .distinctBy { it.id }
+                .take(limit)
+                .withReferenceIds()
+        return AgentToolResult(
+            text =
+                AgentCommentsResponse(
+                    statusId = statusKey.id,
+                    statusHost = statusKey.host,
+                    items = comments.toModelItems(),
+                ).encodeJson(),
+            artifacts = comments.map { AgentNativeArtifact.FeedCardRef(id = "artifact-${it.id}", item = it) },
+        )
     }
 
     private fun aggregateSubjects(arguments: String): AgentToolResult {
@@ -461,6 +669,78 @@ private suspend fun List<Pair<String, MicroblogDataSource>>.loadInParallel(
         }
     }
 
+private suspend fun List<Pair<String, MicroblogDataSource>>.loadProfilesInParallel(
+    action: String,
+    loader: suspend (MicroblogDataSource) -> List<UiProfile>,
+): AgentProfileLoadResult =
+    coroutineScope {
+        map { (servicePlatform, service) ->
+            async {
+                val result =
+                    withTimeoutOrNull(AGENT_TOOL_SERVICE_TIMEOUT_MS) {
+                        runCatching {
+                            loader(service)
+                        }
+                    } ?: return@async AgentProfileLoadResult(
+                        warnings = listOf("$servicePlatform ${action}超时，已跳过该平台。"),
+                    )
+                result.fold(
+                    onSuccess = { rows ->
+                        AgentProfileLoadResult(
+                            items = rows.map { it.toAgentProfileItem(servicePlatform) },
+                        )
+                    },
+                    onFailure = {
+                        AgentProfileLoadResult(
+                            warnings = listOf("$servicePlatform ${action}失败：${it.agentToolMessage()}"),
+                        )
+                    },
+                )
+            }
+        }.awaitAll().let { results ->
+            AgentProfileLoadResult(
+                items = results.flatMap { it.items },
+                warnings = results.flatMap { it.warnings },
+            )
+        }
+    }
+
+private suspend fun RemoteLoader<UiTimelineV2>.loadPages(
+    pageSize: Int,
+    pages: Int,
+): List<UiTimelineV2> {
+    val items = mutableListOf<UiTimelineV2>()
+    var result = load(pageSize = pageSize, request = PagingRequest.Refresh)
+    items += result.data
+    var nextKey = result.nextKey
+    var loadedPages = 1
+    while (!nextKey.isNullOrBlank() && loadedPages < pages) {
+        result = load(pageSize = pageSize, request = PagingRequest.Append(nextKey))
+        items += result.data
+        nextKey = result.nextKey
+        loadedPages += 1
+    }
+    return items
+}
+
+private suspend fun RemoteLoader<UiProfile>.loadProfilePages(
+    pageSize: Int,
+    pages: Int,
+): List<UiProfile> {
+    val items = mutableListOf<UiProfile>()
+    var result = load(pageSize = pageSize, request = PagingRequest.Refresh)
+    items += result.data
+    var nextKey = result.nextKey
+    var loadedPages = 1
+    while (!nextKey.isNullOrBlank() && loadedPages < pages) {
+        result = load(pageSize = pageSize, request = PagingRequest.Append(nextKey))
+        items += result.data
+        nextKey = result.nextKey
+        loadedPages += 1
+    }
+    return items
+}
+
 private fun Throwable.agentToolMessage(): String =
     message
         ?.takeIf { it.isNotBlank() }
@@ -600,6 +880,11 @@ private data class AgentToolLoadResult(
     val warnings: List<String> = emptyList(),
 )
 
+private data class AgentProfileLoadResult(
+    val items: List<AgentProfileItem> = emptyList(),
+    val warnings: List<String> = emptyList(),
+)
+
 @kotlinx.serialization.Serializable
 private data class AgentItemsResponse(
     val items: List<AgentModelTimelineItem>,
@@ -615,8 +900,37 @@ private data class AgentSearchResponse(
 )
 
 @kotlinx.serialization.Serializable
+private data class AgentUserSearchResponse(
+    val query: String,
+    val platform: String,
+    val users: List<AgentProfileItem>,
+    val warnings: List<String> = emptyList(),
+)
+
+@kotlinx.serialization.Serializable
 private data class AgentDetailResponse(
     val item: AgentModelTimelineItem,
+)
+
+@kotlinx.serialization.Serializable
+private data class AgentCommentsResponse(
+    val statusId: String,
+    val statusHost: String,
+    val items: List<AgentModelTimelineItem>,
+)
+
+@kotlinx.serialization.Serializable
+private data class AgentProfileItem(
+    val userId: String,
+    val userHost: String,
+    val platform: String,
+    val name: String,
+    val handle: String,
+    val avatarUrl: String? = null,
+    val description: String? = null,
+    val fansCount: Long = 0,
+    val followsCount: Long = 0,
+    val statusesCount: Long = 0,
 )
 
 @kotlinx.serialization.Serializable
@@ -624,12 +938,18 @@ private data class AgentModelTimelineItem(
     val id: String,
     val kind: String,
     val platform: String? = null,
+    val statusId: String? = null,
+    val statusHost: String? = null,
+    val accountId: String? = null,
+    val accountHost: String? = null,
+    val deeplink: String? = null,
     val title: String? = null,
     val text: String,
     val authorName: String? = null,
     val authorHandle: String? = null,
     val authorAvatarUrl: String? = null,
     val createdAtEpochMillis: Long? = null,
+    val createdAtIso: String? = null,
     val mediaPreviewUrl: String? = null,
 )
 
@@ -645,13 +965,33 @@ private fun AgentTimelineItem.toModelItem(): AgentModelTimelineItem =
         id = referenceId ?: id,
         kind = kind,
         platform = platform,
+        statusId = statusKey?.id,
+        statusHost = statusKey?.host,
+        accountId = (accountType as? AccountType.Specific)?.accountKey?.id,
+        accountHost = (accountType as? AccountType.Specific)?.accountKey?.host,
+        deeplink = deeplink,
         title = title,
         text = text,
         authorName = authorName,
         authorHandle = authorHandle,
         authorAvatarUrl = authorAvatarUrl,
         createdAtEpochMillis = createdAtEpochMillis,
+        createdAtIso = createdAtEpochMillis?.let { kotlin.time.Instant.fromEpochMilliseconds(it).toString() },
         mediaPreviewUrl = mediaPreviewUrl,
+    )
+
+private fun UiProfile.toAgentProfileItem(platform: String): AgentProfileItem =
+    AgentProfileItem(
+        userId = key.id,
+        userHost = key.host,
+        platform = platform,
+        name = name.innerText,
+        handle = handle.raw,
+        avatarUrl = avatar.takeIf { it.isNotBlank() },
+        description = description?.innerText?.compactForAgent(),
+        fansCount = matrices.fansCount,
+        followsCount = matrices.followsCount,
+        statusesCount = matrices.statusesCount,
     )
 
 private fun List<AgentTimelineItem>.withReferenceIds(): List<AgentTimelineItem> {

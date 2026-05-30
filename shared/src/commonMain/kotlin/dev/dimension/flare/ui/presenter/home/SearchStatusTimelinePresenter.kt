@@ -10,6 +10,7 @@ import dev.dimension.flare.ui.model.UiTimelineV2
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import org.koin.core.component.KoinComponent
@@ -18,6 +19,7 @@ import org.koin.core.component.inject
 public class SearchStatusTimelinePresenter(
     private val accountType: AccountType,
     private val queryFlow: MutableStateFlow<String> = MutableStateFlow(""),
+    private val typeFlow: MutableStateFlow<SearchStatusType> = MutableStateFlow(SearchStatusType.Comprehensive),
 ) : TimelinePresenter(),
     KoinComponent {
     public constructor(
@@ -36,7 +38,7 @@ public class SearchStatusTimelinePresenter(
             accountType = accountType,
             repository = accountRepository,
         ).flatMapLatest { service ->
-            queryFlow.map { query ->
+            queryFlow.combine(typeFlow) { query, type -> query to type }.map { (query, type) ->
                 if (query.isEmpty()) {
                     object : RemoteLoader<UiTimelineV2> {
                         override suspend fun load(
@@ -45,7 +47,7 @@ public class SearchStatusTimelinePresenter(
                         ): PagingResult<UiTimelineV2> = PagingResult(data = emptyList())
                     }
                 } else {
-                    service.searchStatus(query)
+                    service.searchStatus(query, type)
                 }
             }
         }

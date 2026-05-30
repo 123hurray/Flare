@@ -11,8 +11,12 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -20,6 +24,7 @@ import dev.dimension.flare.common.isRefreshing
 import dev.dimension.flare.data.datasource.xiaohongshu.cacheXhsNoteContext
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.vvoHost
 import dev.dimension.flare.model.xiaohongshuWebHost
 import dev.dimension.flare.ui.component.AvatarComponent
 import dev.dimension.flare.ui.component.FlareScaffold
@@ -29,10 +34,14 @@ import dev.dimension.flare.ui.component.SearchBarState
 import dev.dimension.flare.ui.component.searchBarPresenter
 import dev.dimension.flare.ui.component.searchContent
 import dev.dimension.flare.ui.component.status.LazyStatusVerticalStaggeredGrid
-import dev.dimension.flare.ui.model.onSuccess
+import dev.dimension.flare.ui.model.UiProfile
+import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.presenter.home.SearchPresenter
+import dev.dimension.flare.ui.presenter.home.SearchStatusType
 import dev.dimension.flare.ui.presenter.invoke
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.launch
 import moe.tlaster.precompose.molecule.producePresenter
 
 @Composable
@@ -45,7 +54,25 @@ internal fun SearchScreen(
     val state by producePresenter("search_${accountType}_$initialQuery") {
         presenter(accountType, initialQuery, onStatusUrlClick)
     }
+    val scope = rememberCoroutineScope()
+    var dismissedCaptchaUrl by remember { mutableStateOf<String?>(null) }
     val lazyListState = rememberLazyStaggeredGridState()
+    val accounts = rememberLatestAccounts(state.searchState.accounts)
+    state.searchState.vvoCaptchaException()?.let { exception ->
+        if (dismissedCaptchaUrl != exception.url) {
+            VvoCaptchaDialog(
+                exception = exception,
+                onDismiss = {
+                    dismissedCaptchaUrl = exception.url
+                },
+                onVerified = {
+                    scope.launch {
+                        state.searchState.refreshAfterVvoCaptchaSuspend()
+                    }
+                },
+            )
+        }
+    }
     RegisterTabCallback(
         lazyListState = lazyListState,
         onRefresh = {
@@ -81,33 +108,58 @@ internal fun SearchScreen(
                     state = lazyListState,
                     contentPadding = contentPadding,
                 ) {
-                    state.searchState.accounts.onSuccess { accounts ->
-                        if (accounts.size > 1) {
-                            item(
-                                span = StaggeredGridItemSpan.FullLine,
+                    if (accounts != null && accounts.size > 1) {
+                        item(
+                            span = StaggeredGridItemSpan.FullLine,
+                        ) {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(bottom = 8.dp),
                             ) {
-                                LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.padding(bottom = 8.dp),
-                                ) {
-                                    items(accounts.size) { index ->
-                                        val profile = accounts[index]
-                                        FilterChip(
-                                            selected = state.searchState.selectedAccount?.key == profile.key,
-                                            onClick = {
-                                                state.searchState.setAccount(profile)
-                                            },
-                                            label = {
-                                                Text(profile.handle.canonical)
-                                            },
-                                            leadingIcon = {
-                                                AvatarComponent(
-                                                    data = profile.avatar,
-                                                    size = 18.dp,
-                                                )
-                                            },
-                                        )
-                                    }
+                                items(accounts.size) { index ->
+                                    val profile = accounts[index]
+                                    FilterChip(
+                                        selected = state.searchState.selectedAccount?.key == profile.key,
+                                        onClick = {
+                                            state.searchState.setAccount(profile)
+                                        },
+                                        label = {
+                                            Text(profile.handle.canonical)
+                                        },
+                                        leadingIcon = {
+                                            AvatarComponent(
+                                                data = profile.avatar,
+                                                size = 18.dp,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    val selectedSearchHost =
+                        state.searchState.selectedAccount?.key?.host
+                            ?: (accountType as? AccountType.Specific)?.accountKey?.host
+                    if (selectedSearchHost == vvoHost) {
+                        item(
+                            span = StaggeredGridItemSpan.FullLine,
+                        ) {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(bottom = 8.dp),
+                            ) {
+                                val types = SearchStatusType.entries
+                                items(types.size) { index ->
+                                    val type = types[index]
+                                    FilterChip(
+                                        selected = state.searchState.selectedSearchStatusType == type,
+                                        onClick = {
+                                            state.searchState.setSearchStatusType(type)
+                                        },
+                                        label = {
+                                            Text(type.label)
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -125,6 +177,30 @@ internal fun SearchScreen(
             },
         )
     }
+}
+
+private val SearchStatusType.label: String
+    get() =
+        when (this) {
+            SearchStatusType.Comprehensive -> "综合"
+            SearchStatusType.Realtime -> "实时"
+            SearchStatusType.Video -> "视频"
+            SearchStatusType.Image -> "图片"
+            SearchStatusType.Following -> "关注"
+        }
+
+@Composable
+private fun rememberLatestAccounts(accounts: UiState<ImmutableList<UiProfile>>): ImmutableList<UiProfile>? {
+    var lastSuccess by remember { mutableStateOf<ImmutableList<UiProfile>?>(null) }
+    val current = accounts.takeSuccess()
+    LaunchedEffect(current) {
+        if (current != null && (lastSuccess == null || current.size >= lastSuccess.orEmpty().size)) {
+            lastSuccess = current
+        }
+    }
+    return current
+        ?.takeIf { lastSuccess == null || it.size >= lastSuccess.orEmpty().size }
+        ?: lastSuccess
 }
 
 @Composable

@@ -54,6 +54,18 @@ internal data class JikeCommentsRequest(
 )
 
 @Serializable
+internal data class JikeThreadCommentsRequest(
+    @SerialName("targetType")
+    val targetType: String,
+    @SerialName("threadId")
+    val threadId: String,
+    @SerialName("limit")
+    val limit: Int = 20,
+    @SerialName("loadMoreKey")
+    val loadMoreKey: JsonObject? = null,
+)
+
+@Serializable
 internal data class JikeSearchRequest(
     @SerialName("keyword")
     val keyword: String,

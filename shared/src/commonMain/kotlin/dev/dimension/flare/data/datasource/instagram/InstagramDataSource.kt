@@ -25,15 +25,18 @@ import dev.dimension.flare.data.network.instagram.InstagramService
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.instagramWebHost
 import dev.dimension.flare.ui.model.UiAccount
 import dev.dimension.flare.ui.model.UiHashtag
 import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiTimelineV2
+import dev.dimension.flare.ui.render.UiDateTime
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.map
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import kotlin.time.Clock
 
 internal class InstagramDataSource(
     override val accountKey: MicroBlogKey,
@@ -141,9 +144,19 @@ internal class InstagramDataSource(
             statusKey = statusKey,
         )
 
-    override fun searchStatus(query: String): RemoteLoader<UiTimelineV2> = emptyTimelineLoader()
+    override fun searchStatus(query: String): RemoteLoader<UiTimelineV2> =
+        InstagramSearchStatusRemoteLoader(
+            service = service,
+            accountKey = accountKey,
+            query = query,
+        )
 
-    override fun searchUser(query: String): RemoteLoader<UiProfile> = emptyProfileLoader()
+    override fun searchUser(query: String): RemoteLoader<UiProfile> =
+        InstagramSearchUserRemoteLoader(
+            service = service,
+            accountKey = accountKey,
+            query = query,
+        )
 
     override fun discoverUsers(): RemoteLoader<UiProfile> = emptyProfileLoader()
 
@@ -285,6 +298,55 @@ private class InstagramStatusContextRemoteLoader(
         return PagingResult(
             endOfPaginationReached = true,
             data = listOf(loader.status(statusKey)),
+        )
+    }
+}
+
+private class InstagramSearchUserRemoteLoader(
+    private val service: InstagramService,
+    private val accountKey: MicroBlogKey,
+    private val query: String,
+) : RemoteLoader<UiProfile> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiProfile> {
+        if (request !is PagingRequest.Refresh) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        return PagingResult(
+            endOfPaginationReached = true,
+            data = service.searchUsers(query).take(pageSize).map { it.toUiProfile(accountKey) },
+        )
+    }
+}
+
+private class InstagramSearchStatusRemoteLoader(
+    private val service: InstagramService,
+    private val accountKey: MicroBlogKey,
+    private val query: String,
+) : RemoteLoader<UiTimelineV2> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request !is PagingRequest.Refresh) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val accountType = AccountType.Specific(accountKey)
+        val createdAt = UiDateTime(Clock.System.now())
+        return PagingResult(
+            endOfPaginationReached = true,
+            data =
+                service.searchUsers(query).take(pageSize).map { user ->
+                    val profile = user.toUiProfile(accountKey)
+                    UiTimelineV2.User(
+                        value = profile,
+                        createdAt = createdAt,
+                        statusKey = MicroBlogKey(profile.key.id, instagramWebHost),
+                        accountType = accountType,
+                    )
+                },
         )
     }
 }

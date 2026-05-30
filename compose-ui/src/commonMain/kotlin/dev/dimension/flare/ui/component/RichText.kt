@@ -83,6 +83,9 @@ public fun RichText(
     onTextLayout: (TextLayoutResult) -> Unit = {},
     onBlockImageClick: ((String) -> Unit)? = null,
     textStyle: TextStyle = PlatformTextStyle.current,
+    headingFontScale: Float = 1f,
+    bodyFontScale: Float = 1f,
+    lineHeightScale: Float = 1f,
     linkStyle: TextStyle =
         textStyle.copy(
             color = if (isLightTheme()) lightLinkColor else darkLinkColor,
@@ -105,7 +108,7 @@ public fun RichText(
             PlatformTextStyle provides PlatformTextStyle.current.merge(textStyle),
         ) {
             val state =
-                remember(text, textStyle, linkStyle, color) {
+                remember(text, textStyle, linkStyle, color, headingFontScale, bodyFontScale, lineHeightScale) {
                     RichTextState(
                         richText = text,
                         styleData =
@@ -119,6 +122,9 @@ public fun RichText(
                                 h5 = h5,
                                 h6 = h6,
                                 contentColor = color,
+                                headingFontScale = headingFontScale,
+                                bodyFontScale = bodyFontScale,
+                                lineHeightScale = lineHeightScale,
                             ),
                     )
                 }

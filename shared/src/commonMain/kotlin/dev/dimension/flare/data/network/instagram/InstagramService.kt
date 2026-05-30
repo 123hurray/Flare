@@ -75,6 +75,25 @@ internal class InstagramService(
             ?: throw IllegalStateException("Instagram profile is empty")
     }
 
+    suspend fun searchUsers(query: String): List<InstagramUser> {
+        val root =
+            requestJson("https://www.instagram.com/web/search/topsearch/") {
+                parameter("context", "blended")
+                parameter("query", query.trim().removePrefix("@"))
+                parameter("rank_token", "0.0")
+                parameter("include_reel", true)
+            }.objectOrNull()
+                ?: throw IllegalStateException("Instagram search response is not an object")
+        return root["users"]
+            .arrayOrEmpty()
+            .mapNotNull { item ->
+                item.objectOrNull()
+                    ?.get("user")
+                    .objectOrNull()
+                    ?.toInstagramUser()
+            }
+    }
+
     suspend fun homeFeed(maxId: String? = null): InstagramTimelinePage {
         return followingFeed(maxId)
     }

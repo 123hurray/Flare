@@ -27,6 +27,7 @@ import dev.dimension.flare.data.network.jike.JikeService
 import dev.dimension.flare.data.network.jike.model.JikeCommentsRequest
 import dev.dimension.flare.data.network.jike.model.JikePostActionRequest
 import dev.dimension.flare.data.network.jike.model.JikeSearchRequest
+import dev.dimension.flare.data.network.jike.model.JikeThreadCommentsRequest
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
@@ -197,6 +198,13 @@ internal class JikeDataSource(
     )
 
     override fun context(statusKey: MicroBlogKey): RemoteLoader<UiTimelineV2> =
+        statusKey.id.jikeCommentTarget()?.let { target ->
+            JikeCommentThreadRemoteLoader(
+                accountKey = accountKey,
+                service = service,
+                target = target,
+            )
+        } ?:
         object : RemoteLoader<UiTimelineV2> {
             override suspend fun load(
                 pageSize: Int,
@@ -383,5 +391,74 @@ internal class JikeDataSource(
         accountKey = accountKey,
         topicId = topicId,
         tabType = tabType,
+    )
+}
+
+private class JikeCommentThreadRemoteLoader(
+    private val accountKey: MicroBlogKey,
+    private val service: JikeService,
+    private val target: JikeCommentTarget,
+) : RemoteLoader<UiTimelineV2> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val replies =
+            service.getThreadComments(
+                JikeThreadCommentsRequest(
+                    targetType = target.targetType,
+                    threadId = target.threadId,
+                    limit = pageSize,
+                    loadMoreKey = (request as? PagingRequest.Append)?.nextKey.decodeJikeLoadMoreKey(),
+                ),
+            )
+        val renderedReplies =
+            replies.data.orEmpty()
+                .filterNot { it.id == target.commentId }
+                .map { it.toUiTimeline(accountKey) }
+        val root =
+            if (request is PagingRequest.Refresh) {
+                service.getPrimaryComments(
+                    JikeCommentsRequest(
+                        targetId = target.targetId,
+                        targetType = target.targetType,
+                        limit = 100,
+                    ),
+                ).data.orEmpty()
+                    .firstOrNull { it.id == target.commentId }
+                    ?.toUiTimeline(accountKey)
+            } else {
+                null
+            }
+        return PagingResult(
+            endOfPaginationReached = replies.loadMoreKey == null,
+            data = listOfNotNull(root) + renderedReplies,
+            nextKey = replies.loadMoreKey.encodeJikeLoadMoreKey(),
+        )
+    }
+}
+
+private data class JikeCommentTarget(
+    val targetType: String,
+    val targetId: String,
+    val threadId: String,
+    val commentId: String,
+)
+
+private fun String.jikeCommentTarget(): JikeCommentTarget? {
+    val parts = split(':')
+    if (parts.size != 5 || parts[0] != "comment") return null
+    val targetType = parts[1].takeIf { it.isNotBlank() } ?: return null
+    val targetId = parts[2].takeIf { it.isNotBlank() } ?: return null
+    val threadId = parts[3].takeIf { it.isNotBlank() } ?: return null
+    val commentId = parts[4].takeIf { it.isNotBlank() } ?: return null
+    return JikeCommentTarget(
+        targetType = targetType,
+        targetId = targetId,
+        threadId = threadId,
+        commentId = commentId,
     )
 }

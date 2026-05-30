@@ -8,6 +8,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
+import io.ktor.http.encodeURLParameter
 import io.ktor.serialization.kotlinx.json.json
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
@@ -27,6 +28,8 @@ internal class ZhihuService(
     private val accountKey: MicroBlogKey? = null,
     private val cookiesFlow: Flow<Map<String, String>> = flowOf(emptyMap()),
 ) {
+    private var cachedZseCk: String? = null
+
     private val client =
         ktorClient {
             install(ContentNegotiation) {
@@ -43,6 +46,74 @@ internal class ZhihuService(
             name = root.string("name").orEmpty(),
             avatar = root.string("avatar_url").orEmpty(),
             headline = root.string("headline").orEmpty(),
+        )
+    }
+
+    suspend fun userProfile(urlToken: String): ZhihuViewer {
+        val root =
+            requestJson(
+                "https://www.zhihu.com/api/v4/members/${urlToken.encodeURLParameter()}" +
+                    "?include=name,avatar_url,url_token,id,headline,follower_count,following_count,answer_count,articles_count",
+            )
+        root.throwIfZhihuError("userProfile", urlToken)
+        return root.toViewer(fallbackId = urlToken)
+    }
+
+    suspend fun searchContent(
+        query: String,
+        offset: Int,
+        limit: Int,
+    ): ZhihuTimelinePage {
+        val root =
+            requestJson(
+                "https://www.zhihu.com/api/v4/search_v3?t=general" +
+                    "&q=${query.encodeURLParameter()}" +
+                    "&correction=1&offset=$offset&limit=$limit&lc_idx=$offset&show_all_topics=0&search_source=Normal",
+            )
+        root.throwIfZhihuError("searchContent", query)
+        val items =
+            root["data"]
+                .arrayOrEmpty()
+                .mapNotNull { item ->
+                    val json = item.objectOrNull() ?: return@mapNotNull null
+                    json["object"].objectOrNull()?.toTargetContent()
+                        ?: json["target"].objectOrNull()?.toTargetContent()
+                        ?: json.toTargetContent()
+                }
+        val paging = root["paging"].objectOrNull()
+        return ZhihuTimelinePage(
+            items = items,
+            nextUrl = ((offset + limit).toString()).takeUnless { paging?.boolean("is_end") == true || items.isEmpty() },
+            isEnd = paging?.boolean("is_end") ?: items.isEmpty(),
+        )
+    }
+
+    suspend fun searchUsers(
+        query: String,
+        offset: Int,
+        limit: Int,
+    ): ZhihuUserPage {
+        val root =
+            requestJson(
+                "https://www.zhihu.com/api/v4/search_v3?t=people" +
+                    "&q=${query.encodeURLParameter()}" +
+                    "&correction=1&offset=$offset&limit=$limit&lc_idx=$offset&show_all_topics=0&search_source=Normal",
+            )
+        root.throwIfZhihuError("searchUsers", query)
+        val users =
+            root["data"]
+                .arrayOrEmpty()
+                .mapNotNull { item ->
+                    val json = item.objectOrNull() ?: return@mapNotNull null
+                    json["object"].objectOrNull()?.toSearchUser()
+                        ?: json["target"].objectOrNull()?.toSearchUser()
+                        ?: json.toSearchUser()
+                }
+        val paging = root["paging"].objectOrNull()
+        return ZhihuUserPage(
+            items = users,
+            nextOffset = (offset + limit).takeUnless { paging?.boolean("is_end") == true || users.isEmpty() },
+            isEnd = paging?.boolean("is_end") ?: users.isEmpty(),
         )
     }
 
@@ -188,7 +259,11 @@ internal class ZhihuService(
         }
 
     private suspend fun requestJson(url: String): JsonObject {
-        val cookies = cookiesFlow.first().filterValues { it.isNotBlank() }
+        val cookies =
+            cookiesFlow
+                .first()
+                .filterValues { it.isNotBlank() }
+                .let { if (url.needsZhihuWebSignature()) it.withZseCk() else it }
         if (cookies["z_c0"].isNullOrBlank()) {
             throw RequireReLoginException(
                 accountKey = accountKey ?: MicroBlogKey("account", zhihuWebHost),
@@ -238,6 +313,21 @@ internal class ZhihuService(
             header(HttpHeaders.Cookie, cookies.toCookieHeader())
             return
         }
+        if (url.needsZhihuWebSignature()) {
+            val apiPath = url.zhihuApiPath()
+            val dC0 = cookies["d_c0"].orEmpty()
+            header("x-api-version", "3.0.91")
+            header("x-app-za", "OS=Web")
+            header("x-zse-93", ZHIHU_X_ZSE_93)
+            if (dC0.isNotBlank()) {
+                header("x-zse-96", ZhihuZse96.sign(apiPath = apiPath, dC0 = dC0))
+            }
+            header("Referer", "https://www.zhihu.com/")
+            header("Origin", "https://www.zhihu.com")
+            header("x-requested-with", "fetch")
+            header(HttpHeaders.Cookie, cookies.toCookieHeader())
+            return
+        }
         header("x-api-version", "3.1.8")
         header("x-app-version", "10.12.0")
         header("x-app-bundleid", "com.zhihu.android")
@@ -246,6 +336,27 @@ internal class ZhihuService(
         header("Origin", "https://www.zhihu.com")
         header("x-requested-with", "fetch")
         header(HttpHeaders.Cookie, cookies.toCookieHeader())
+    }
+
+    private suspend fun Map<String, String>.withZseCk(): Map<String, String> {
+        if (!get("__zse_ck").isNullOrBlank()) {
+            return this
+        }
+        val zseCk =
+            cachedZseCk
+                ?: runCatching {
+                    client
+                        .get("https://static.zhihu.com/zse-ck/v3.js") {
+                            header(HttpHeaders.UserAgent, ZHIHU_WEB_USER_AGENT)
+                        }.bodyAsText()
+                        .let { ZSE_CK_REGEX.find(it)?.groupValues?.getOrNull(1).orEmpty() }
+                        .also { if (it.isNotBlank()) cachedZseCk = it }
+                }.getOrDefault("")
+        return if (zseCk.isBlank()) {
+            this
+        } else {
+            this + ("__zse_ck" to zseCk)
+        }
     }
 }
 
@@ -268,6 +379,9 @@ internal data class ZhihuViewer(
     val name: String,
     val avatar: String,
     val headline: String,
+    val followerCount: Long = 0L,
+    val followingCount: Long = 0L,
+    val statusesCount: Long = 0L,
 )
 
 internal data class ZhihuTimelinePage(
@@ -361,6 +475,12 @@ internal data class ZhihuComment(
 internal data class ZhihuCommentPage(
     val comments: List<ZhihuComment>,
     val nextUrl: String?,
+    val isEnd: Boolean,
+)
+
+internal data class ZhihuUserPage(
+    val items: List<ZhihuViewer>,
+    val nextOffset: Int?,
     val isEnd: Boolean,
 )
 
@@ -601,6 +721,24 @@ private fun JsonObject.toCommentPage(): ZhihuCommentPage =
         isEnd = get("paging").objectOrNull()?.boolean("is_end") ?: true,
     )
 
+private fun JsonObject.toViewer(fallbackId: String): ZhihuViewer =
+    ZhihuViewer(
+        id = string("id") ?: string("url_token") ?: fallbackId,
+        urlToken = string("url_token") ?: string("id") ?: fallbackId,
+        name = string("name").orEmpty(),
+        avatar = string("avatar_url") ?: string("avatarUrl") ?: "",
+        headline = string("headline").orEmpty(),
+        followerCount = long("follower_count") ?: 0L,
+        followingCount = long("following_count") ?: 0L,
+        statusesCount = (long("answer_count") ?: 0L) + (long("articles_count") ?: 0L),
+    )
+
+private fun JsonObject.toSearchUser(): ZhihuViewer? {
+    val member = get("member").objectOrNull() ?: this
+    val token = member.string("url_token") ?: member.string("id") ?: return null
+    return member.toViewer(fallbackId = token)
+}
+
 private fun JsonObject.logCommentStructure(
     kind: String,
     id: String,
@@ -766,6 +904,17 @@ private fun Map<String, String>.toCookieHeader(): String =
         .filter { it.key.isNotBlank() && it.value.isNotBlank() }
         .joinToString("; ") { (name, value) -> "$name=$value" }
 
+private fun String.needsZhihuWebSignature(): Boolean =
+    startsWith("https://www.zhihu.com/api/v4/search_v3") ||
+        startsWith("https://www.zhihu.com/api/v4/members/")
+
+private fun String.zhihuApiPath(): String =
+    when {
+        startsWith("https://www.zhihu.com") -> removePrefix("https://www.zhihu.com")
+        startsWith("https://api.zhihu.com") -> removePrefix("https://api.zhihu.com")
+        else -> this
+    }
+
 private fun JsonObject.string(key: String): String? =
     when (val primitive = get(key) as? JsonPrimitive) {
         null -> null
@@ -801,3 +950,5 @@ public const val ZHIHU_WEB_USER_AGENT: String =
         "Chrome/126.0.0.0 Safari/537.36"
 
 private const val ZHIHU_DEVICE_ID: String = "FlareAndroidZhihuClient000000000000="
+
+private val ZSE_CK_REGEX = Regex("""__g\.ck\|\|"([\w+/=\\]*?)",_=""")

@@ -122,9 +122,19 @@ internal class ZhihuDataSource(
         mediaOnly: Boolean,
     ): RemoteLoader<UiTimelineV2> = notSupported()
 
-    override fun searchStatus(query: String): RemoteLoader<UiTimelineV2> = notSupported()
+    override fun searchStatus(query: String): RemoteLoader<UiTimelineV2> =
+        ZhihuSearchStatusRemoteLoader(
+            accountKey = accountKey,
+            service = service,
+            query = query,
+        )
 
-    override fun searchUser(query: String): RemoteLoader<UiProfile> = notSupported()
+    override fun searchUser(query: String): RemoteLoader<UiProfile> =
+        ZhihuSearchUserRemoteLoader(
+            accountKey = accountKey,
+            service = service,
+            query = query,
+        )
 
     override fun discoverUsers(): RemoteLoader<UiProfile> = notSupported()
 
@@ -171,7 +181,7 @@ private class ZhihuLoader(
 
     override suspend fun userById(id: String): UiProfile =
         service
-            .me()
+            .userProfile(id)
             .toUiProfile(accountKey, requestedId = id)
 
     override suspend fun deleteStatus(statusKey: MicroBlogKey) {
@@ -195,6 +205,50 @@ private class ZhihuHomeTimelineRemoteLoader(
             data = page.items.map { it.toUiTimeline(accountKey, detail = false) },
             nextKey = page.nextUrl,
             endOfPaginationReached = page.isEnd || page.nextUrl.isNullOrBlank(),
+        )
+    }
+}
+
+private class ZhihuSearchStatusRemoteLoader(
+    private val accountKey: MicroBlogKey,
+    private val service: ZhihuService,
+    private val query: String,
+) : RemoteLoader<UiTimelineV2> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val offset = (request as? PagingRequest.Append)?.nextKey?.toIntOrNull() ?: 0
+        val page = service.searchContent(query, offset, pageSize)
+        return PagingResult(
+            data = page.items.map { it.toUiTimeline(accountKey, detail = false) },
+            nextKey = page.nextUrl,
+            endOfPaginationReached = page.isEnd || page.nextUrl.isNullOrBlank(),
+        )
+    }
+}
+
+private class ZhihuSearchUserRemoteLoader(
+    private val accountKey: MicroBlogKey,
+    private val service: ZhihuService,
+    private val query: String,
+) : RemoteLoader<UiProfile> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiProfile> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val offset = (request as? PagingRequest.Append)?.nextKey?.toIntOrNull() ?: 0
+        val page = service.searchUsers(query, offset, pageSize)
+        return PagingResult(
+            data = page.items.map { it.toUiProfile(accountKey) },
+            nextKey = page.nextOffset?.toString(),
+            endOfPaginationReached = page.isEnd || page.nextOffset == null,
         )
     }
 }

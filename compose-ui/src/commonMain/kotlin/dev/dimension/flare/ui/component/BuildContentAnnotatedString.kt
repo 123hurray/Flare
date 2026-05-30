@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.TextUnit
 import dev.dimension.flare.ui.render.RenderBlockStyle
 import dev.dimension.flare.ui.render.RenderContent
 import dev.dimension.flare.ui.render.RenderRun
@@ -102,18 +103,45 @@ internal data class StyleData(
     val h5: TextStyle,
     val h6: TextStyle,
     private val contentColor: Color,
+    private val headingFontScale: Float = 1f,
+    private val bodyFontScale: Float = 1f,
+    private val lineHeightScale: Float = 1f,
 ) {
     val textStyle by lazy {
         style.copy(
+            fontSize = style.fontSize.scaleIfSpecified(bodyFontScale),
+            lineHeight = style.lineHeight.scaleIfSpecified(lineHeightScale),
             lineHeightStyle = null,
             platformStyle = null,
             lineBreak = LineBreak.Paragraph,
         )
     }
+    val h1Style by lazy { h1.scaled(headingFontScale, lineHeightScale) }
+    val h2Style by lazy { h2.scaled(headingFontScale, lineHeightScale) }
+    val h3Style by lazy { h3.scaled(headingFontScale, lineHeightScale) }
+    val h4Style by lazy { h4.scaled(headingFontScale, lineHeightScale) }
+    val h5Style by lazy { h5.scaled(headingFontScale, lineHeightScale) }
+    val h6Style by lazy { h6.scaled(headingFontScale, lineHeightScale) }
     val color by lazy {
         textStyle.color.takeOrElse { contentColor }
     }
 }
+
+private fun TextStyle.scaled(
+    fontScale: Float,
+    lineHeightScale: Float,
+): TextStyle =
+    copy(
+        fontSize = fontSize.scaleIfSpecified(fontScale),
+        lineHeight = lineHeight.scaleIfSpecified(lineHeightScale),
+    )
+
+private fun TextUnit.scaleIfSpecified(scale: Float): TextUnit =
+    if (scale == 1f || this == TextUnit.Unspecified) {
+        this
+    } else {
+        this * scale
+    }
 
 
 private sealed interface StyleOp {
@@ -350,12 +378,12 @@ private fun StyleData.blockTextStyle(block: RenderBlockStyle): TextStyle =
     when {
         block.headingLevel != null ->
             when (block.headingLevel) {
-                1 -> h1
-                2 -> h2
-                3 -> h3
-                4 -> h4
-                5 -> h5
-                else -> h6
+                1 -> h1Style
+                2 -> h2Style
+                3 -> h3Style
+                4 -> h4Style
+                5 -> h5Style
+                else -> h6Style
             }
         block.isFigCaption ->
             textStyle.copy(

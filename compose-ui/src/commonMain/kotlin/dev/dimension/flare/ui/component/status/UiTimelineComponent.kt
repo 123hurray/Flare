@@ -228,6 +228,7 @@ internal fun UiTimelineComponent(
     modifier: Modifier = Modifier,
     detailStatusKey: MicroBlogKey? = null,
     commentStyle: Boolean = false,
+    maxLines: Int? = null,
 ) {
     when (item) {
         is UiTimelineV2.Post -> {
@@ -235,6 +236,7 @@ internal fun UiTimelineComponent(
                 data = item,
                 detailStatusKey = detailStatusKey,
                 commentStyle = commentStyle,
+                maxLines = maxLines,
                 modifier = modifier,
             )
         }
@@ -464,6 +466,7 @@ private fun StatusContent(
     detailStatusKey: MicroBlogKey?,
     modifier: Modifier = Modifier,
     commentStyle: Boolean = false,
+    maxLines: Int? = null,
 ) {
     Column(
         modifier = modifier,
@@ -557,6 +560,7 @@ private fun StatusContent(
                 item = data,
                 isDetail = data.statusKey == detailStatusKey,
                 commentStyle = commentStyle,
+                maxLines = maxLines,
                 modifier =
                     Modifier
                         .padding(
