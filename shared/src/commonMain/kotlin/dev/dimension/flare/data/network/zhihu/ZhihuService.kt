@@ -66,9 +66,9 @@ internal class ZhihuService(
     ): ZhihuTimelinePage {
         val root =
             requestJson(
-                "https://www.zhihu.com/api/v4/search_v3?t=general" +
+                "https://www.zhihu.com/api/v4/search_v3?gk_version=gz-gaokao&t=general" +
                     "&q=${query.encodeURLParameter()}" +
-                    "&correction=1&offset=$offset&limit=$limit&lc_idx=$offset&show_all_topics=0&search_source=Normal",
+                    "&correction=1&offset=$offset&limit=$limit&filter_fields=&lc_idx=$offset&show_all_topics=0&search_source=Normal",
             )
         root.throwIfZhihuError("searchContent", query)
         val items =
@@ -95,9 +95,9 @@ internal class ZhihuService(
     ): ZhihuUserPage {
         val root =
             requestJson(
-                "https://www.zhihu.com/api/v4/search_v3?t=people" +
+                "https://www.zhihu.com/api/v4/search_v3?gk_version=gz-gaokao&t=people" +
                     "&q=${query.encodeURLParameter()}" +
-                    "&correction=1&offset=$offset&limit=$limit&lc_idx=$offset&show_all_topics=0&search_source=Normal",
+                    "&correction=1&offset=$offset&limit=$limit&filter_fields=&lc_idx=$offset&show_all_topics=0&search_source=Normal",
             )
         root.throwIfZhihuError("searchUsers", query)
         val users =
@@ -316,11 +316,12 @@ internal class ZhihuService(
         if (url.needsZhihuWebSignature()) {
             val apiPath = url.zhihuApiPath()
             val dC0 = cookies["d_c0"].orEmpty()
+            val xZse93 = if (url.isZhihuSearchUrl()) ZHIHU_SEARCH_X_ZSE_93 else ZHIHU_X_ZSE_93
             header("x-api-version", "3.0.91")
             header("x-app-za", "OS=Web")
-            header("x-zse-93", ZHIHU_X_ZSE_93)
+            header("x-zse-93", xZse93)
             if (dC0.isNotBlank()) {
-                header("x-zse-96", ZhihuZse96.sign(apiPath = apiPath, dC0 = dC0))
+                header("x-zse-96", ZhihuZse96.sign(apiPath = apiPath, dC0 = dC0, xZse93 = xZse93))
             }
             header("Referer", "https://www.zhihu.com/")
             header("Origin", "https://www.zhihu.com")
@@ -905,8 +906,10 @@ private fun Map<String, String>.toCookieHeader(): String =
         .joinToString("; ") { (name, value) -> "$name=$value" }
 
 private fun String.needsZhihuWebSignature(): Boolean =
-    startsWith("https://www.zhihu.com/api/v4/search_v3") ||
+    isZhihuSearchUrl() ||
         startsWith("https://www.zhihu.com/api/v4/members/")
+
+private fun String.isZhihuSearchUrl(): Boolean = startsWith("https://www.zhihu.com/api/v4/search_v3")
 
 private fun String.zhihuApiPath(): String =
     when {

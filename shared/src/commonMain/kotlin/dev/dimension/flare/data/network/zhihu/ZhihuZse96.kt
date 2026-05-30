@@ -38,9 +38,14 @@ internal object ZhihuZse96 {
             50, 221, 152, 140, 33, 235, 214,
         )
 
-    fun sign(apiPath: String, dC0: String): String {
-        val xZse93 = ZHIHU_X_ZSE_93
-        val md5 = "$xZse93+$apiPath+$dC0".encodeUtf8().md5().hex()
+    fun sign(
+        apiPath: String,
+        dC0: String,
+        xZse93: String = ZHIHU_X_ZSE_93,
+        xZst81: String? = null,
+    ): String {
+        val payload = listOfNotNull(xZse93, apiPath, dC0, xZst81?.takeIf { it.isNotBlank() }).joinToString("+")
+        val md5 = payload.encodeUtf8().md5().hex()
         return "2.0_${encrypt(md5)}"
     }
 
@@ -163,3 +168,4 @@ internal object ZhihuZse96 {
 }
 
 internal const val ZHIHU_X_ZSE_93: String = "101_3_3.0"
+internal const val ZHIHU_SEARCH_X_ZSE_93: String = "101_3_2.0"

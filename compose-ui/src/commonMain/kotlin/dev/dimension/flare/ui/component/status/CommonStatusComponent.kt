@@ -789,7 +789,7 @@ private fun ZhihuDetailStatusComponent(
                 text = it,
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = PlatformTheme.typography.h3,
-                headingFontScale = 1f,
+                headingFontScale = 1.5f,
                 lineHeightScale = 1f,
             )
         }

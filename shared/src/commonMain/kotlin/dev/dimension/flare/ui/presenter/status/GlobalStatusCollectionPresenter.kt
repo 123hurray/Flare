@@ -52,7 +52,7 @@ public class GlobalStatusCollectionPresenter :
                 cacheDatabase,
                 listOf(
                     TimelinePagingMapper.toDb(
-                        data = status,
+                        data = status.asFeedCardPreview(),
                         pagingKey = pagingKey,
                     ),
                 ),

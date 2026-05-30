@@ -50,7 +50,7 @@ public class LogStatusHistoryPresenter(
                         cacheDatabase,
                         listOf(
                             TimelinePagingMapper.toDb(
-                                data = current,
+                                data = current.asFeedCardPreview(),
                                 pagingKey = FOOTPRINTS_PAGING_KEY,
                             ),
                         ),

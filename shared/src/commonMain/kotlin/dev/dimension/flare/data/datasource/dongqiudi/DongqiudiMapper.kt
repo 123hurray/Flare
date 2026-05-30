@@ -35,8 +35,16 @@ internal fun DongqiudiArticle.toUiTimeline(
     val content =
         bodyHtml
             ?.toArticleHtml()
-            ?.let { parseHtml("<h5>$title</h5>$it").toUi(sourceLanguages) }
-            ?: listOf(title, description)
+            ?.let {
+                parseHtml(
+                    if (detail) {
+                        it
+                    } else {
+                        "<h5>$title</h5>$it"
+                    },
+                ).toUi(sourceLanguages)
+            }
+            ?: listOf(if (detail) "" else title, description)
                 .filter { it.isNotBlank() }
                 .joinToString("\n")
                 .toUiPlainText(sourceLanguages)
@@ -61,7 +69,7 @@ internal fun DongqiudiArticle.toUiTimeline(
         platformType = PlatformType.Dongqiudi,
         images = images.toImmutableList(),
         sensitive = false,
-        contentWarning = null,
+        contentWarning = if (detail) title.toUiPlainText(sourceLanguages) else null,
         user = toAuthorProfile(accountKey),
         sourceLanguages = sourceLanguages.toImmutableList(),
         content = content,
