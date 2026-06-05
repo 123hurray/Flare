@@ -77,6 +77,7 @@ internal fun DiscoverScreen(
     val state by producePresenter("discover") { discoverPresenter(onStatusUrlClick) }
     val scope = rememberCoroutineScope()
     var dismissedCaptchaUrl by remember { mutableStateOf<String?>(null) }
+    var dismissedXhsVerificationUrl by remember { mutableStateOf<String?>(null) }
     val lazyListState = rememberLazyStaggeredGridState()
     val accounts = rememberLatestAccounts(state.accounts)
     state.searchState.vvoCaptchaException()?.let { exception ->
@@ -89,6 +90,22 @@ internal fun DiscoverScreen(
                 onVerified = {
                     scope.launch {
                         state.searchState.refreshAfterVvoCaptchaSuspend()
+                    }
+                },
+            )
+        }
+    }
+    (state.searchState.xhsVerificationException() ?: state.xhsVerificationException())?.let { exception ->
+        if (dismissedXhsVerificationUrl != exception.url) {
+            XhsVerificationDialog(
+                exception = exception,
+                onDismiss = {
+                    dismissedXhsVerificationUrl = exception.url
+                },
+                onVerified = {
+                    scope.launch {
+                        state.searchState.refreshAfterXhsVerificationSuspend()
+                        state.refreshAfterXhsVerificationSuspend()
                     }
                 },
             )

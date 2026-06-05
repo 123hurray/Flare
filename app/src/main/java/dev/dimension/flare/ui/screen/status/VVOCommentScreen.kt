@@ -29,8 +29,10 @@ import dev.dimension.flare.ui.component.RefreshContainer
 import dev.dimension.flare.ui.component.status.LazyStatusVerticalStaggeredGrid
 import dev.dimension.flare.ui.component.status.StatusItem
 import dev.dimension.flare.ui.component.status.status
+import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.onLoading
 import dev.dimension.flare.ui.model.onSuccess
+import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.presenter.status.VVOCommentPresenter
 import kotlinx.coroutines.launch
@@ -42,6 +44,7 @@ internal fun VVOCommentScreen(
     commentKey: MicroBlogKey,
     onBack: () -> Unit,
     accountType: AccountType,
+    originalAuthorKey: MicroBlogKey?,
 ) {
     val state by producePresenter("comment_$commentKey") {
         presenter(
@@ -49,6 +52,7 @@ internal fun VVOCommentScreen(
             accountType = accountType,
         )
     }
+    val layerOwnerKey = (state.state.root.takeSuccess() as? UiTimelineV2.Post)?.user?.key
     val topAppBarScrollBehavior =
         if (LocalAppearanceSettings.current.bottomBarBehavior == BottomBarBehavior.AlwaysShow) {
             TopAppBarDefaults.pinnedScrollBehavior()
@@ -88,12 +92,24 @@ internal fun VVOCommentScreen(
                         item {
                             state.state.root
                                 .onSuccess {
-                                    StatusItem(item = it, commentStyle = true)
+                                    StatusItem(
+                                        item = it,
+                                        detailStatusKey = commentKey,
+                                        detailAuthorKey = null,
+                                        layerOwnerKey = layerOwnerKey,
+                                        commentStyle = true,
+                                    )
                                 }.onLoading {
                                     StatusItem(item = null)
                                 }
                         }
-                        status(state.state.list, commentStyle = true)
+                        status(
+                            state.state.list,
+                            detailStatusKey = commentKey,
+                            detailAuthorKey = null,
+                            layerOwnerKey = layerOwnerKey,
+                            commentStyle = true,
+                        )
                     }
                 },
             )

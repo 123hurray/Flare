@@ -39,6 +39,7 @@ import compose.icons.fontawesomeicons.Solid
 import compose.icons.fontawesomeicons.solid.Minus
 import compose.icons.fontawesomeicons.solid.Plus
 import dev.dimension.flare.R
+import dev.dimension.flare.data.model.AppFontWeight
 import dev.dimension.flare.data.model.AvatarShape
 import dev.dimension.flare.data.model.LocalAppearanceSettings
 import dev.dimension.flare.data.model.Theme
@@ -190,6 +191,26 @@ internal fun AppearanceThemeScreen(
                 onSelected = {
                     state.updateSettings {
                         copy(avatarShape = it)
+                    }
+                },
+                shapes = ListItemDefaults.item(),
+            )
+            SingleChoiceSettingsItem(
+                headline = { Text(text = stringResource(id = R.string.settings_appearance_font_weight)) },
+                supporting = { Text(text = stringResource(id = R.string.settings_appearance_font_weight_description)) },
+                items =
+                    persistentMapOf(
+                        AppFontWeight.ExtraLight to stringResource(id = R.string.settings_appearance_font_weight_extra_light),
+                        AppFontWeight.Light to stringResource(id = R.string.settings_appearance_font_weight_light),
+                        AppFontWeight.DemiLight to stringResource(id = R.string.settings_appearance_font_weight_demi_light),
+                        AppFontWeight.Normal to stringResource(id = R.string.settings_appearance_font_weight_normal),
+                        AppFontWeight.Medium to stringResource(id = R.string.settings_appearance_font_weight_medium),
+                        AppFontWeight.SemiBold to stringResource(id = R.string.settings_appearance_font_weight_semi_bold),
+                    ),
+                selected = appearanceSettings.fontWeight,
+                onSelected = {
+                    state.updateSettings {
+                        copy(fontWeight = it)
                     }
                 },
                 shapes = ListItemDefaults.item(),

@@ -2,6 +2,8 @@ package dev.dimension.flare.data.network.xiaohongshu
 
 import dev.dimension.flare.common.JSON
 import dev.dimension.flare.common.encodeJsonWithDefaults
+import dev.dimension.flare.data.network.ResponseCookieUpdate
+import dev.dimension.flare.data.network.extractSetCookieUpdate
 import dev.dimension.flare.data.network.httpClientEngine
 import dev.dimension.flare.data.repository.DebugRepository
 import dev.dimension.flare.data.network.xiaohongshu.model.XhsCommentPageResponse
@@ -53,6 +55,7 @@ import kotlin.time.Duration.Companion.milliseconds
 internal class XhsService(
     private val accountKey: MicroBlogKey? = null,
     cookiesFlow: Flow<Map<String, String>>,
+    private val onCookiesUpdated: (suspend (ResponseCookieUpdate) -> Unit)? = null,
 ) {
     private val client = HttpClient(httpClientEngine)
     private val auth = XhsAuthPlugin(cookiesFlow)
@@ -285,6 +288,7 @@ internal class XhsService(
                     append(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9,en;q=0.8")
                 }
             }
+        persistResponseCookies(response)
         return response.bodyAsText()
     }
 
@@ -306,6 +310,7 @@ internal class XhsService(
             }
         val body = response.bodyAsText()
         logResponse(path, response.status.value, body)
+        persistResponseCookies(response)
         if (mapLoginExpired && response.status == HttpStatusCode.Unauthorized) {
             XhsErrorMapper.map(accountKey, -100, null)?.let { throw it }
         }
@@ -332,6 +337,7 @@ internal class XhsService(
             }
         val responseBody = response.bodyAsText()
         logResponse(path, response.status.value, responseBody)
+        persistResponseCookies(response)
         if (mapLoginExpired && response.status == HttpStatusCode.Unauthorized) {
             XhsErrorMapper.map(accountKey, -100, null)?.let { throw it }
         }
@@ -357,6 +363,7 @@ internal class XhsService(
             }
         val responseBody = response.bodyAsText()
         logResponse(path, response.status.value, responseBody)
+        persistResponseCookies(response)
         if (response.status == HttpStatusCode.Unauthorized) {
             XhsErrorMapper.map(accountKey, -100, null)?.let { throw it }
         }
@@ -378,7 +385,7 @@ internal class XhsService(
                 decode = { JSON.decodeFromString<XhsFollowResponse>(it) },
                 mapLoginExpired = false,
             )
-        XhsErrorMapper.map(null, response.code, response.msg)?.let { throw it }
+        XhsErrorMapper.map(accountKey, response.code, response.msg)?.let { throw it }
         if (response.success) {
             logRelationResponse(path, response)
             return response
@@ -407,6 +414,13 @@ internal class XhsService(
             }
         println(line)
         DebugRepository.log(line)
+    }
+
+    private suspend fun persistResponseCookies(response: HttpResponse) {
+        val update = response.extractSetCookieUpdate()
+        if (update.hasChanges) {
+            onCookiesUpdated?.invoke(update)
+        }
     }
 
     private suspend fun executeWithBackoff(block: suspend () -> HttpResponse): HttpResponse {
@@ -674,7 +688,8 @@ internal class XhsService(
     ) {
         if (status in 200..299) return
         val (code, message) = errorCodeAndMessage(body)
-        XhsErrorMapper.map(if (mapLoginExpired) accountKey else null, code, message)?.let { throw it }
+        XhsErrorMapper.map(accountKeyForErrorCode(code, mapLoginExpired), code, message)?.let { throw it }
+        XhsErrorMapper.map(accountKeyForErrorCode(status, mapLoginExpired), status, message)?.let { throw it }
         if (status == HttpStatusCode.NotAcceptable.value) {
             throw XhsSignatureException(message ?: "Xiaohongshu request rejected: HTTP $status")
         }
@@ -692,8 +707,18 @@ internal class XhsService(
         val parsed = runCatching { JSON.decodeFromString<JsonElement>(body).jsonObject }.getOrNull() ?: return
         val code = parsed["code"]?.jsonPrimitive?.content?.toIntOrNull()
         val msg = parsed["msg"]?.jsonPrimitive?.content
-        XhsErrorMapper.map(if (mapLoginExpired) accountKey else null, code, msg)?.let { throw it }
+        XhsErrorMapper.map(accountKeyForErrorCode(code, mapLoginExpired), code, msg)?.let { throw it }
     }
+
+    private fun accountKeyForErrorCode(
+        code: Int?,
+        mapLoginExpired: Boolean,
+    ): MicroBlogKey? =
+        if (code == 461 || code == 471) {
+            accountKey
+        } else {
+            accountKey.takeIf { mapLoginExpired }
+        }
 
     private fun requireVerifiedMainApiSigning(path: String) {
         if (XhsSigning.IS_MAIN_API_SIGNING_VERIFIED) return

@@ -5,6 +5,8 @@ import dev.dimension.flare.data.datasource.microblog.paging.CacheableRemoteLoade
 import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
 import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.network.vvo.VVOService
+import dev.dimension.flare.data.network.vvo.model.isAiGenerated
+import dev.dimension.flare.data.network.vvo.model.withoutAiGeneratedChildren
 import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
@@ -16,8 +18,9 @@ internal class CommentChildRemoteMediator(
     private val service: VVOService,
     private val commentKey: MicroBlogKey,
     private val accountKey: MicroBlogKey,
+    private val filterAiComments: Boolean,
 ) : CacheableRemoteLoader<UiTimelineV2> {
-    override val pagingKey: String = "status_comments_child_${commentKey}_$accountKey"
+    override val pagingKey: String = "status_comments_child_${commentKey}_${accountKey}_filter_ai_$filterAiComments"
 
     override suspend fun load(
         pageSize: Int,
@@ -56,7 +59,18 @@ internal class CommentChildRemoteMediator(
         val maxId = response.maxID?.takeIf { it != 0L }
         return PagingResult(
             endOfPaginationReached = maxId == null,
-            data = response.data.orEmpty().map { it.render(accountKey) },
+            data =
+                response.data
+                    .orEmpty()
+                    .let { comments ->
+                        if (filterAiComments) {
+                            comments
+                                .filterNot { it.isAiGenerated() }
+                                .map { it.withoutAiGeneratedChildren() }
+                        } else {
+                            comments
+                        }
+                    }.map { it.render(accountKey) },
             nextKey = maxId?.toString(),
         )
     }

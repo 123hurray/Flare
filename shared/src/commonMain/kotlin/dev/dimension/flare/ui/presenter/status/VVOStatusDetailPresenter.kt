@@ -136,7 +136,11 @@ public class VVOStatusDetailPresenter(
                     require(it is VVODataSource)
                     remember(statusKey, accountType) {
                         appDataStore.appSettingsStore.data.flatMapLatest { appSettings ->
-                            val rawLoader = it.statusComment(statusKey = statusKey)
+                            val rawLoader =
+                                it.statusComment(
+                                    statusKey = statusKey,
+                                    filterAiComments = appSettings.localFilterConfig.filterAiComments,
+                                )
                             val loader =
                                 if (appSettings.localFilterConfig.filterDuplicateComments) {
                                     rawLoader.filterDuplicateCommentPages(appSettings.localFilterConfig.duplicateCommentThreshold)

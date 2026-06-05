@@ -47,6 +47,7 @@ public data class AppearanceSettings(
     val shareImageExpandMediaSize: Boolean = false,
     val timelineLongPressExpandMediaSize: Boolean = false,
     val detailExpandMediaSize: Boolean = false,
+    val fontWeight: AppFontWeight = AppFontWeight.DemiLight,
 ) {
     public companion object {
         // for iOS
@@ -70,6 +71,18 @@ public enum class BottomBarBehavior {
     AlwaysShow,
     HideOnScroll,
     MinimizeOnScroll,
+}
+
+@Serializable
+public enum class AppFontWeight(
+    public val weight: Int,
+) {
+    ExtraLight(200),
+    Light(300),
+    DemiLight(350),
+    Normal(400),
+    Medium(500),
+    SemiBold(600),
 }
 
 @Serializable

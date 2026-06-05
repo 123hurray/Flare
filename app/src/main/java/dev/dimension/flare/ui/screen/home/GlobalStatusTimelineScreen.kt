@@ -1,28 +1,33 @@
 package dev.dimension.flare.ui.screen.home
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Solid
 import compose.icons.fontawesomeicons.solid.Trash
+import dev.dimension.flare.R
 import dev.dimension.flare.common.PagingState
 import dev.dimension.flare.ui.component.FAIcon
 import dev.dimension.flare.ui.component.FlareScaffold
@@ -35,8 +40,8 @@ import dev.dimension.flare.ui.component.status.StatusItem
 import dev.dimension.flare.ui.component.status.status
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.presenter.invoke
-import dev.dimension.flare.ui.presenter.status.LogStatusHistoryPresenter
 import dev.dimension.flare.ui.presenter.status.GlobalStatusTimelinePresenter
+import dev.dimension.flare.ui.presenter.status.LogStatusHistoryPresenter
 import moe.tlaster.precompose.molecule.producePresenter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,6 +71,7 @@ internal fun GlobalStatusTimelineScreen(
     val lazyListState = rememberLazyStaggeredGridState()
     val canDelete = pagingKey == LogStatusHistoryPresenter.FAVORITES_PAGING_KEY
     val previewMaxLines = LocalComponentAppearance.current.lineLimit
+    var deleteTarget by remember { mutableStateOf<UiTimelineV2?>(null) }
     FlareScaffold(
         topBar = {
             Box(
@@ -98,13 +104,13 @@ internal fun GlobalStatusTimelineScreen(
                         },
                 ) { index ->
                     val item = listState[index]
-                    FavoriteSwipeItem(
+                    FavoriteMenuItem(
                         item = item,
                         index = index,
                         totalCount = listState.itemCount,
                         maxLines = previewMaxLines,
-                        onDelete = {
-                            item?.let(state::delete)
+                        onShowMenu = {
+                            deleteTarget = item
                         },
                     )
                 }
@@ -116,61 +122,69 @@ internal fun GlobalStatusTimelineScreen(
             }
         }
     }
+    deleteTarget?.let { target ->
+        ModalBottomSheet(
+            onDismissRequest = {
+                deleteTarget = null
+            },
+        ) {
+            ListItem(
+                headlineContent = {
+                    Text(stringResource(id = R.string.delete))
+                },
+                leadingContent = {
+                    FAIcon(
+                        imageVector = FontAwesomeIcons.Solid.Trash,
+                        contentDescription = null,
+                    )
+                },
+                modifier =
+                    Modifier.clickable(
+                        onClick = {
+                            state.delete(target)
+                            deleteTarget = null
+                        },
+                    ),
+            )
+        }
+    }
 }
 
 @Composable
-private fun FavoriteSwipeItem(
+private fun FavoriteMenuItem(
     item: UiTimelineV2?,
     index: Int,
     totalCount: Int,
     maxLines: Int,
-    onDelete: () -> Unit,
+    onShowMenu: () -> Unit,
 ) {
-    val swipeState =
-        rememberSwipeToDismissBoxState(
-            positionalThreshold = { distance -> distance * 0.9f },
-            confirmValueChange = {
-                if (it == SwipeToDismissBoxValue.EndToStart) {
-                    onDelete()
-                    true
-                } else {
-                    false
+    AdaptiveCard(
+        index = index,
+        totalCount = totalCount,
+        respectTimelineMode = true,
+        modifier =
+            Modifier.pointerInput(item?.itemKey) {
+                if (item == null) {
+                    return@pointerInput
+                }
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val longPress = awaitLongPressOrCancellation(down.id)
+                    if (longPress != null) {
+                        longPress.consume()
+                        onShowMenu()
+                        do {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { it.consume() }
+                        } while (event.changes.any { it.pressed })
+                    }
                 }
             },
-        )
-    SwipeToDismissBox(
-        state = swipeState,
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = item != null,
-        backgroundContent = {
-            if (swipeState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.error)
-                            .padding(16.dp),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    FAIcon(
-                        imageVector = FontAwesomeIcons.Solid.Trash,
-                        contentDescription = "删除",
-                        tint = MaterialTheme.colorScheme.onError,
-                    )
-                }
-            }
+        content = {
+            StatusItem(
+                item = item,
+                maxLines = maxLines,
+            )
         },
-    ) {
-        AdaptiveCard(
-            index = index,
-            totalCount = totalCount,
-            respectTimelineMode = true,
-            content = {
-                StatusItem(
-                    item = item,
-                    maxLines = maxLines,
-                )
-            },
-        )
-    }
+    )
 }

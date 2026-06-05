@@ -11,6 +11,9 @@ import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
 import dev.dimension.flare.data.repository.LocalFilterRepository
 import dev.dimension.flare.ui.model.UiKeywordFilter
 import dev.dimension.flare.ui.model.UiTimelineV2
+import dev.dimension.flare.ui.render.RenderContent
+import dev.dimension.flare.ui.render.RenderRun
+import dev.dimension.flare.ui.render.UiRichText
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -91,13 +94,10 @@ private fun PagingData<UiTimelineV2>.filterDuplicateComments(
     if (!enabledForList || !config.filterDuplicateComments) {
         return this
     }
-    val threshold = config.duplicateCommentThreshold.coerceAtLeast(2)
-    val seen = mutableMapOf<String, Int>()
+    val seen = mutableSetOf<String>()
     return filter { item ->
         val key = item.duplicateCommentKey() ?: return@filter true
-        val count = seen.getOrElse(key) { 0 } + 1
-        seen[key] = count
-        count < threshold
+        seen.add(key)
     }
 }
 
@@ -170,47 +170,161 @@ private fun StringBuilder.appendProfile(profile: dev.dimension.flare.ui.model.Ui
 }
 
 private class DuplicateCommentPageFilter(
-    threshold: Int,
+    @Suppress("UNUSED_PARAMETER") threshold: Int,
 ) {
-    private val threshold = threshold.coerceAtLeast(2)
-    private val seen = mutableMapOf<String, Int>()
+    private val seen = mutableSetOf<String>()
 
     fun reset() {
         seen.clear()
     }
 
     fun filter(items: List<UiTimelineV2>): List<UiTimelineV2> {
-        val pageCounts =
-            items
-                .mapNotNull { it.duplicateCommentKey() }
-                .groupingBy { it }
-                .eachCount()
-        val filtered =
-            items.filter { item ->
-                val key = item.duplicateCommentKey() ?: return@filter true
-                val previousCount = seen.getOrElse(key) { 0 }
-                val pageCount = pageCounts.getOrElse(key) { 0 }
-                val totalCount = previousCount + pageCount
-                when {
-                    previousCount == 0 && pageCount >= threshold -> false
-                    previousCount > 0 && totalCount >= threshold -> false
-                    else -> true
-                }
-            }
-        pageCounts.forEach { (key, pageCount) ->
-            seen[key] = seen.getOrElse(key) { 0 } + pageCount
+        return items.filter { item ->
+            val key = item.duplicateCommentKey() ?: return@filter true
+            seen.add(key)
         }
-        return filtered
     }
 }
 
 private fun UiTimelineV2.duplicateCommentKey(): String? {
-    val text =
+    val content =
         when (this) {
-            is UiTimelineV2.Post -> content.innerText
+            is UiTimelineV2.Post -> content
             else -> return null
-        }.trim()
-            .replace(Regex("\\s+"), " ")
-            .lowercase()
-    return text.takeIf { it.isNotEmpty() }
+        }
+    val normalizedText = content.normalizeDuplicateCommentContent()
+    return when {
+        normalizedText.isNotEmpty() -> normalizedText
+        content.isEmpty -> null
+        else -> EmptyNormalizedCommentKey
+    }
 }
+
+private fun UiRichText.normalizeDuplicateCommentContent(): String =
+    renderRuns
+        .joinToString(separator = "") { content ->
+            when (content) {
+                is RenderContent.BlockImage -> ""
+                is RenderContent.Text ->
+                    content.runs.joinToString(separator = "") { run ->
+                        when (run) {
+                            is RenderRun.Image -> ""
+                            is RenderRun.Text -> run.text
+                        }
+                    }
+            }
+        }.normalizeDuplicateCommentText()
+
+internal fun String.normalizeDuplicateCommentText(): String {
+    val withoutBracketEmoji = replace(Regex("""\[[^\[\]\s]{1,8}]"""), "")
+    val withoutPunctuation = buildString {
+        var index = 0
+        while (index < withoutBracketEmoji.length) {
+            val char = withoutBracketEmoji[index]
+            val nextChar = withoutBracketEmoji.getOrNull(index + 1)
+            val codePoint = char.toCodePointOrNull(nextChar)
+            if (char.isKeycapBase() && withoutBracketEmoji.hasKeycapSequenceAt(index)) {
+                index += withoutBracketEmoji.keycapSequenceLengthAt(index)
+                continue
+            }
+            if (codePoint != null) {
+                if (!codePoint.isEmojiCodePoint()) {
+                    append(char)
+                    append(nextChar)
+                }
+                index += 2
+                continue
+            }
+            when {
+                char.isWhitespace() -> Unit
+                char.isCommonPunctuation() -> Unit
+                char.code.isEmojiCodePoint() -> Unit
+                else -> append(char.lowercaseChar())
+            }
+            index += 1
+        }
+    }
+    val withoutParticles = buildString {
+        withoutPunctuation.forEach { char ->
+            if (!char.isCommonChineseModalParticle()) {
+                append(char)
+            }
+        }
+    }
+    return withoutParticles.ifEmpty { withoutPunctuation }
+}
+
+private const val EmptyNormalizedCommentKey = "\u0000empty-normalized-comment"
+
+private fun Char.toCodePointOrNull(nextChar: Char?): Int? {
+    val high = code
+    val low = nextChar?.code ?: return null
+    if (high !in 0xD800..0xDBFF || low !in 0xDC00..0xDFFF) {
+        return null
+    }
+    return 0x10000 + ((high - 0xD800) shl 10) + (low - 0xDC00)
+}
+
+private fun Char.isKeycapBase(): Boolean =
+    this in '0'..'9' || this == '#' || this == '*'
+
+private fun String.hasKeycapSequenceAt(index: Int): Boolean {
+    val nextIndex =
+        when (getOrNull(index + 1)?.code) {
+            0xFE0E, 0xFE0F -> index + 2
+            else -> index + 1
+        }
+    return getOrNull(nextIndex)?.code == 0x20E3
+}
+
+private fun String.keycapSequenceLengthAt(index: Int): Int =
+    when (getOrNull(index + 1)?.code) {
+        0xFE0E, 0xFE0F -> 3
+        else -> 2
+    }
+
+private fun Int.isEmojiCodePoint(): Boolean =
+    when (this) {
+        in 0x1F000..0x1FAFF,
+        in 0x2600..0x27BF,
+        in 0x2300..0x23FF,
+        in 0x2B00..0x2BFF,
+        in 0xFE00..0xFE0F,
+        0x00A9,
+        0x00AE,
+        0x200D,
+        0x20E3,
+        0x3030,
+        0x303D,
+        0x3297,
+        0x3299,
+        -> true
+        else -> false
+    }
+
+private fun Char.isCommonPunctuation(): Boolean =
+    when (this) {
+        '.', ',', '!', '?', ':', ';', '\'', '"', '`',
+        '~', '-', '_', '+', '=', '*', '/', '\\', '|',
+        '@', '#', '$', '%', '^', '&',
+        '(', ')', '[', ']', '{', '}', '<', '>',
+        '。', '，', '！', '？', '：', '；', '、', '·',
+        '…', '—', '～', '《', '》', '〈', '〉', '「', '」',
+        '『', '』', '（', '）', '【', '】', '〔', '〕',
+        '“', '”', '‘', '’', '￥',
+        -> true
+        else -> false
+    }
+
+private fun Char.isCommonChineseModalParticle(): Boolean =
+    this in chineseModalParticles
+
+private val chineseModalParticles =
+    setOf(
+        '了', '啦', '喽', '咯', '啰', '咧',
+        '啊', '呀', '哇', '呐', '呢', '嘛',
+        '吗', '么', '吧', '罢',
+        '哎', '唉', '哟', '呦', '哦', '噢',
+        '额', '呃', '嗯', '恩', '诶', '欸',
+        '得', '地', '的', '着', '过',
+    )

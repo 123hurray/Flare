@@ -107,6 +107,7 @@ import dev.dimension.flare.compose.ui.vote
 import dev.dimension.flare.data.datasource.microblog.ActionMenu
 import dev.dimension.flare.data.datasource.xiaohongshu.XhsStatusMediaLazyResolver
 import dev.dimension.flare.data.model.PostActionStyle
+import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.ui.component.AdaptiveGrid
 import dev.dimension.flare.ui.component.AvatarComponent
@@ -164,6 +165,8 @@ public fun CommonStatusComponent(
     modifier: Modifier = Modifier,
     isDetail: Boolean = false,
     isQuote: Boolean = false,
+    detailAuthorKey: MicroBlogKey? = null,
+    layerOwnerKey: MicroBlogKey? = null,
     showMedia: Boolean = true,
     maxLines: Int? = null,
     showExpandButton: Boolean = true,
@@ -182,6 +185,7 @@ public fun CommonStatusComponent(
         ZhihuDetailStatusComponent(
             item = item,
             showExpandButton = showExpandButton,
+            maxLines = maxLines,
             modifier = modifier,
         )
         return
@@ -189,6 +193,8 @@ public fun CommonStatusComponent(
     if (commentStyle && !isDetail && !isQuote) {
         CompactCommentStatusComponent(
             item = item,
+            detailAuthorKey = detailAuthorKey,
+            layerOwnerKey = layerOwnerKey,
             modifier = modifier,
         )
         return
@@ -361,7 +367,7 @@ public fun CommonStatusComponent(
                                     item.contentWarning
                                 },
                             poll = item.poll,
-                            maxLines = Int.MAX_VALUE,
+                            maxLines = maxLines ?: Int.MAX_VALUE,
                             showExpandButton = showExpandButton,
                             onExpandClick = null,
                             textStyle =
@@ -536,6 +542,8 @@ public fun CommonStatusComponent(
 @Composable
 private fun CompactCommentStatusComponent(
     item: UiTimelineV2.Post,
+    detailAuthorKey: MicroBlogKey?,
+    layerOwnerKey: MicroBlogKey?,
     modifier: Modifier = Modifier,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -565,9 +573,9 @@ private fun CompactCommentStatusComponent(
         user?.let {
             AvatarComponent(
                 it.avatar,
+                size = TopLevelCommentAvatarSize,
                 modifier =
                     Modifier
-                        .size(36.dp)
                         .clickable {
                             it.onClicked.invoke(
                                 ClickContext(
@@ -578,17 +586,16 @@ private fun CompactCommentStatusComponent(
                             )
                         },
             )
-        } ?: Spacer(modifier = Modifier.size(36.dp))
+        } ?: Spacer(modifier = Modifier.size(TopLevelCommentAvatarSize))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             user?.let {
-                RichText(
-                    text = it.name,
-                    color = PlatformTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                CommentAuthorName(
+                    item = item,
+                    detailAuthorKey = detailAuthorKey,
+                    layerOwnerKey = layerOwnerKey,
                 )
             }
             if (!item.content.isEmpty) {
@@ -606,6 +613,8 @@ private fun CompactCommentStatusComponent(
                 CompactChildComments(
                     parent = item,
                     comments = item.quote,
+                    detailAuthorKey = detailAuthorKey,
+                    layerOwnerKey = layerOwnerKey ?: item.user?.key,
                     moreAction = replyAction,
                 )
             }
@@ -655,6 +664,8 @@ private fun CommentMetaAndActions(item: UiTimelineV2.Post) {
 private fun CompactChildComments(
     parent: UiTimelineV2.Post,
     comments: ImmutableList<UiTimelineV2.Post>,
+    detailAuthorKey: MicroBlogKey?,
+    layerOwnerKey: MicroBlogKey?,
     moreAction: ActionMenu.Item?,
 ) {
     Column(
@@ -665,7 +676,11 @@ private fun CompactChildComments(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         comments.fastForEach { comment ->
-            CompactChildComment(comment)
+            CompactChildComment(
+                item = comment,
+                detailAuthorKey = detailAuthorKey,
+                layerOwnerKey = layerOwnerKey,
+            )
         }
         moreAction?.let {
             MoreChildCommentsAction(parent, it)
@@ -674,27 +689,31 @@ private fun CompactChildComments(
 }
 
 @Composable
-private fun CompactChildComment(item: UiTimelineV2.Post) {
+private fun CompactChildComment(
+    item: UiTimelineV2.Post,
+    detailAuthorKey: MicroBlogKey?,
+    layerOwnerKey: MicroBlogKey?,
+) {
     val nicknameSize = PlatformTheme.typography.body.fontSize.value.takeIf { it > 0f }?.dp ?: 14.dp
+    val avatarSize = nicknameSize * ChildCommentAvatarScale
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item.user?.let {
             AvatarComponent(
                 it.avatar,
-                modifier = Modifier.size(nicknameSize),
+                size = avatarSize,
             )
-        } ?: Spacer(modifier = Modifier.size(nicknameSize))
+        } ?: Spacer(modifier = Modifier.size(avatarSize))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             item.user?.let {
-                RichText(
-                    text = it.name,
-                    color = PlatformTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                CommentAuthorName(
+                    item = item,
+                    detailAuthorKey = detailAuthorKey,
+                    layerOwnerKey = layerOwnerKey,
                 )
             }
             StatusContentComponent(
@@ -732,6 +751,64 @@ private fun CompactChildComment(item: UiTimelineV2.Post) {
 }
 
 @Composable
+private fun CommentAuthorName(
+    item: UiTimelineV2.Post,
+    detailAuthorKey: MicroBlogKey?,
+    layerOwnerKey: MicroBlogKey?,
+) {
+    val user = item.user ?: return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        RichText(
+            text = user.name,
+            color = PlatformTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        when {
+            detailAuthorKey != null && user.key == detailAuthorKey -> {
+                CommentAuthorBadge(text = "博主")
+            }
+
+            layerOwnerKey != null && user.key == layerOwnerKey -> {
+                CommentAuthorBadge(text = "层主")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentAuthorBadge(text: String) {
+    val badgeTextStyle =
+        PlatformTheme.typography.caption.copy(
+            fontSize = PlatformTheme.typography.caption.fontSize * CommentAuthorBadgeScale,
+            lineHeight = PlatformTheme.typography.caption.lineHeight * CommentAuthorBadgeScale,
+        )
+    PlatformText(
+        text = text,
+        style = badgeTextStyle,
+        color = PlatformTheme.colorScheme.primary,
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(3.dp))
+                .background(PlatformTheme.colorScheme.primary.copy(alpha = 0.12f))
+                .border(
+                    width = 1.dp,
+                    color = PlatformTheme.colorScheme.primary.copy(alpha = 0.35f),
+                    shape = RoundedCornerShape(3.dp),
+                ).padding(horizontal = 3.dp, vertical = 0.5.dp),
+        maxLines = 1,
+    )
+}
+
+private val TopLevelCommentAvatarSize = 28.8.dp
+private const val ChildCommentAvatarScale = 1.15f
+private const val CommentAuthorBadgeScale = 0.7f
+
+@Composable
 private fun MoreChildCommentsAction(
     parent: UiTimelineV2.Post,
     action: ActionMenu.Item,
@@ -765,6 +842,7 @@ private fun MoreChildCommentsAction(
 private fun ZhihuDetailStatusComponent(
     item: UiTimelineV2.Post,
     showExpandButton: Boolean,
+    maxLines: Int?,
     modifier: Modifier = Modifier,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -791,6 +869,7 @@ private fun ZhihuDetailStatusComponent(
                 textStyle = PlatformTheme.typography.h3,
                 headingFontScale = 1.5f,
                 lineHeightScale = 1f,
+                maxLines = maxLines ?: Int.MAX_VALUE,
             )
         }
         item.sourceChannel?.name?.takeIf { it.isNotBlank() }?.let {
@@ -811,6 +890,7 @@ private fun ZhihuDetailStatusComponent(
                         textStyle = PlatformTheme.typography.h4,
                         bodyFontScale = 0.8f,
                         lineHeightScale = 0.8f,
+                        maxLines = maxLines ?: Int.MAX_VALUE,
                         onBlockImageClick = { url ->
                             openStatusRichTextImage(item, url, uriHandler)
                         },
@@ -874,7 +954,7 @@ private fun ZhihuDetailStatusComponent(
                     content = bodyContent,
                     contentWarning = null,
                     poll = item.poll,
-                    maxLines = Int.MAX_VALUE,
+                    maxLines = maxLines ?: Int.MAX_VALUE,
                     showExpandButton = showExpandButton,
                     onExpandClick = null,
                     onBlockImageClick = { url ->

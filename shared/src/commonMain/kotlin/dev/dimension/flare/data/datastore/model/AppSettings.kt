@@ -25,6 +25,7 @@ public data class AppSettings(
     public data class LocalFilterConfig(
         val filterDuplicateComments: Boolean = false,
         val duplicateCommentThreshold: Int = 3,
+        val filterAiComments: Boolean = false,
     )
 
     @Serializable

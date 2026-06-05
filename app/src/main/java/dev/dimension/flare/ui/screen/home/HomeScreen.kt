@@ -7,6 +7,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,8 +46,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
@@ -100,6 +105,7 @@ import dev.dimension.flare.ui.route.Router
 import dev.dimension.flare.ui.screen.splash.SplashScreen
 import kotlinx.coroutines.launch
 import moe.tlaster.precompose.molecule.producePresenter
+import kotlin.math.abs
 
 @OptIn(
     ExperimentalMaterial3AdaptiveNavigationSuiteApi::class,
@@ -113,6 +119,7 @@ internal fun HomeScreen(afterInit: () -> Unit) {
     val uriHandler = LocalUriHandler.current
     val state by producePresenter { presenter(uriHandler = uriHandler) }
     val hapticFeedback = LocalHapticFeedback.current
+    val density = LocalDensity.current
     state.tabs
         .onSuccess { tabs ->
             val currentRoute =
@@ -166,20 +173,32 @@ internal fun HomeScreen(afterInit: () -> Unit) {
                 }
             }
             val currentStackRoute = state.topLevelBackStack.takeSuccess()?.currentKey ?: currentRoute
+            val edgeSwipeWidthPx = with(density) { 72.dp.toPx() }
+            val edgeSwipeThresholdPx = with(density) { 56.dp.toPx() }
+            val homeModifier =
+                Modifier
+                    .fillMaxSize()
+                    .threeFingerSwipeLeft {
+                        state.navigate(
+                            Route.Agent.Chat(
+                                sourceRoute = "home",
+                                accountType = (currentRoute as? Route.WithAccountType)?.accountType,
+                            ),
+                        )
+                    }.twoFingerLeftEdgeSwipeOpenDrawer(
+                        enabled =
+                            layoutType == NavigationSuiteType.NavigationBar &&
+                                currentStackRoute !is Route.Agent,
+                        edgeWidthPx = edgeSwipeWidthPx,
+                        thresholdPx = edgeSwipeThresholdPx,
+                        onOpenDrawer = {
+                            state.openDrawerFromEdge()
+                        },
+                    )
             Box {
                 NavigationSuiteScaffold2(
                     wideNavigationRailState = state.wideNavigationRailState,
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .threeFingerSwipeLeft {
-                                state.navigate(
-                                    Route.Agent.Chat(
-                                        sourceRoute = "home",
-                                        accountType = (currentRoute as? Route.WithAccountType)?.accountType,
-                                    ),
-                                )
-                            },
+                    modifier = homeModifier,
                     bottomBarAutoHideEnabled = state.navigationState.bottomBarAutoHideEnabled,
                     showNavigationSuite = currentStackRoute !is Route.Agent,
                     layoutType = layoutType,
@@ -685,6 +704,13 @@ private fun presenter(uriHandler: UriHandler) =
                     wideNavigationRailState.toggle()
                 }
             }
+
+            fun openDrawerFromEdge() {
+                if (wideNavigationRailState.currentValue == WideNavigationRailValue.Expanded) return
+                scope.launch {
+                    wideNavigationRailState.toggle()
+                }
+            }
         }
     }
 
@@ -705,6 +731,55 @@ private fun navigate(
         wideNavigationRailState.collapse()
     }
 }
+
+private fun Modifier.twoFingerLeftEdgeSwipeOpenDrawer(
+    enabled: Boolean,
+    edgeWidthPx: Float,
+    thresholdPx: Float,
+    onOpenDrawer: () -> Unit,
+): Modifier =
+    if (!enabled) {
+        this
+    } else {
+        pointerInput(edgeWidthPx, thresholdPx, onOpenDrawer) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                if (down.position.x > edgeWidthPx) {
+                    return@awaitEachGesture
+                }
+                var startCentroidX: Float? = null
+                var startCentroidY: Float? = null
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val pressedChanges = event.changes.filter { it.pressed }
+                    if (pressedChanges.isEmpty()) break
+                    if (pressedChanges.size < 2) {
+                        continue
+                    }
+                    val trackedChanges = pressedChanges.take(2)
+                    if (startCentroidX == null || startCentroidY == null) {
+                        if (trackedChanges.any { it.position.x > edgeWidthPx }) {
+                            break
+                        }
+                        startCentroidX = trackedChanges.map { it.position.x }.average().toFloat()
+                        startCentroidY = trackedChanges.map { it.position.y }.average().toFloat()
+                    }
+                    val centroidX = trackedChanges.map { it.position.x }.average().toFloat()
+                    val centroidY = trackedChanges.map { it.position.y }.average().toFloat()
+                    val deltaX = centroidX - startCentroidX
+                    val deltaY = centroidY - startCentroidY
+                    if (deltaX > thresholdPx && deltaX > abs(deltaY) * 1.2f) {
+                        trackedChanges.forEach { it.consume() }
+                        onOpenDrawer()
+                        break
+                    }
+                    if (trackedChanges.any { it.positionChange().x < 0f } && abs(deltaX) > thresholdPx / 2f) {
+                        break
+                    }
+                }
+            }
+        }
+    }
 
 @Composable
 private fun userPresenter(accountType: AccountType) =

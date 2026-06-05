@@ -56,6 +56,7 @@ internal fun SearchScreen(
     }
     val scope = rememberCoroutineScope()
     var dismissedCaptchaUrl by remember { mutableStateOf<String?>(null) }
+    var dismissedXhsVerificationUrl by remember { mutableStateOf<String?>(null) }
     val lazyListState = rememberLazyStaggeredGridState()
     val accounts = rememberLatestAccounts(state.searchState.accounts)
     state.searchState.vvoCaptchaException()?.let { exception ->
@@ -68,6 +69,21 @@ internal fun SearchScreen(
                 onVerified = {
                     scope.launch {
                         state.searchState.refreshAfterVvoCaptchaSuspend()
+                    }
+                },
+            )
+        }
+    }
+    state.searchState.xhsVerificationException()?.let { exception ->
+        if (dismissedXhsVerificationUrl != exception.url) {
+            XhsVerificationDialog(
+                exception = exception,
+                onDismiss = {
+                    dismissedXhsVerificationUrl = exception.url
+                },
+                onVerified = {
+                    scope.launch {
+                        state.searchState.refreshAfterXhsVerificationSuspend()
                     }
                 },
             )

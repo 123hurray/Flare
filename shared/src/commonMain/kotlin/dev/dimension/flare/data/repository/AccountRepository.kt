@@ -155,21 +155,6 @@ internal class AccountRepository internal constructor(
                     datasource.close()
                 }
             }
-            cacheDatabase.pagingTimelineDao().deleteByAccountType(
-                AccountType.Specific(accountKey),
-            )
-            cacheDatabase.statusDao().deleteByAccountType(
-                AccountType.Specific(accountKey),
-            )
-            cacheDatabase.userDao().deleteHistoryByAccountType(
-                AccountType.Specific(accountKey),
-            )
-            cacheDatabase.emojiDao().clearHistoryByAccountType(
-                AccountType.Specific(accountKey),
-            )
-            cacheDatabase.messageDao().clearMessageTimeline(
-                AccountType.Specific(accountKey),
-            )
             appDatabase.accountDao().delete(accountKey)
         }
 

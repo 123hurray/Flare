@@ -115,6 +115,22 @@ internal class VVODataSource(
         )
     }
 
+    fun authenticatedUser(): CacheData<UiProfile> =
+        MemCacheable("vvo_authenticated_user_$accountKey") {
+            val config = service.config()
+            if (config.data?.login != true) {
+                throw LoginExpiredException(
+                    accountKey = accountKey,
+                    platformType = PlatformType.VVo,
+                )
+            }
+            val uid = requireNotNull(config.data.uid) { "uid is null" }
+            val st = requireNotNull(config.data.st) { "st is null" }
+            val profile = service.profileInfo(uid, st)
+            val user = profile.data?.user ?: error("user not found")
+            user.render(accountKey)
+        }
+
     override val postHandler by lazy {
         PostHandler(
             accountType = AccountType.Specific(accountKey),
@@ -429,11 +445,15 @@ internal class VVODataSource(
             accountKey = accountKey,
         )
 
-    fun statusComment(statusKey: MicroBlogKey): RemoteLoader<UiTimelineV2> =
+    fun statusComment(
+        statusKey: MicroBlogKey,
+        filterAiComments: Boolean = false,
+    ): RemoteLoader<UiTimelineV2> =
         StatusCommentRemoteMediator(
             service = service,
             accountKey = accountKey,
             statusKey = statusKey,
+            filterAiComments = filterAiComments,
         )
 
     fun statusRepost(statusKey: MicroBlogKey): RemoteLoader<UiTimelineV2> =
@@ -443,11 +463,15 @@ internal class VVODataSource(
             statusKey = statusKey,
         )
 
-    fun commentChild(commentKey: MicroBlogKey): RemoteLoader<UiTimelineV2> =
+    fun commentChild(
+        commentKey: MicroBlogKey,
+        filterAiComments: Boolean = false,
+    ): RemoteLoader<UiTimelineV2> =
         CommentChildRemoteMediator(
             service = service,
             accountKey = accountKey,
             commentKey = commentKey,
+            filterAiComments = filterAiComments,
         )
 
     fun comment(statusKey: MicroBlogKey): CacheData<UiTimelineV2> =

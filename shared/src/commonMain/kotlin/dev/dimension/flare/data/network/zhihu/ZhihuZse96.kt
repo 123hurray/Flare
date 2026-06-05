@@ -168,4 +168,3 @@ internal object ZhihuZse96 {
 }
 
 internal const val ZHIHU_X_ZSE_93: String = "101_3_3.0"
-internal const val ZHIHU_SEARCH_X_ZSE_93: String = "101_3_2.0"

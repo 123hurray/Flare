@@ -35,6 +35,11 @@ public class LocalFilterPresenter :
                     .takeSuccess()
                     ?.localFilterConfig
                     ?.filterDuplicateComments ?: false
+            override val filterAiComments =
+                appSettings
+                    .takeSuccess()
+                    ?.localFilterConfig
+                    ?.filterAiComments ?: false
 
             override fun add(item: UiKeywordFilter) {
                 repository.add(
@@ -74,6 +79,19 @@ public class LocalFilterPresenter :
                     }
                 }
             }
+
+            override fun setFilterAiComments(value: Boolean) {
+                scope.launch {
+                    settingsRepository.updateAppSettings {
+                        copy(
+                            localFilterConfig =
+                                localFilterConfig.copy(
+                                    filterAiComments = value,
+                                ),
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -82,6 +100,7 @@ public class LocalFilterPresenter :
 public interface LocalFilterState {
     public val items: UiState<ImmutableList<UiKeywordFilter>>
     public val filterDuplicateComments: Boolean
+    public val filterAiComments: Boolean
 
     public fun delete(keyword: String)
 
@@ -90,4 +109,6 @@ public interface LocalFilterState {
     public fun update(item: UiKeywordFilter)
 
     public fun setFilterDuplicateComments(value: Boolean)
+
+    public fun setFilterAiComments(value: Boolean)
 }

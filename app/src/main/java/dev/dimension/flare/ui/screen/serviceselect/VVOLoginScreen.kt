@@ -63,6 +63,10 @@ internal fun VVOLoginScreen(
         if (state.loading) {
             return@BackHandler
         }
+        if (state.error != null) {
+            onBack()
+            return@BackHandler
+        }
         val chocolate = currentVvoChocolate(webViewState.lastLoadedUrl, state::checkChocolate) ?: pendingChocolate
         if (chocolate != null) {
             pendingChocolate = chocolate

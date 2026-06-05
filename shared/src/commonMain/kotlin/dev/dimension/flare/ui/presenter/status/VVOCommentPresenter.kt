@@ -69,7 +69,11 @@ public class VVOCommentPresenter(
                     remember(service) {
                         require(service is VVODataSource)
                         appDataStore.appSettingsStore.data.flatMapLatest { appSettings ->
-                            val rawLoader = service.commentChild(commentKey = commentKey)
+                            val rawLoader =
+                                service.commentChild(
+                                    commentKey = commentKey,
+                                    filterAiComments = appSettings.localFilterConfig.filterAiComments,
+                                )
                             val loader =
                                 if (appSettings.localFilterConfig.filterDuplicateComments) {
                                     rawLoader.filterDuplicateCommentPages(appSettings.localFilterConfig.duplicateCommentThreshold)

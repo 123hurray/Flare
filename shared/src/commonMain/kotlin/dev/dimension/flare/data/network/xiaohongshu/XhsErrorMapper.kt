@@ -3,6 +3,7 @@ package dev.dimension.flare.data.network.xiaohongshu
 import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
+import dev.dimension.flare.model.xiaohongshuWebHost
 
 internal object XhsErrorMapper {
     fun map(
@@ -11,7 +12,7 @@ internal object XhsErrorMapper {
         message: String?,
     ): Throwable? =
         when (code) {
-            461, 471 -> XhsVerificationRequiredException(message ?: "Xiaohongshu verification required")
+            461, 471 -> XhsVerificationRequiredException(accountKey, message ?: "Xiaohongshu verification required")
             300012 -> XhsIpBlockedException(message ?: "Xiaohongshu IP blocked")
             300015 -> XhsSignatureException(message ?: "Xiaohongshu signature rejected")
             -100 -> accountKey?.let { LoginExpiredException(it, PlatformType.Xiaohongshu) }
@@ -19,8 +20,10 @@ internal object XhsErrorMapper {
         }
 }
 
-internal class XhsVerificationRequiredException(
+public class XhsVerificationRequiredException(
+    public val accountKey: MicroBlogKey?,
     message: String,
+    public val url: String = "https://$xiaohongshuWebHost/explore",
 ) : IllegalStateException(message)
 
 internal class XhsIpBlockedException(

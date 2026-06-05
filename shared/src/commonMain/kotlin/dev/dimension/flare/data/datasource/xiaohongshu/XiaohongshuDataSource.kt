@@ -19,6 +19,7 @@ import dev.dimension.flare.data.datasource.microblog.loader.RelationActionType
 import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
 import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
+import dev.dimension.flare.data.network.ResponseCookieUpdate
 import dev.dimension.flare.data.network.xiaohongshu.XhsService
 import dev.dimension.flare.data.network.xiaohongshu.XhsSigning
 import dev.dimension.flare.data.network.xiaohongshu.model.XhsFeedRequest
@@ -31,9 +32,11 @@ import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiTimelineV2
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import kotlin.time.Clock
 
 internal class XiaohongshuDataSource(
     override val accountKey: MicroBlogKey,
@@ -59,6 +62,25 @@ internal class XiaohongshuDataSource(
                 accountRepository
                     .credentialFlow<UiAccount.Xiaohongshu.Credential>(accountKey)
                     .map { it.cookies },
+            onCookiesUpdated = ::updateCredentialCookies,
+        )
+    }
+
+    private suspend fun updateCredentialCookies(update: ResponseCookieUpdate) {
+        val credential = accountRepository.credentialFlow<UiAccount.Xiaohongshu.Credential>(accountKey).first()
+        val nextCookies =
+            (credential.cookies - update.removed + update.updated)
+                .filterValues { it.isNotBlank() }
+        if (nextCookies == credential.cookies) {
+            return
+        }
+        accountRepository.updateCredential(
+            accountKey = accountKey,
+            credential =
+                credential.copy(
+                    cookies = nextCookies,
+                    savedAt = Clock.System.now().toEpochMilliseconds(),
+                ),
         )
     }
 

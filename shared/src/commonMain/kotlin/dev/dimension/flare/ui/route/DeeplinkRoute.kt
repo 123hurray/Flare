@@ -43,6 +43,7 @@ public sealed class DeeplinkRoute {
         public data class VVOComment(
             val commentKey: MicroBlogKey,
             val accountType: AccountType,
+            val originalAuthorKey: MicroBlogKey? = null,
         ) : Status()
 
         @Serializable

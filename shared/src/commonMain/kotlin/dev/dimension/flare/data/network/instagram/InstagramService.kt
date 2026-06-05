@@ -1,6 +1,8 @@
 package dev.dimension.flare.data.network.instagram
 
 import dev.dimension.flare.common.JSON
+import dev.dimension.flare.data.network.ResponseCookieUpdate
+import dev.dimension.flare.data.network.extractSetCookieUpdate
 import dev.dimension.flare.data.network.ktorClient
 import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.model.MicroBlogKey
@@ -35,6 +37,7 @@ import kotlinx.serialization.json.put
 internal class InstagramService(
     private val accountKey: MicroBlogKey? = null,
     private val cookiesFlow: Flow<Map<String, String>>,
+    private val onCookiesUpdated: (suspend (ResponseCookieUpdate) -> Unit)? = null,
 ) {
     private val client =
         ktorClient {
@@ -236,6 +239,7 @@ internal class InstagramService(
             }
         val body = response.bodyAsText()
         logRawResponse(url = url, response = response, body = body)
+        persistResponseCookies(response)
         validate(response)
         return JSON.parseToJsonElement(body)
     }
@@ -269,8 +273,16 @@ internal class InstagramService(
             }
         val body = response.bodyAsText()
         logRawResponse(url = url, response = response, body = body)
+        persistResponseCookies(response)
         validate(response)
         return JSON.parseToJsonElement(body)
+    }
+
+    private suspend fun persistResponseCookies(response: HttpResponse) {
+        val update = response.extractSetCookieUpdate()
+        if (update.hasChanges) {
+            onCookiesUpdated?.invoke(update)
+        }
     }
 
     private fun io.ktor.client.request.HttpRequestBuilder.instagramHeaders(

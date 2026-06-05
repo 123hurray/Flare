@@ -58,7 +58,7 @@
     <string name="settings_appearance_title">Appearance</string>
     <string name="settings_appearance_subtitle">Customize the look and feel of Flare</string>
     <string name="settings_appearance_theme_group_title">Theme</string>
-    <string name="settings_appearance_theme_group_subtitle">Colors, font size and avatar shape</string>
+    <string name="settings_appearance_theme_group_subtitle">Colors, fonts and avatar shape</string>
     <string name="settings_appearance_layout_group_title">Layout</string>
     <string name="settings_appearance_layout_group_subtitle">Timeline, navigation bar and post layout</string>
     <string name="settings_appearance_display_group_title">Display</string>
@@ -268,6 +268,14 @@
     <string name="settings_appearance_theme_color_description">Change the theme color of the app</string>
     <string name="settings_appearance_theme_pure_color">High contrast Mode</string>
     <string name="settings_appearance_theme_pure_color_description">Increase contrast between background and text</string>
+    <string name="settings_appearance_font_weight">Font weight</string>
+    <string name="settings_appearance_font_weight_description">Adjust the thickness of app text</string>
+    <string name="settings_appearance_font_weight_extra_light">Extra light W200</string>
+    <string name="settings_appearance_font_weight_light">Light W300</string>
+    <string name="settings_appearance_font_weight_demi_light">Demi light W350</string>
+    <string name="settings_appearance_font_weight_normal">Normal W400</string>
+    <string name="settings_appearance_font_weight_medium">Medium W500</string>
+    <string name="settings_appearance_font_weight_semi_bold">Semi bold W600</string>
     <string name="settings_appearance_font_size_diff">Font size</string>
     <string name="settings_appearance_font_size_diff_description">Change the font size of the app</string>
     <string name="settings_appearance_font_size_diff_decrease">Decrease</string>
@@ -337,6 +345,8 @@
     <string name="local_filter_regex">Regular expression</string>
     <string name="local_filter_duplicate_comments">Filter duplicate comments</string>
     <string name="local_filter_duplicate_comments_description">When 3 comments share the same text, newly loaded duplicates are hidden.</string>
+    <string name="local_filter_ai_comments">Filter AI comments</string>
+    <string name="local_filter_ai_comments_description">Hide Weibo comments marked with a non-null ai_type field.</string>
     <string name="local_filter_for_timeline">Filter in timeline</string>
     <string name="local_filter_for_notification">Filter in notification</string>
     <string name="local_filter_for_search">Filter in search</string>

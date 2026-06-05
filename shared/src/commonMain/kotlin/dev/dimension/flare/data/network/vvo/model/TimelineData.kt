@@ -25,12 +25,14 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -604,6 +606,8 @@ internal data class Comment(
     val totalNumber: Long? = null,
     @SerialName("associate_status_id")
     val associateStatusID: String? = null,
+    @SerialName("ai_type")
+    val aiType: JsonElement? = null,
 ) {
     val commentList: List<Comment>?
         get() =
@@ -612,6 +616,30 @@ internal data class Comment(
             } else {
                 null
             }
+}
+
+internal fun Comment.isAiGenerated(): Boolean = aiType != null && aiType !is JsonNull
+
+internal fun Comment.withoutAiGeneratedChildren(): Comment {
+    val childComments = commentList ?: return this
+    val filteredChildren =
+        childComments
+            .filterNot { it.isAiGenerated() }
+            .map { it.withoutAiGeneratedChildren() }
+    val unchanged =
+        filteredChildren.size == childComments.size &&
+            filteredChildren.zip(childComments).all { (filtered, original) -> filtered == original }
+    if (unchanged) {
+        return this
+    }
+    return copy(
+        comments =
+            JsonArray(
+                filteredChildren.map {
+                    JSON.encodeToJsonElement(it)
+                },
+            ),
+    )
 }
 
 @Serializable

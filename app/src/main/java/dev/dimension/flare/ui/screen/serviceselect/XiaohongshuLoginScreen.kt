@@ -33,13 +33,13 @@ import kotlinx.coroutines.delay
 import moe.tlaster.precompose.molecule.producePresenter
 import kotlin.time.Duration.Companion.seconds
 
-private const val XHS_LOGIN_USER_AGENT =
+internal const val XHS_LOGIN_USER_AGENT =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) " +
         "Chrome/145.0.0.0 Safari/537.36"
 private const val XHS_LOGIN_VIEWPORT_WIDTH = 1440
 private const val XHS_LOGIN_VIEWPORT_HEIGHT = 900
 
-private val xhsLoginHeaders =
+internal val xhsLoginHeaders =
     mapOf(
         "User-Agent" to XHS_LOGIN_USER_AGENT,
         "Sec-CH-UA" to "\"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\", \"Not-A.Brand\";v=\"99\"",
@@ -47,7 +47,7 @@ private val xhsLoginHeaders =
         "Sec-CH-UA-Platform" to "\"macOS\"",
     )
 
-private val xhsDesktopNavigatorScript =
+internal val xhsDesktopNavigatorScript =
     """
     (() => {
       const userAgent = "$XHS_LOGIN_USER_AGENT";
@@ -184,13 +184,13 @@ private fun XiaohongshuLoginWebView(
                     .getInstance()
                     .getCookie("https://$xiaohongshuWebHost")
                     .orEmpty()
-            val cookies = cookieText.parseCookies().filterKeys { it in xhsCookieAllowList }
+            val cookies = cookieText.parseXhsCookies().filterKeys { it in xhsCookieAllowList }
             if (href.isAfterLoginNavigation() && cookies.hasAuthenticatedXhsCookie()) {
-                Log.i("XiaohongshuLogin", "cookies ready href=$href ${cookies.sanitizedCookieLog()}")
+                Log.i("XiaohongshuLogin", "cookies ready href=$href ${cookies.sanitizedXhsCookieLog()}")
                 onCookiesFound(cookies)
                 break
             } else {
-                Log.i("XiaohongshuLogin", "waiting href=$href ${cookies.sanitizedCookieLog()}")
+                Log.i("XiaohongshuLogin", "waiting href=$href ${cookies.sanitizedXhsCookieLog()}")
             }
             delay(2.seconds)
         }
@@ -238,7 +238,7 @@ private fun XiaohongshuLoginWebView(
     )
 }
 
-private val xhsCookieAllowList =
+internal val xhsCookieAllowList =
     setOf(
         "a1",
         "webId",
@@ -255,7 +255,7 @@ private val xhsCookieAllowList =
         "acw_tc",
     )
 
-private fun String.parseCookies(): Map<String, String> =
+internal fun String.parseXhsCookies(): Map<String, String> =
     split(";")
         .mapNotNull { part ->
             val index = part.indexOf("=")
@@ -278,7 +278,7 @@ private fun clearXhsCookies() {
     manager.flush()
 }
 
-private fun Map<String, String>.hasAuthenticatedXhsCookie(): Boolean =
+internal fun Map<String, String>.hasAuthenticatedXhsCookie(): Boolean =
     !get("web_session").isNullOrBlank() &&
         (
             !get("id_token").isNullOrBlank() ||
@@ -290,7 +290,7 @@ private fun String.isAfterLoginNavigation(): Boolean =
     startsWith("https://$xiaohongshuWebHost", ignoreCase = true) &&
         !contains("/login", ignoreCase = true)
 
-private fun Map<String, String>.sanitizedCookieLog(): String =
+internal fun Map<String, String>.sanitizedXhsCookieLog(): String =
     keys
         .sorted()
         .joinToString(prefix = "keys=[", postfix = "]") { name ->

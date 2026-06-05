@@ -37,6 +37,7 @@ internal sealed interface Route : NavKey {
         data class VVOComment(
             val commentKey: MicroBlogKey,
             override val accountType: AccountType,
+            val originalAuthorKey: MicroBlogKey? = null,
         ) : Status,
             WithAccountType
 
@@ -758,6 +759,7 @@ internal sealed interface Route : NavKey {
                     Status.VVOComment(
                         commentKey = deeplinkRoute.commentKey,
                         accountType = deeplinkRoute.accountType,
+                        originalAuthorKey = deeplinkRoute.originalAuthorKey,
                     )
                 }
 

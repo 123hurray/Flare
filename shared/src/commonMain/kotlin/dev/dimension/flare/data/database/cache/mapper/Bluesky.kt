@@ -97,6 +97,10 @@ private fun ConvoView.toDbMessageRoom(host: String) =
                 is ConvoViewLastMessageUnion.Unknown -> {
                     null
                 }
+
+                is ConvoViewLastMessageUnion.SystemMessageView -> {
+                    null
+                }
             },
     )
 
@@ -114,6 +118,7 @@ private fun ConvoViewLastMessageUnion.toDbMessageItem(roomKey: MicroBlogKey) =
     when (this) {
         is ConvoViewLastMessageUnion.MessageView -> toDbMessageItem(roomKey)
         is ConvoViewLastMessageUnion.DeletedMessageView -> toDbMessageItem(roomKey)
+        is ConvoViewLastMessageUnion.SystemMessageView -> null
         is ConvoViewLastMessageUnion.Unknown -> null
     }
 

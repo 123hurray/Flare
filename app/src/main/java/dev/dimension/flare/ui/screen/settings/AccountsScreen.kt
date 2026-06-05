@@ -190,7 +190,7 @@ internal fun AccountsScreen(
                             userState = data,
                             shapes = shape,
                             onClick = {
-                                state.setActiveAccount(it)
+                                state.setActiveAccount(account.accountKey)
                             },
                             onLongClick = {
                                 showMenu = true
@@ -203,9 +203,9 @@ internal fun AccountsScreen(
                                 ) {
                                     state.activeAccount.onSuccess {
                                         RadioButton(
-                                            selected = it.accountKey == user.key,
+                                            selected = it.accountKey == account.accountKey,
                                             onClick = {
-                                                state.setActiveAccount(user.key)
+                                                state.setActiveAccount(account.accountKey)
                                             },
                                         )
                                     }

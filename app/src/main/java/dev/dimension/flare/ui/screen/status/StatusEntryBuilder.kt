@@ -50,6 +50,7 @@ internal fun EntryProviderScope<NavKey>.statusEntryBuilder(
         VVOCommentScreen(
             commentKey = args.commentKey,
             accountType = args.accountType,
+            originalAuthorKey = args.originalAuthorKey,
             onBack = onBack
         )
     }

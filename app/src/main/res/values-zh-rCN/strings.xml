@@ -50,7 +50,7 @@
     <string name="settings_appearance_title">外观</string>
     <string name="settings_appearance_subtitle">自定义 Flare 的外观和感觉</string>
     <string name="settings_appearance_theme_group_title">主题</string>
-    <string name="settings_appearance_theme_group_subtitle">颜色、字体大小和头像形状</string>
+    <string name="settings_appearance_theme_group_subtitle">颜色、字体和头像形状</string>
     <string name="settings_appearance_layout_group_title">布局</string>
     <string name="settings_appearance_layout_group_subtitle">时间线、导航栏和帖子布局</string>
     <string name="settings_appearance_display_group_title">显示</string>
@@ -243,6 +243,14 @@
     <string name="settings_appearance_theme_color_description">更改应用的主题颜色</string>
     <string name="settings_appearance_theme_pure_color">高对比度模式</string>
     <string name="settings_appearance_theme_pure_color_description">增加背景和文本之间的对比度</string>
+    <string name="settings_appearance_font_weight">字重</string>
+    <string name="settings_appearance_font_weight_description">调整应用中文字的粗细</string>
+    <string name="settings_appearance_font_weight_extra_light">极细 W200</string>
+    <string name="settings_appearance_font_weight_light">细 W300</string>
+    <string name="settings_appearance_font_weight_demi_light">偏细 W350</string>
+    <string name="settings_appearance_font_weight_normal">常规 W400</string>
+    <string name="settings_appearance_font_weight_medium">中等 W500</string>
+    <string name="settings_appearance_font_weight_semi_bold">半粗 W600</string>
     <string name="settings_appearance_font_size_diff">字体大小</string>
     <string name="settings_appearance_font_size_diff_description">更改应用程序的字体大小</string>
     <string name="settings_appearance_font_size_diff_decrease">减少</string>
@@ -302,6 +310,8 @@
     <string name="local_filter_regex">正则表达式</string>
     <string name="local_filter_duplicate_comments">过滤重复评论</string>
     <string name="local_filter_duplicate_comments_description">当 3 条评论内容相同时，后续加载的重复评论会被隐藏。</string>
+    <string name="local_filter_ai_comments">过滤 AI 评论</string>
+    <string name="local_filter_ai_comments_description">隐藏微博评论结构中 ai_type 不为空的评论。</string>
     <string name="local_filter_for_timeline">在时间轴中过滤</string>
     <string name="local_filter_for_notification">在通知中过滤</string>
     <string name="local_filter_for_search">在搜索中过滤</string>

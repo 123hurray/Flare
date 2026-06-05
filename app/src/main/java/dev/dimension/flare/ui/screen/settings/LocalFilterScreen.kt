@@ -81,7 +81,7 @@ internal fun LocalFilterScreen(
                     onClick = {
                         state.setFilterDuplicateComments(!state.filterDuplicateComments)
                     },
-                    shapes = ListItemDefaults.segmentedShapes2(0, 1),
+                    shapes = ListItemDefaults.segmentedShapes2(0, 2),
                     content = {
                         Text(text = stringResource(id = R.string.local_filter_duplicate_comments))
                     },
@@ -92,6 +92,26 @@ internal fun LocalFilterScreen(
                         Switch(
                             checked = state.filterDuplicateComments,
                             onCheckedChange = state::setFilterDuplicateComments,
+                        )
+                    },
+                )
+            }
+            item {
+                SegmentedListItem(
+                    onClick = {
+                        state.setFilterAiComments(!state.filterAiComments)
+                    },
+                    shapes = ListItemDefaults.segmentedShapes2(1, 2),
+                    content = {
+                        Text(text = stringResource(id = R.string.local_filter_ai_comments))
+                    },
+                    supportingContent = {
+                        Text(text = stringResource(id = R.string.local_filter_ai_comments_description))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = state.filterAiComments,
+                            onCheckedChange = state::setFilterAiComments,
                         )
                     },
                 )

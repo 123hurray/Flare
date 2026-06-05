@@ -21,6 +21,7 @@ import dev.dimension.flare.data.datasource.microblog.paging.CacheableRemoteLoade
 import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
 import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
+import dev.dimension.flare.data.network.ResponseCookieUpdate
 import dev.dimension.flare.data.network.instagram.InstagramService
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.AccountType
@@ -33,6 +34,7 @@ import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.render.UiDateTime
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -55,6 +57,25 @@ internal class InstagramDataSource(
                 accountRepository
                     .credentialFlow<UiAccount.Instagram.Credential>(accountKey)
                     .map { it.cookies },
+            onCookiesUpdated = ::updateCredentialCookies,
+        )
+    }
+
+    private suspend fun updateCredentialCookies(update: ResponseCookieUpdate) {
+        val credential = accountRepository.credentialFlow<UiAccount.Instagram.Credential>(accountKey).first()
+        val nextCookies =
+            (credential.cookies - update.removed + update.updated)
+                .filterValues { it.isNotBlank() }
+        if (nextCookies == credential.cookies) {
+            return
+        }
+        accountRepository.updateCredential(
+            accountKey = accountKey,
+            credential =
+                credential.copy(
+                    cookies = nextCookies,
+                    savedAt = Clock.System.now().toEpochMilliseconds(),
+                ),
         )
     }
 

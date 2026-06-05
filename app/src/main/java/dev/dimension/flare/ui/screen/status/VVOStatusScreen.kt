@@ -171,6 +171,8 @@ internal fun VVOStatusScreen(
                         comment = state.comment,
                         repost = state.repost,
                         detailType = state.type,
+                        detailStatusKey = statusKey,
+                        detailAuthorKey = currentPost?.user?.key,
                         onDetailTypeChange = state::onTypeChanged,
                     )
                 }
@@ -246,6 +248,8 @@ private fun LazyStaggeredGridScope.reactionContent(
     comment: PagingState<UiTimelineV2>,
     repost: PagingState<UiTimelineV2>,
     detailType: DetailType,
+    detailStatusKey: MicroBlogKey,
+    detailAuthorKey: MicroBlogKey?,
     onDetailTypeChange: (DetailType) -> Unit,
 ) {
     item(
@@ -276,7 +280,12 @@ private fun LazyStaggeredGridScope.reactionContent(
     }
     when (detailType) {
         DetailType.Comment -> {
-            status(comment, commentStyle = true)
+            status(
+                comment,
+                detailStatusKey = detailStatusKey,
+                detailAuthorKey = detailAuthorKey,
+                commentStyle = true,
+            )
         }
 
         DetailType.Repost -> {

@@ -175,6 +175,8 @@ import org.koin.compose.koinInject
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
 
+private const val MediaOverlayPostMaxLines = 2
+
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalPermissionsApi::class,
@@ -745,7 +747,7 @@ internal fun StatusMediaScreen(
                                                                 ).clickable {
                                                                     toStatusDetail()
                                                         },
-                                                        maxLines = 4,
+                                                        maxLines = MediaOverlayPostMaxLines,
                                                         showExpandButton = false,
                                                         isDetail = true,
                                                     )
@@ -791,8 +793,8 @@ internal fun StatusMediaScreen(
                                                             WindowInsets.systemBars.only(
                                                                 WindowInsetsSides.End + WindowInsetsSides.Vertical,
                                                             ),
-                                                        ),
-                                                maxLines = Int.MAX_VALUE,
+                                                ),
+                                                maxLines = MediaOverlayPostMaxLines,
                                                 showExpandButton = false,
                                                 isQuote = false,
                                                 isDetail = true,

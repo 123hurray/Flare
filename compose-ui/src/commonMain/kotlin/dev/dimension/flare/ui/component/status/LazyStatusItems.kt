@@ -47,11 +47,22 @@ import kotlin.native.HiddenFromObjC
 public fun LazyStaggeredGridScope.status(
     pagingState: PagingState<UiTimelineV2>,
     detailStatusKey: MicroBlogKey? = null,
+    detailAuthorKey: MicroBlogKey? = null,
+    layerOwnerKey: MicroBlogKey? = null,
     commentStyle: Boolean = false,
     maxLines: Int? = null,
 ): Unit =
     with(pagingState) {
         onSuccess {
+            val resolvedDetailAuthorKey =
+                detailAuthorKey ?: detailStatusKey?.let { key ->
+                    (0 until itemCount)
+                        .asSequence()
+                        .mapNotNull { peek(it) as? UiTimelineV2.Post }
+                        .firstOrNull { it.statusKey == key }
+                        ?.user
+                        ?.key
+                }
             items(
                 itemCount,
                 key =
@@ -80,6 +91,8 @@ public fun LazyStaggeredGridScope.status(
                         StatusItem(
                             item,
                             detailStatusKey = detailStatusKey,
+                            detailAuthorKey = resolvedDetailAuthorKey,
+                            layerOwnerKey = layerOwnerKey,
                             commentStyle = commentStyle && item is UiTimelineV2.Post && item.statusKey != detailStatusKey,
                             maxLines = maxLines,
 //                        modifier =
@@ -240,6 +253,8 @@ public fun StatusItem(
     item: UiTimelineV2?,
     modifier: Modifier = Modifier,
     detailStatusKey: MicroBlogKey? = null,
+    detailAuthorKey: MicroBlogKey? = null,
+    layerOwnerKey: MicroBlogKey? = null,
     commentStyle: Boolean = false,
     maxLines: Int? = null,
 ) {
@@ -257,6 +272,8 @@ public fun StatusItem(
         UiTimelineComponent(
             item = item,
             detailStatusKey = detailStatusKey,
+            detailAuthorKey = detailAuthorKey,
+            layerOwnerKey = layerOwnerKey,
             commentStyle = commentStyle,
             maxLines = maxLines,
             modifier = modifier,

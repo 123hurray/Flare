@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import dev.dimension.flare.common.combineLatestFlowLists
 import dev.dimension.flare.data.datasource.microblog.AuthenticatedMicroblogDataSource
 import dev.dimension.flare.data.datasource.microblog.datasource.UserDataSource
+import dev.dimension.flare.data.datasource.vvo.VVODataSource
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.data.repository.accountServiceFlow
 import dev.dimension.flare.model.AccountType
@@ -40,7 +41,14 @@ public class AccountsPresenter :
                         AccountType.Specific(account.accountKey),
                         accountRepository,
                     ).flatMapLatest { service ->
-                        if (service is UserDataSource && service is AuthenticatedMicroblogDataSource) {
+                        if (service is VVODataSource) {
+                            service.authenticatedUser().toUi().map { user ->
+                                AccountsState.AccountItem(
+                                    account = account,
+                                    profile = user,
+                                )
+                            }
+                        } else if (service is UserDataSource && service is AuthenticatedMicroblogDataSource) {
                             service.userHandler.userById(account.accountKey.id).toUi().map { user ->
                                 AccountsState.AccountItem(
                                     account = account,

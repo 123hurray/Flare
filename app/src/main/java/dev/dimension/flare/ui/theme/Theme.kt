@@ -20,11 +20,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import com.materialkolor.rememberDynamicColorScheme
+import dev.dimension.flare.data.model.AppFontWeight
 import dev.dimension.flare.data.model.LocalAppearanceSettings
 import dev.dimension.flare.data.model.Theme
 
@@ -84,6 +86,7 @@ fun FlareTheme(
     val context = LocalContext.current
     val fontSizeDiff = LocalAppearanceSettings.current.fontSizeDiff
     val lineHeightDiff = LocalAppearanceSettings.current.lineHeightDiff
+    val fontWeight = LocalAppearanceSettings.current.fontWeight
     val seed = Color(LocalAppearanceSettings.current.colorSeed)
     val pureColorMode = LocalAppearanceSettings.current.pureColorMode
     val colorScheme =
@@ -157,8 +160,8 @@ fun FlareTheme(
     MaterialExpressiveTheme(
         colorScheme = colorScheme,
         typography =
-            remember(fontSizeDiff, lineHeightDiff) {
-                typography(fontSizeDiff, lineHeightDiff)
+            remember(fontSizeDiff, lineHeightDiff, fontWeight) {
+                typography(fontSizeDiff, lineHeightDiff, fontWeight.toComposeFontWeight())
             },
         content = {
             CompositionLocalProvider(
@@ -206,6 +209,7 @@ fun ColorScheme.isLight() = LocalIsLightTheme.current
 private fun typography(
     fontDiff: Float,
     lineHeightDiff: Float,
+    fontWeight: FontWeight,
 ): Typography =
     Typography().let {
         if (fontDiff == 0f && lineHeightDiff == 0f) {
@@ -371,4 +375,49 @@ private fun typography(
                         ),
             )
         }
+    }.withFontWeight(fontWeight)
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private fun Typography.withFontWeight(fontWeight: FontWeight): Typography =
+    copy(
+        displayLarge = displayLarge.copy(fontWeight = fontWeight),
+        displayMedium = displayMedium.copy(fontWeight = fontWeight),
+        displaySmall = displaySmall.copy(fontWeight = fontWeight),
+        headlineLarge = headlineLarge.copy(fontWeight = fontWeight),
+        headlineMedium = headlineMedium.copy(fontWeight = fontWeight),
+        headlineSmall = headlineSmall.copy(fontWeight = fontWeight),
+        titleLarge = titleLarge.copy(fontWeight = fontWeight),
+        titleMedium = titleMedium.copy(fontWeight = fontWeight),
+        titleSmall = titleSmall.copy(fontWeight = fontWeight),
+        bodyLarge = bodyLarge.copy(fontWeight = fontWeight),
+        bodyMedium = bodyMedium.copy(fontWeight = fontWeight),
+        bodySmall = bodySmall.copy(fontWeight = fontWeight),
+        labelLarge = labelLarge.copy(fontWeight = fontWeight),
+        labelMedium = labelMedium.copy(fontWeight = fontWeight),
+        labelSmall = labelSmall.copy(fontWeight = fontWeight),
+        displayLargeEmphasized = displayLargeEmphasized.copy(fontWeight = fontWeight),
+        displayMediumEmphasized = displayMediumEmphasized.copy(fontWeight = fontWeight),
+        displaySmallEmphasized = displaySmallEmphasized.copy(fontWeight = fontWeight),
+        headlineLargeEmphasized = headlineLargeEmphasized.copy(fontWeight = fontWeight),
+        headlineMediumEmphasized = headlineMediumEmphasized.copy(fontWeight = fontWeight),
+        headlineSmallEmphasized = headlineSmallEmphasized.copy(fontWeight = fontWeight),
+        titleLargeEmphasized = titleLargeEmphasized.copy(fontWeight = fontWeight),
+        titleMediumEmphasized = titleMediumEmphasized.copy(fontWeight = fontWeight),
+        titleSmallEmphasized = titleSmallEmphasized.copy(fontWeight = fontWeight),
+        bodyLargeEmphasized = bodyLargeEmphasized.copy(fontWeight = fontWeight),
+        bodyMediumEmphasized = bodyMediumEmphasized.copy(fontWeight = fontWeight),
+        bodySmallEmphasized = bodySmallEmphasized.copy(fontWeight = fontWeight),
+        labelLargeEmphasized = labelLargeEmphasized.copy(fontWeight = fontWeight),
+        labelMediumEmphasized = labelMediumEmphasized.copy(fontWeight = fontWeight),
+        labelSmallEmphasized = labelSmallEmphasized.copy(fontWeight = fontWeight),
+    )
+
+private fun AppFontWeight.toComposeFontWeight(): FontWeight =
+    when (this) {
+        AppFontWeight.ExtraLight -> FontWeight.ExtraLight
+        AppFontWeight.Light -> FontWeight.Light
+        AppFontWeight.DemiLight -> FontWeight(350)
+        AppFontWeight.Normal -> FontWeight.Normal
+        AppFontWeight.Medium -> FontWeight.Medium
+        AppFontWeight.SemiBold -> FontWeight.SemiBold
     }

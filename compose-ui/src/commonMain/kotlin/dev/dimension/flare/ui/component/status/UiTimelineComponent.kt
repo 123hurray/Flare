@@ -227,6 +227,8 @@ internal fun UiTimelineComponent(
     item: UiTimelineV2,
     modifier: Modifier = Modifier,
     detailStatusKey: MicroBlogKey? = null,
+    detailAuthorKey: MicroBlogKey? = null,
+    layerOwnerKey: MicroBlogKey? = null,
     commentStyle: Boolean = false,
     maxLines: Int? = null,
 ) {
@@ -235,6 +237,8 @@ internal fun UiTimelineComponent(
             StatusContent(
                 data = item,
                 detailStatusKey = detailStatusKey,
+                detailAuthorKey = detailAuthorKey,
+                layerOwnerKey = layerOwnerKey,
                 commentStyle = commentStyle,
                 maxLines = maxLines,
                 modifier = modifier,
@@ -464,6 +468,8 @@ private fun UserListContent(
 private fun StatusContent(
     data: UiTimelineV2.Post,
     detailStatusKey: MicroBlogKey?,
+    detailAuthorKey: MicroBlogKey?,
+    layerOwnerKey: MicroBlogKey?,
     modifier: Modifier = Modifier,
     commentStyle: Boolean = false,
     maxLines: Int? = null,
@@ -559,6 +565,8 @@ private fun StatusContent(
             CommonStatusComponent(
                 item = data,
                 isDetail = data.statusKey == detailStatusKey,
+                detailAuthorKey = detailAuthorKey,
+                layerOwnerKey = layerOwnerKey,
                 commentStyle = commentStyle,
                 maxLines = maxLines,
                 modifier =
