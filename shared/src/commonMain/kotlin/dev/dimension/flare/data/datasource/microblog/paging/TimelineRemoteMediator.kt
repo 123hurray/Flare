@@ -90,10 +90,16 @@ internal class TimelineRemoteMediator(
         data: List<DbPagingTimelineWithStatus>,
     ) {
         if (request is PagingRequest.Refresh) {
-            data.groupBy { it.timeline.pagingKey }.keys.forEach { key ->
+            if (loader.replaceCacheOnRefresh) {
                 database
                     .pagingTimelineDao()
-                    .delete(pagingKey = key)
+                    .delete(pagingKey = loader.pagingKey)
+            } else {
+                data.groupBy { it.timeline.pagingKey }.keys.forEach { key ->
+                    database
+                        .pagingTimelineDao()
+                        .delete(pagingKey = key)
+                }
             }
         }
         if (request is PagingRequest.Prepend && loader.supportPrepend) {

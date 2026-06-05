@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material3.FilterChip
@@ -71,15 +72,29 @@ import moe.tlaster.precompose.molecule.producePresenter
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun DiscoverScreen(
+    initialAccountType: AccountType?,
     onUserClick: (AccountType, MicroBlogKey) -> Unit,
     onStatusUrlClick: (AccountType, MicroBlogKey) -> Unit,
 ) {
-    val state by producePresenter("discover") { discoverPresenter(onStatusUrlClick) }
+    val state by producePresenter("discover_$initialAccountType") {
+        discoverPresenter(
+            initialAccountType = initialAccountType,
+            onStatusUrlClick = onStatusUrlClick,
+        )
+    }
     val scope = rememberCoroutineScope()
     var dismissedCaptchaUrl by remember { mutableStateOf<String?>(null) }
     var dismissedXhsVerificationUrl by remember { mutableStateOf<String?>(null) }
     val lazyListState = rememberLazyStaggeredGridState()
+    val accountListState = rememberLazyListState()
     val accounts = rememberLatestAccounts(state.accounts)
+    LaunchedEffect(accounts, state.selectedAccount?.key) {
+        val selectedKey = state.selectedAccount?.key ?: return@LaunchedEffect
+        val selectedIndex = accounts?.indexOfFirst { it.key == selectedKey } ?: -1
+        if (selectedIndex >= 0) {
+            accountListState.animateScrollToItem(selectedIndex)
+        }
+    }
     state.searchState.vvoCaptchaException()?.let { exception ->
         if (dismissedCaptchaUrl != exception.url) {
             VvoCaptchaDialog(
@@ -155,6 +170,7 @@ internal fun DiscoverScreen(
                             span = StaggeredGridItemSpan.FullLine,
                         ) {
                             LazyRow(
+                                state = accountListState,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.padding(bottom = 8.dp),
                             ) {
@@ -381,10 +397,13 @@ internal fun DiscoverScreen(
 }
 
 @Composable
-private fun discoverPresenter(onStatusUrlClick: (AccountType, MicroBlogKey) -> Unit) =
+private fun discoverPresenter(
+    initialAccountType: AccountType?,
+    onStatusUrlClick: (AccountType, MicroBlogKey) -> Unit,
+) =
     run {
         val scope = rememberCoroutineScope()
-        val state = remember { DiscoverPresenter() }.invoke()
+        val state = remember(initialAccountType) { DiscoverPresenter(initialAccountType) }.invoke()
         val searchBarState = searchBarPresenter()
         val searchState =
             remember {

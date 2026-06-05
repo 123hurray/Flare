@@ -40,15 +40,27 @@ internal data object VvoPlatformSpec : PlatformSpec {
     override fun agreementUrl(host: String): String? = null
 
     override fun deepLinkPatterns(host: String): ImmutableList<DeepLinkPattern<out DeepLinkMapping.Type>> =
-        listOf(
-            "https://$vvoHost/status/{id}",
-            "https://$vvoHost/detail/{id}",
-            "https://$vvoHostLong/{handle}/{id}",
-            "https://www.$vvoHostLong/{handle}/{id}",
-            "https://$vvoHostShort/{handle}/{id}",
-        ).map {
-            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url(it))
-        }.toImmutableList()
+        (
+            listOf(
+                "https://$vvoHost/status/{id}",
+                "https://$vvoHost/detail/{id}",
+                "https://$vvoHostLong/{handle}/{id}",
+                "https://www.$vvoHostLong/{handle}/{id}",
+                "https://$vvoHostShort/{handle}/{id}",
+            ).map {
+                DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url(it))
+            } +
+                listOf(
+                    "https://$vvoHost/u/{handle}",
+                    "https://$vvoHost/profile/{handle}",
+                    "https://$vvoHostLong/u/{handle}",
+                    "https://www.$vvoHostLong/u/{handle}",
+                    "https://$vvoHostLong/{handle}",
+                    "https://www.$vvoHostLong/{handle}",
+                ).map {
+                    DeepLinkPattern(DeepLinkMapping.Type.Profile.serializer(), Url(it))
+                }
+        ).toImmutableList()
 
     override fun defaultTimelineTabs(accountKey: MicroBlogKey): ImmutableList<TimelineTabItem> =
         persistentListOf(

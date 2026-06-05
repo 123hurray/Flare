@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dev.dimension.flare.common.VideoDownloadHelper
 import dev.dimension.flare.data.network.xiaohongshu.XhsAndroidWebSigner
+import dev.dimension.flare.data.network.zhihu.ZhihuAndroidWebSearch
 import dev.dimension.flare.ui.AppContainer
 import dev.dimension.flare.ui.assist.AssistContentState
 import dev.dimension.flare.ui.component.platform.LocalWifiState
@@ -37,6 +38,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         XhsAndroidWebSigner.attach(this)
+        ZhihuAndroidWebSearch.attach(this)
         setContent {
             val wifiState by wifiStateFlow.collectAsState(false)
             CompositionLocalProvider(
@@ -71,6 +73,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         XhsAndroidWebSigner.detach(this)
+        ZhihuAndroidWebSearch.detach(this)
         super.onDestroy()
     }
 }

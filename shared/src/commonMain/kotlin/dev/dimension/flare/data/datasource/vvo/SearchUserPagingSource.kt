@@ -72,7 +72,7 @@ internal class SearchUserPagingSource(
 
         if (request is PagingRequest.Refresh && response.ok == 1L && users.isEmpty() && st != null) {
             service.getUid(normalizedQuery)?.let { uid ->
-                service.profileInfo(uid, st).data?.user?.let { user ->
+                runCatching { service.userProfile(uid, st) }.getOrNull()?.let { user ->
                     users = listOf(user)
                 }
             }

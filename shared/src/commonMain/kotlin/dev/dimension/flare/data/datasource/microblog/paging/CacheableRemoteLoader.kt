@@ -4,6 +4,8 @@ internal interface CacheableRemoteLoader<T : Any> : RemoteLoader<T> {
     val pagingKey: String
     val supportPrepend: Boolean
         get() = false
+    val replaceCacheOnRefresh: Boolean
+        get() = false
 }
 
 internal interface ReportableRemoteLoader {

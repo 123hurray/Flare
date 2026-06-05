@@ -440,6 +440,9 @@
     <string name="deeplink_account_selection_title">选择帐户</string>
     <string name="deeplink_account_selection_message">选择要打开此链接的帐户</string>
     <string name="deeplink_account_selection_browser">在浏览器中打开</string>
+    <string name="settings_external_links_title">链接关联</string>
+    <string name="settings_external_links_description">选择哪些平台链接可以从其他应用跳转到 Flare。</string>
+    <string name="settings_external_links_platform_description">在系统打开方式提示中显示 Flare。</string>
     <string name="block_user_title">屏蔽用户</string>
     <string name="block_user_description">您确定要屏蔽此用户吗？</string>
     <string name="unblock_user_title">取消屏蔽用户</string>
@@ -467,6 +470,12 @@
     <string name="tab_settings_group_name_placeholder">群组名称</string>
     <string name="tab_settings_group_default_name">新建群组</string>
     <string name="status_share_sheet_theme_title">主题</string>
+    <string name="status_share_sheet_append_qr">附加二维码</string>
+    <string name="status_share_sheet_append_qr_description">在分享图片底部添加二维码，扫码可打开原帖链接。</string>
+    <string name="status_share_sheet_qr_caption">扫码打开原帖</string>
+    <string name="status_share_sheet_qr_title">扫描二维码查看更多精彩内容</string>
+    <string name="status_share_sheet_qr_subtitle">快来%1$s一起看看吧</string>
+    <string name="status_share_sheet_qr_content_description">原帖二维码</string>
     <string name="channel_title">频道</string>
     <string name="channel_item_follow">关注</string>
     <string name="channel_item_unfollow">取消关注</string>

@@ -5,6 +5,7 @@ import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.model.UiAccount
 import dev.dimension.flare.ui.route.DeeplinkRoute
 import io.ktor.http.Url
+import io.ktor.http.encodeURLParameter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentMapOf
@@ -45,6 +46,76 @@ internal object DeepLinkMapping {
                 DeeplinkRoute.Status.Detail(
                     accountType = AccountType.Specific(accountKey),
                     statusKey = MicroBlogKey(id, accountKey.host),
+                )
+        }
+
+        @Serializable
+        data class XiaohongshuPost(
+            val handle: String? = null,
+            val id: String,
+            val xsec_token: String? = null,
+            val xsec_source: String? = null,
+            val type: String? = null,
+        ) : Type {
+            override fun deepLink(accountKey: MicroBlogKey): DeeplinkRoute =
+                DeeplinkRoute.Status.Detail(
+                    accountType = AccountType.Specific(accountKey),
+                    statusKey = MicroBlogKey(id.withXhsContext(), accountKey.host),
+                )
+
+            private fun String.withXhsContext(): String {
+                val params =
+                    listOfNotNull(
+                        xsec_token?.takeIf { it.isNotBlank() }?.let { "xsec_token=${it.encodeURLParameter()}" },
+                        xsec_source?.takeIf { it.isNotBlank() }?.let { "xsec_source=${it.encodeURLParameter()}" },
+                        type?.takeIf { it.isNotBlank() }?.let { "type=${it.encodeURLParameter()}" },
+                    )
+                return if (params.isEmpty()) this else "$this?${params.joinToString("&")}"
+            }
+        }
+
+        @Serializable
+        data class ZhihuAnswer(
+            val handle: String? = null,
+            val id: String,
+        ) : Type {
+            override fun deepLink(accountKey: MicroBlogKey): DeeplinkRoute =
+                DeeplinkRoute.Status.Detail(
+                    accountType = AccountType.Specific(accountKey),
+                    statusKey = MicroBlogKey("answer:$id", accountKey.host),
+                )
+        }
+
+        @Serializable
+        data class ZhihuArticle(
+            val id: String,
+        ) : Type {
+            override fun deepLink(accountKey: MicroBlogKey): DeeplinkRoute =
+                DeeplinkRoute.Status.Detail(
+                    accountType = AccountType.Specific(accountKey),
+                    statusKey = MicroBlogKey("article:$id", accountKey.host),
+                )
+        }
+
+        @Serializable
+        data class ZhihuPin(
+            val id: String,
+        ) : Type {
+            override fun deepLink(accountKey: MicroBlogKey): DeeplinkRoute =
+                DeeplinkRoute.Status.Detail(
+                    accountType = AccountType.Specific(accountKey),
+                    statusKey = MicroBlogKey("pin:$id", accountKey.host),
+                )
+        }
+
+        @Serializable
+        data class ZhihuQuestion(
+            val id: String,
+        ) : Type {
+            override fun deepLink(accountKey: MicroBlogKey): DeeplinkRoute =
+                DeeplinkRoute.Status.Detail(
+                    accountType = AccountType.Specific(accountKey),
+                    statusKey = MicroBlogKey("question:$id", accountKey.host),
                 )
         }
 

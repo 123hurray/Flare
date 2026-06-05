@@ -51,6 +51,9 @@ internal fun EntryProviderScope<NavKey>.settingsSelectEntryBuilder(
             toLocalHistory = {
                 navigate(Route.Settings.LocalHistory)
             },
+            toExternalLinks = {
+                navigate(Route.Settings.ExternalLinks)
+            },
             toDraftBox = {
                 navigate(Route.DraftBox)
             },
@@ -187,6 +190,16 @@ internal fun EntryProviderScope<NavKey>.settingsSelectEntryBuilder(
         )
     ) {
         LocalCacheSearchScreen(
+            onBack = onBack
+        )
+    }
+
+    entry<Route.Settings.ExternalLinks>(
+        metadata = ListDetailSceneStrategy.detailPane(
+            sceneKey = "Settings"
+        )
+    ) {
+        ExternalLinkSettingsScreen(
             onBack = onBack
         )
     }

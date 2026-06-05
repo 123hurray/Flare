@@ -27,7 +27,6 @@ import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.collectAsUiState
 import dev.dimension.flare.ui.model.onSuccess
-import dev.dimension.flare.ui.model.toUi
 import dev.dimension.flare.ui.presenter.PresenterBase
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
@@ -57,9 +56,7 @@ public class SearchPresenter(
                     .toImmutableList()
             }.map {
                 it.map { dataSource ->
-                    val authenticated = dataSource as UserDataSource
-                    val accountKey = dataSource.accountKey
-                    authenticated.userHandler.userById(accountKey.id).toUi().map { accountKey to it }
+                    authenticatedAccountProfileFlow(dataSource)
                 }
             }.combineLatestFlowLists()
             .stableAccountProfiles()

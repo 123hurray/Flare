@@ -16,6 +16,7 @@ import dev.dimension.flare.common.AnimatedPngDecoder
 import dev.dimension.flare.common.AnimatedWebPDecoder
 import dev.dimension.flare.data.network.ktorClient
 import dev.dimension.flare.data.network.xiaohongshu.XhsAndroidWebSigner
+import dev.dimension.flare.data.network.zhihu.ZhihuAndroidWebSearch
 import dev.dimension.flare.di.KoinHelper
 import dev.dimension.flare.di.aiModule
 import dev.dimension.flare.di.androidModule
@@ -36,6 +37,7 @@ class App :
             modules(KoinHelper.modules() + androidModule + aiModule)
         }
         XhsAndroidWebSigner.install(this)
+        ZhihuAndroidWebSearch.install(this)
     }
 
     @OptIn(ExperimentalCoilApi::class)

@@ -173,6 +173,15 @@ internal fun HomeScreen(afterInit: () -> Unit) {
                 }
             }
             val currentStackRoute = state.topLevelBackStack.takeSuccess()?.currentKey ?: currentRoute
+            var discoverInitialAccountType by remember { mutableStateOf<AccountType?>(null) }
+            var currentBrowsingAccountType by remember { mutableStateOf<AccountType?>(null) }
+            LaunchedEffect(currentRoute, currentStackRoute) {
+                (
+                    currentStackRoute.accountTypeOrNull()
+                        ?: currentRoute.accountTypeOrNull()
+                )?.takeIf { it is AccountType.Specific }
+                    ?.let { currentBrowsingAccountType = it }
+            }
             val edgeSwipeWidthPx = with(density) { 72.dp.toPx() }
             val edgeSwipeThresholdPx = with(density) { 56.dp.toPx() }
             val homeModifier =
@@ -300,13 +309,26 @@ internal fun HomeScreen(afterInit: () -> Unit) {
                     },
                     navigationSuiteItems = {
                         tabs.primary.forEach { tab ->
+                            val tabRoute = getDirection(tab)
+                            val isSelected =
+                                if (tab is DiscoverTabItem) {
+                                    currentRoute is Route.Discover
+                                } else {
+                                    currentRoute == tabRoute
+                                }
                             item(
-                                selected = currentRoute == getDirection(tab),
+                                selected = isSelected,
                                 onClick = {
-                                    if (currentRoute == getDirection(tab)) {
+                                    if (isSelected) {
                                         state.scrollToTopRegistry.scrollToTop()
                                     } else {
-                                        state.navigate(getDirection(tab))
+                                        if (tab is DiscoverTabItem) {
+                                            discoverInitialAccountType =
+                                                currentBrowsingAccountType
+                                                    ?: currentStackRoute.accountTypeOrNull()
+                                                    ?: currentRoute.accountTypeOrNull()
+                                        }
+                                        state.navigate(tabRoute)
                                     }
                                 },
                                 icon = {
@@ -431,13 +453,26 @@ internal fun HomeScreen(afterInit: () -> Unit) {
                                     },
                                     children = {
                                         item.tabs.forEach {
+                                            val childRoute = getDirection(it, it.account)
+                                            val childSelected =
+                                                if (it is DiscoverTabItem) {
+                                                    currentRoute is Route.Discover
+                                                } else {
+                                                    currentRoute == childRoute
+                                                }
                                             item(
-                                                selected = currentRoute == getDirection(it, it.account),
+                                                selected = childSelected,
                                                 onClick = {
-                                                    if (currentRoute == getDirection(it, it.account)) {
+                                                    if (childSelected) {
                                                         state.scrollToTopRegistry.scrollToTop()
                                                     } else {
-                                                        state.navigate(getDirection(it, it.account))
+                                                        if (it is DiscoverTabItem) {
+                                                            discoverInitialAccountType =
+                                                                currentBrowsingAccountType
+                                                                    ?: currentStackRoute.accountTypeOrNull()
+                                                                    ?: currentRoute.accountTypeOrNull()
+                                                        }
+                                                        state.navigate(childRoute)
                                                     }
                                                 },
                                                 icon = {
@@ -553,6 +588,12 @@ internal fun HomeScreen(afterInit: () -> Unit) {
                     },
                 ) {
                     CompositionLocalProvider(
+                        LocalDiscoverInitialAccountType provides discoverInitialAccountType,
+                        LocalCurrentBrowsingAccountUpdater provides { accountType ->
+                            if (accountType is AccountType.Specific) {
+                                currentBrowsingAccountType = accountType
+                            }
+                        },
                         LocalUriHandler provides
                             remember {
                                 object : UriHandler {
@@ -603,6 +644,8 @@ private fun getDirection(
         is Misskey.AntennasListTabItem -> Route.Misskey.AntennasList(accountType)
         is Misskey.ChannelListTabItem -> Route.Misskey.ChannelList(accountType)
     }
+
+private fun Route.accountTypeOrNull(): AccountType? = (this as? Route.WithAccountType)?.accountType
 
 @Composable
 private fun presenter(uriHandler: UriHandler) =

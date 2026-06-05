@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -34,6 +36,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
@@ -99,6 +102,7 @@ import dev.dimension.flare.ui.screen.media.saveByteArrayToDownloads
 import dev.dimension.flare.ui.theme.FlareTheme
 import dev.dimension.flare.ui.theme.screenHorizontalPadding
 import dev.dimension.flare.ui.theme.single
+import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 import kotlinx.coroutines.launch
 import moe.tlaster.precompose.molecule.producePresenter
 import java.io.ByteArrayOutputStream
@@ -117,6 +121,7 @@ private val ShareCardShapeCornerRadius = 16.dp
 private val ShareCardShadowCornerRadius = 12.dp
 private val ShareCardShadowRadius = 16.dp
 private val ShareCaptureWidth = ShareCardWidth + ShareCardPadding * 2
+private val ShareQrCodeSize = 90.dp
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -138,6 +143,9 @@ internal fun StatusShareSheet(
     val viewModelStoreOwner = LocalViewModelStoreOwner.current
     val scope = rememberCoroutineScope()
     var previewTheme by remember { mutableStateOf(SharePreviewTheme.Light) }
+    val qrShareUrl = remember(shareUrl, statusKey) { shareUrl.toQrPageUrl(statusKey) }
+    val canAppendQrCode = qrShareUrl.startsWith("http://") || qrShareUrl.startsWith("https://")
+    var appendQrCode by remember { mutableStateOf(false) }
     val state by producePresenter("status_share_sheet_${statusKey}_$shareUrl") {
         val cached = StatusMediaRouteCache.get(statusKey, accountType)
         if (cached?.platformType == PlatformType.Xiaohongshu) {
@@ -163,6 +171,7 @@ internal fun StatusShareSheet(
             statusKey = statusKey,
             status = status,
             previewTheme = previewTheme,
+            qrUrl = qrShareUrl.takeIf { appendQrCode && canAppendQrCode },
         )
 
         Row(
@@ -207,6 +216,7 @@ internal fun StatusShareSheet(
                                         StatusShareCard(
                                             statusKey = statusKey,
                                             status = status,
+                                            qrUrl = qrShareUrl.takeIf { appendQrCode && canAppendQrCode },
                                         )
                                     }
                                 }
@@ -283,6 +293,7 @@ internal fun StatusShareSheet(
                                         StatusShareCard(
                                             statusKey = statusKey,
                                             status = status,
+                                            qrUrl = qrShareUrl.takeIf { appendQrCode && canAppendQrCode },
                                         )
                                     }
                                 }
@@ -332,6 +343,29 @@ internal fun StatusShareSheet(
             }
         }
         SegmentedListItem(
+            onClick = {
+                if (canAppendQrCode) {
+                    appendQrCode = !appendQrCode
+                }
+            },
+            shapes = ListItemDefaults.single(),
+            content = {
+                Text(text = stringResource(id = R.string.status_share_sheet_append_qr))
+            },
+            supportingContent = {
+                Text(text = stringResource(id = R.string.status_share_sheet_append_qr_description))
+            },
+            trailingContent = {
+                Switch(
+                    checked = appendQrCode,
+                    enabled = canAppendQrCode,
+                    onCheckedChange = {
+                        appendQrCode = it
+                    },
+                )
+            },
+        )
+        SegmentedListItem(
             onClick = {},
             shapes = ListItemDefaults.single(),
             content = {
@@ -377,6 +411,7 @@ private fun StatusSharePreview(
     statusKey: MicroBlogKey,
     status: UiTimelineV2?,
     previewTheme: SharePreviewTheme,
+    qrUrl: String?,
     modifier: Modifier = Modifier,
 ) {
     FlareTheme(
@@ -390,6 +425,7 @@ private fun StatusSharePreview(
             StatusShareCard(
                 statusKey = statusKey,
                 status = status,
+                qrUrl = qrUrl,
                 blockInteractions = true,
             )
         }
@@ -400,12 +436,15 @@ private fun StatusSharePreview(
 private fun StatusShareCard(
     statusKey: MicroBlogKey,
     status: UiTimelineV2?,
+    qrUrl: String? = null,
     modifier: Modifier = Modifier,
     blockInteractions: Boolean = false,
 ) {
     val appearanceSettings = LocalAppearanceSettings.current
-    Box(
+    val qrPlatformName = (status as? UiTimelineV2.Post)?.platformType?.shareQrPlatformName()
+    Column(
         modifier = modifier.background(MaterialTheme.colorScheme.background),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Surface(
             modifier =
@@ -418,38 +457,118 @@ private fun StatusShareCard(
                     ),
             shape = RoundedCornerShape(ShareCardShapeCornerRadius),
         ) {
-            Box {
-                CompositionLocalProvider(
-                    LocalComponentAppearance provides
-                        LocalComponentAppearance.current.copy(
-                            showTranslateButton = false,
-                            videoAutoplay = ComponentAppearance.VideoAutoplay.NEVER,
-                            expandMediaSize =
-                                LocalComponentAppearance.current.expandMediaSize ||
-                                    appearanceSettings.shareImageExpandMediaSize,
-                        ),
-                ) {
-                    StatusItem(
-                        item = status,
-                        detailStatusKey = statusKey,
-                    )
+            Column {
+                Box {
+                    CompositionLocalProvider(
+                        LocalComponentAppearance provides
+                            LocalComponentAppearance.current.copy(
+                                showTranslateButton = false,
+                                videoAutoplay = ComponentAppearance.VideoAutoplay.NEVER,
+                                expandMediaSize =
+                                    LocalComponentAppearance.current.expandMediaSize ||
+                                        appearanceSettings.shareImageExpandMediaSize,
+                            ),
+                    ) {
+                        StatusItem(
+                            item = status,
+                            detailStatusKey = statusKey,
+                        )
+                    }
+                    if (blockInteractions) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .matchParentSize()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = {},
+                                    ),
+                        )
+                    }
                 }
-                if (blockInteractions) {
-                    Box(
+                qrUrl?.let {
+                    Row(
                         modifier =
                             Modifier
-                                .matchParentSize()
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = {},
-                                ),
-                    )
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+                                .padding(horizontal = 24.dp, vertical = 18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = stringResource(id = R.string.status_share_sheet_qr_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text =
+                                    stringResource(
+                                        id = R.string.status_share_sheet_qr_subtitle,
+                                        qrPlatformName ?: stringResource(id = R.string.app_name),
+                                    ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = "-",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Surface(
+                            color = Color.White,
+                            contentColor = Color.Black,
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Image(
+                                painter = rememberQrCodePainter(it),
+                                contentDescription = stringResource(id = R.string.status_share_sheet_qr_content_description),
+                                modifier =
+                                    Modifier
+                                        .padding(6.dp)
+                                        .size(ShareQrCodeSize),
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+private fun String.toQrPageUrl(statusKey: MicroBlogKey): String {
+    if (!startsWith("http://") && !startsWith("https://")) return this
+    if (!statusKey.host.contains("xiaohongshu", ignoreCase = true)) return this
+    val noteId = statusKey.id.substringBefore('?').takeIf { it.isNotBlank() } ?: return this
+    val query = statusKey.id.substringAfter('?', missingDelimiterValue = "").takeIf { it.isNotBlank() }
+    return buildString {
+        append("https://www.xiaohongshu.com/discovery/item/")
+        append(noteId)
+        query?.let {
+            append('?')
+            append(it)
+        }
+    }
+}
+
+@Composable
+private fun PlatformType.shareQrPlatformName(): String =
+    when (this) {
+        PlatformType.Xiaohongshu -> "小红书"
+        PlatformType.VVo -> "微博"
+        PlatformType.xQt -> "X"
+        PlatformType.Zhihu -> "知乎"
+        PlatformType.Instagram -> "Instagram"
+        PlatformType.Jike -> "即刻"
+        PlatformType.Dongqiudi -> "懂球帝"
+        else -> stringResource(id = R.string.app_name)
+    }
 
 private fun shareText(
     context: Context,

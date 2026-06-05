@@ -89,6 +89,7 @@ internal fun SettingsScreen(
     toColorSpace: () -> Unit,
     toTabCustomization: () -> Unit,
     toLocalFilter: () -> Unit,
+    toExternalLinks: () -> Unit,
     toLocalHistory: () -> Unit,
     toDraftBox: () -> Unit,
     toAiConfig: () -> Unit,
@@ -274,7 +275,7 @@ internal fun SettingsScreen(
                     onClick = {
                         toStorage.invoke()
                     },
-                    shapes = ListItemDefaults.last(),
+                    shapes = ListItemDefaults.item(),
                     content = {
                         Text(text = stringResource(id = R.string.settings_storage_title))
                     },
@@ -287,6 +288,25 @@ internal fun SettingsScreen(
                     },
                     supportingContent = {
                         Text(text = stringResource(id = R.string.settings_storage_subtitle))
+                    },
+                )
+                SegmentedListItem(
+                    onClick = {
+                        toExternalLinks.invoke()
+                    },
+                    shapes = ListItemDefaults.last(),
+                    content = {
+                        Text(text = stringResource(id = R.string.settings_external_links_title))
+                    },
+                    leadingContent = {
+                        ThemedIcon(
+                            imageVector = FontAwesomeIcons.Solid.CircleInfo,
+                            contentDescription = stringResource(id = R.string.settings_external_links_title),
+                            color = ThemeIconData.Color.SapphireBlue,
+                        )
+                    },
+                    supportingContent = {
+                        Text(text = stringResource(id = R.string.settings_external_links_description))
                     },
                 )
             }

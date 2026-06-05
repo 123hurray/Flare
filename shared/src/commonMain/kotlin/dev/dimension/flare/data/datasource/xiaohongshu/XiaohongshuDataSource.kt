@@ -139,7 +139,9 @@ internal class XiaohongshuDataSource(
                 pageSize: Int,
                 request: PagingRequest,
             ): PagingResult<UiTimelineV2> {
-                statusKey.id.xhsCommentTarget()?.let { target ->
+                val statusContext = statusKey.id.xhsNoteStatusContext()
+                val linkContext = statusContext.toNoteContext()?.also { XhsNoteContextCache.put(it) }
+                statusContext.noteId.xhsCommentTarget()?.let { target ->
                     return loadCommentContext(
                         noteId = target.noteId,
                         rootCommentId = target.commentId,
@@ -150,13 +152,13 @@ internal class XiaohongshuDataSource(
                 if (request is PagingRequest.Prepend) {
                     return PagingResult(endOfPaginationReached = true)
                 }
-                val cached = XhsNoteContextCache.get(statusKey.id)
+                val commentContext = linkContext ?: XhsNoteContextCache.get(statusContext.noteId)
                 if (request is PagingRequest.Append) {
                     val comments =
-                        cached?.let {
+                        commentContext?.let {
                             runCatching {
                                 service.comments(
-                                    noteId = statusKey.id,
+                                    noteId = statusContext.noteId,
                                     xsecToken = it.xsecToken,
                                     cursor = request.nextKey,
                                 )
@@ -168,17 +170,16 @@ internal class XiaohongshuDataSource(
                         comments
                             ?.comments
                             .orEmpty()
-                            .map { it.toUiTimeline(accountKey, statusKey.id) },
+                            .map { it.toUiTimeline(accountKey, statusContext.noteId) },
                         nextKey = comments?.cursor,
                     )
                 }
                 val post = loadPost(statusKey)
-                val commentContext = XhsNoteContextCache.get(statusKey.id) ?: cached
                 val comments =
                     commentContext?.let {
                         runCatching {
                             service.comments(
-                                noteId = statusKey.id,
+                                noteId = statusContext.noteId,
                                 xsecToken = it.xsecToken,
                             )
                         }.getOrNull()
@@ -187,7 +188,7 @@ internal class XiaohongshuDataSource(
                     comments
                         ?.comments
                         .orEmpty()
-                        .map { it.toUiTimeline(accountKey, statusKey.id) }
+                        .map { it.toUiTimeline(accountKey, statusContext.noteId) }
                 return PagingResult(
                     endOfPaginationReached = comments?.hasMore != true || comments.cursor.isNullOrBlank(),
                     data = listOfNotNull(post) + renderedComments,
@@ -260,14 +261,16 @@ internal class XiaohongshuDataSource(
     }
 
     private suspend fun loadPost(statusKey: MicroBlogKey): UiTimelineV2.Post? {
-        val cached = XhsNoteContextCache.get(statusKey.id)
-        return if (cached != null && XhsSigning.IS_MAIN_API_SIGNING_VERIFIED) {
+        val statusContext = statusKey.id.xhsNoteStatusContext()
+        val linkContext = statusContext.toNoteContext()?.also { XhsNoteContextCache.put(it) }
+        val detailContext = linkContext ?: XhsNoteContextCache.get(statusContext.noteId)
+        return if (detailContext != null && XhsSigning.IS_MAIN_API_SIGNING_VERIFIED) {
             service
                 .feed(
                     XhsFeedRequest(
-                        sourceNoteId = statusKey.id,
-                        xsecSource = cached.xsecSource,
-                        xsecToken = cached.xsecToken,
+                        sourceNoteId = statusContext.noteId,
+                        xsecSource = detailContext.xsecSource,
+                        xsecToken = detailContext.xsecToken,
                     ),
                 ).data
                 ?.items
@@ -276,8 +279,8 @@ internal class XiaohongshuDataSource(
                 ?.toUiTimeline(accountKey)
         } else {
             XhsHtmlParser
-                .parseNote(statusKey.id, service.noteHtml(statusKey.id))
-                ?.toUiTimeline(accountKey, statusKey.id)
+                .parseNote(statusContext.noteId, service.noteHtml(statusContext.noteId))
+                ?.toUiTimeline(accountKey, statusContext.noteId)
         }
     }
 

@@ -6,9 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,9 +20,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import compose.icons.FontAwesomeIcons
-import compose.icons.fontawesomeicons.Solid
-import compose.icons.fontawesomeicons.solid.MagnifyingGlass
 import dev.dimension.flare.R
 import dev.dimension.flare.common.PagingState
 import dev.dimension.flare.data.model.BottomBarBehavior
@@ -35,7 +30,6 @@ import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.zhihuWebHost
 import dev.dimension.flare.ui.common.threeFingerSwipeHorizontal
 import dev.dimension.flare.ui.component.BackButton
-import dev.dimension.flare.ui.component.FAIcon
 import dev.dimension.flare.ui.component.FlareScaffold
 import dev.dimension.flare.ui.component.FlareTopAppBar
 import dev.dimension.flare.ui.component.RefreshContainer
@@ -89,22 +83,6 @@ internal fun StatusScreen(
                 },
                 navigationIcon = {
                     BackButton(onBack = onBack)
-                },
-                actions = {
-                    if (isZhihuStatus) {
-                        TextButton(onClick = {}) {
-                            Text("邀请回答")
-                        }
-                        TextButton(onClick = {}) {
-                            Text("写回答")
-                        }
-                        IconButton(onClick = {}) {
-                            FAIcon(
-                                imageVector = FontAwesomeIcons.Solid.MagnifyingGlass,
-                                contentDescription = "搜索",
-                            )
-                        }
-                    }
                 },
             )
         },

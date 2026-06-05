@@ -120,6 +120,7 @@ import moe.tlaster.precompose.molecule.producePresenter
 @Composable
 internal fun HomeTimelineScreen(
     accountType: AccountType,
+    onCurrentAccountChanged: (AccountType) -> Unit,
     toCompose: () -> Unit,
     toQuickMenu: () -> Unit,
     toLogin: () -> Unit,
@@ -302,6 +303,13 @@ internal fun HomeTimelineScreen(
                         scope.launch {
                             pagerState.scrollToPage(0)
                         }
+                    }
+                }
+                LaunchedEffect(accountType, selectedPage, tabState) {
+                    val selectedAccountType = tabState.getOrNull(selectedPage)?.account
+                    when {
+                        selectedAccountType is AccountType.Specific -> onCurrentAccountChanged(selectedAccountType)
+                        accountType is AccountType.Specific -> onCurrentAccountChanged(accountType)
                     }
                 }
 

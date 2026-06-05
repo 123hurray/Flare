@@ -233,6 +233,7 @@ private class InstagramHomeTimelineRemoteLoader(
             InstagramHomeTimelineType.Following -> "instagram_following_web_$accountKey"
             InstagramHomeTimelineType.Recommended -> "instagram_recommended_$accountKey"
         }
+    override val replaceCacheOnRefresh: Boolean = type == InstagramHomeTimelineType.Recommended
 
     override suspend fun load(
         pageSize: Int,

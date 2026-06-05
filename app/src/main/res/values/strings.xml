@@ -500,6 +500,9 @@
     <string name="deeplink_account_selection_title">Select account</string>
     <string name="deeplink_account_selection_message">Select an account to open this link</string>
     <string name="deeplink_account_selection_browser">Open in browser</string>
+    <string name="settings_external_links_title">Link associations</string>
+    <string name="settings_external_links_description">Choose which platform links can be opened by Flare from other apps.</string>
+    <string name="settings_external_links_platform_description">Show Flare in the system open-with prompt for this platform.</string>
 
     <string name="block_user_title">Block user</string>
     <string name="block_user_description">Are you sure you want to block this user?</string>
@@ -532,6 +535,12 @@
     <string name="tab_settings_group_name_placeholder">Group name</string>
     <string name="tab_settings_group_default_name">New Group</string>
     <string name="status_share_sheet_theme_title">Theme</string>
+    <string name="status_share_sheet_append_qr">Append QR code</string>
+    <string name="status_share_sheet_append_qr_description">Add a QR code to the bottom of the shared image so others can open the original link.</string>
+    <string name="status_share_sheet_qr_caption">Scan to open the original post</string>
+    <string name="status_share_sheet_qr_title">Scan the QR code for more</string>
+    <string name="status_share_sheet_qr_subtitle">Open it with %1$s</string>
+    <string name="status_share_sheet_qr_content_description">Original post QR code</string>
     <string name="channel_title">Channel</string>
     <string name="channel_item_follow">Follow</string>
     <string name="channel_item_unfollow">Unfollow</string>

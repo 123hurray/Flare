@@ -18,10 +18,13 @@ import dev.dimension.flare.model.PlatformSpec
 import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.PlatformTypeMetadata
 import dev.dimension.flare.model.jikeApiHost
+import dev.dimension.flare.model.jikeWebHost
 import dev.dimension.flare.ui.model.UiIcon
 import dev.dimension.flare.ui.model.UiInstanceMetadata
+import io.ktor.http.Url
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
 internal data object JikePlatformSpec : PlatformSpec {
     override val type = PlatformType.Jike
@@ -34,7 +37,12 @@ internal data object JikePlatformSpec : PlatformSpec {
 
     override fun agreementUrl(host: String): String? = null
 
-    override fun deepLinkPatterns(host: String): ImmutableList<DeepLinkPattern<out DeepLinkMapping.Type>> = persistentListOf()
+    override fun deepLinkPatterns(host: String): ImmutableList<DeepLinkPattern<out DeepLinkMapping.Type>> =
+        listOf(
+            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$jikeWebHost/u/{handle}/post/{id}")),
+            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$jikeWebHost/u/{handle}/repost/{id}")),
+            DeepLinkPattern(DeepLinkMapping.Type.Profile.serializer(), Url("https://$jikeWebHost/u/{handle}")),
+        ).toImmutableList()
 
     override fun defaultTimelineTabs(accountKey: MicroBlogKey): ImmutableList<TimelineTabItem> =
         persistentListOf(

@@ -66,7 +66,7 @@ internal class ZhihuService(
     ): ZhihuTimelinePage {
         val boundedLimit = limit.coerceIn(1, ZHIHU_SEARCH_LIMIT)
         val root =
-            requestJson(
+            requestSearchJson(
                 "https://www.zhihu.com/api/v4/search_v3?gk_version=gz-gaokao&t=general" +
                     "&q=${query.encodeURLParameter()}" +
                     "&correction=1&offset=$offset&limit=$boundedLimit&filter_fields=&lc_idx=$offset&show_all_topics=0&search_source=Normal",
@@ -96,7 +96,7 @@ internal class ZhihuService(
     ): ZhihuUserPage {
         val boundedLimit = limit.coerceIn(1, ZHIHU_SEARCH_LIMIT)
         val root =
-            requestJson(
+            requestSearchJson(
                 "https://www.zhihu.com/api/v4/search_v3?gk_version=gz-gaokao&t=people" +
                     "&q=${query.encodeURLParameter()}" +
                     "&correction=1&offset=$offset&limit=$boundedLimit&filter_fields=&lc_idx=$offset&show_all_topics=0&search_source=Normal",
@@ -147,16 +147,21 @@ internal class ZhihuService(
                     ZhihuContentType.Answer ->
                         requestJson("https://www.zhihu.com/api/v4/answers/${key.id}?include=author,content,voteup_count,comment_count,excerpt,question,created_time")
                     ZhihuContentType.Article ->
-                        requestFirstJson(
-                            "detail",
-                            statusId,
-                            listOf(
-                                "https://api.zhihu.com/v4/articles/${key.id}?include=author,content,voteup_count,comment_count,excerpt,created,updated",
-                                "https://www.zhihu.com/api/v4/articles/${key.id}?include=author,content,voteup_count,comment_count,excerpt,created,updated",
-                                "https://api.zhihu.com/v4/articles/${key.id}",
-                                "https://www.zhihu.com/api/v4/articles/${key.id}",
-                            ),
-                        )
+                        runCatching {
+                            requestFirstJson(
+                                "detail",
+                                statusId,
+                                listOf(
+                                    "https://api.zhihu.com/v4/articles/${key.id}?include=author,content,voteup_count,comment_count,excerpt,created,updated",
+                                    "https://www.zhihu.com/api/v4/articles/${key.id}?include=author,content,voteup_count,comment_count,excerpt,created,updated",
+                                    "https://api.zhihu.com/v4/articles/${key.id}",
+                                    "https://www.zhihu.com/api/v4/articles/${key.id}",
+                                ),
+                            )
+                        }.getOrElse {
+                            println("ZhihuService: article api detail unavailable id=${key.id} message=${it.message}")
+                            return@runCatching articleDetailFromWeb(key.id)
+                        }
                     ZhihuContentType.Pin ->
                         requestJson("https://www.zhihu.com/api/v4/pins/${key.id}")
                     ZhihuContentType.Question -> error("Question detail should be loaded from answers feed")
@@ -272,11 +277,17 @@ internal class ZhihuService(
                 platformType = PlatformType.Zhihu,
             )
         }
-        val body =
-            client
-            .get(url) {
+        val response =
+            client.get(url) {
                 zhihuHeaders(url, cookies)
-            }.bodyAsText()
+            }
+        val body = response.bodyAsText()
+        if (url.isZhihuSearchUrl()) {
+            println(
+                "ZhihuService: searchResponse status=${response.status.value} " +
+                    "url=$url body=${body.take(ZHIHU_DEBUG_BODY_LIMIT)}",
+            )
+        }
         if (url.contains("/comment_v5/")) {
             logRawCommentBody(
                 scope = "ZhihuService",
@@ -287,6 +298,33 @@ internal class ZhihuService(
         return JSON.decodeFromString(body)
     }
 
+    private suspend fun requestSearchJson(url: String): JsonObject {
+        val root = requestJson(url)
+        if (root.zhihuErrorCode() != "40362") {
+            return root
+        }
+        val cookies =
+            cookiesFlow
+                .first()
+                .filterValues { it.isNotBlank() }
+        val fallback =
+            runCatching {
+                ZhihuSearchRuntime.requestJson(
+                    ZhihuSearchWebRequest(
+                        url = url,
+                        cookies = cookies,
+                    ),
+                )
+            }.onFailure {
+                println("ZhihuService: searchWebFallback failed url=$url message=${it.message}")
+            }.getOrNull()
+        if (fallback.isNullOrBlank()) {
+            return root
+        }
+        println("ZhihuService: searchWebFallback url=$url body=${fallback.take(ZHIHU_DEBUG_BODY_LIMIT)}")
+        return JSON.decodeFromString(fallback)
+    }
+
     private suspend fun requestFirstJson(
         scope: String,
         id: String,
@@ -295,13 +333,51 @@ internal class ZhihuService(
         var lastError: Throwable? = null
         urls.forEach { url ->
             runCatching {
-                return requestJson(url)
+                val root = requestJson(url)
+                root.throwIfZhihuError(scope, id)
+                return root
             }.onFailure {
                 println("ZhihuService: $scope candidate failed id=$id url=$url message=${it.message}")
                 lastError = it
             }
         }
         throw lastError ?: IllegalStateException("No Zhihu $scope candidates for $id")
+    }
+
+    private suspend fun articleDetailFromWeb(articleId: String): ZhihuContent {
+        val html = requestHtml("https://zhuanlan.zhihu.com/p/$articleId")
+        val marker = """<script id="js-initialData" type="text/json">"""
+        val initialData =
+            html
+                .substringAfter(marker, missingDelimiterValue = "")
+                .substringBefore("</script>", missingDelimiterValue = "")
+                .takeIf { it.isNotBlank() }
+                ?: error("Zhihu article web initial data missing")
+        val root = JSON.decodeFromString<JsonObject>(initialData)
+        val article =
+            root["initialState"]
+                .objectOrNull()
+                ?.get("entities")
+                .objectOrNull()
+                ?.get("articles")
+                .objectOrNull()
+                ?.let { articles ->
+                    articles[articleId].objectOrNull()
+                        ?: articles.values.firstOrNull()?.objectOrNull()
+                }
+                ?: error("Zhihu article web entity missing")
+        return article.toWebArticleContent(articleId)
+    }
+
+    private suspend fun requestHtml(url: String): String {
+        val cookies = cookiesFlow.first()
+        return client
+            .get(url) {
+                header(HttpHeaders.UserAgent, ZHIHU_WEB_USER_AGENT)
+                header(HttpHeaders.Accept, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                header(HttpHeaders.Cookie, cookies.toCookieHeader())
+                header("Referer", "https://www.zhihu.com/")
+            }.bodyAsText()
     }
 
     private fun io.ktor.client.request.HttpRequestBuilder.zhihuHeaders(
@@ -328,6 +404,14 @@ internal class ZhihuService(
             }
             if (dC0.isNotBlank()) {
                 header("x-zse-96", ZhihuZse96.sign(apiPath = apiPath, dC0 = dC0, xZse93 = xZse93, xZst81 = xZst81))
+            }
+            if (url.isZhihuSearchUrl()) {
+                println(
+                    "ZhihuService: searchHeaders apiPath=$apiPath " +
+                        "hasDC0=${dC0.isNotBlank()} " +
+                        "hasZseCk=${!cookies["__zse_ck"].isNullOrBlank()} " +
+                        "hasXZst81=${!xZst81.isNullOrBlank()}",
+                )
             }
             header("Referer", "https://www.zhihu.com/")
             header("Origin", "https://www.zhihu.com")
@@ -366,6 +450,8 @@ internal class ZhihuService(
         }
     }
 }
+
+private const val ZHIHU_DEBUG_BODY_LIMIT = 3500
 
 private fun logRawCommentBody(
     scope: String,
@@ -524,6 +610,11 @@ internal data class ZhihuContentKey(
                 ?.groupValues
                 ?.getOrNull(1)
                 ?.let { return ZhihuContentKey(ZhihuContentType.Article, it) }
+            Regex("""/(?:v4/)?articles/(\d+)""")
+                .find(normalized)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let { return ZhihuContentKey(ZhihuContentType.Article, it) }
             Regex("""/question/\d+/answer/(\d+)""")
                 .find(normalized)
                 ?.groupValues
@@ -549,8 +640,8 @@ private fun JsonObject.toFeedContent(): ZhihuContent? {
 
     val extra = get("extra").objectOrNull()
     val feedContent = get("common_card").objectOrNull()?.get("feed_content").objectOrNull() ?: return null
-    val title = feedContent["title"].objectOrNull()?.string("panel_text").orEmpty()
-    val excerpt = feedContent["content"].objectOrNull()?.string("panel_text").orEmpty()
+    val title = feedContent["title"].objectOrNull()?.string("panel_text").orEmpty().stripZhihuHighlightHtml()
+    val excerpt = feedContent["content"].objectOrNull()?.string("panel_text").orEmpty().stripZhihuHighlightHtml()
     val sourceLine = feedContent["source_line"].objectOrNull()
     val elements = sourceLine?.get("elements").arrayOrEmpty()
     val authorName =
@@ -570,7 +661,13 @@ private fun JsonObject.toFeedContent(): ZhihuContent? {
             .objectOrNull()
             ?.string("intent_url")
             ?: feedContent["title"].objectOrNull()?.get("action").objectOrNull()?.string("intent_url")
-    val intentKey = intentUrl?.let { ZhihuContentKey.parseOrNull(it) }
+    val intentKey =
+        listOfNotNull(
+            intentUrl,
+            extra?.string("url"),
+            extra?.string("target_url"),
+            extra?.string("redirect_url"),
+        ).firstNotNullOfOrNull { ZhihuContentKey.parseOrNull(it) }
     val type = intentKey?.type ?: extra?.string("type")?.toZhihuContentType() ?: return null
     val id = intentKey?.id ?: extra?.string("id")?.normalizeZhihuContentId(type) ?: return null
     val questionId = intentUrl?.let { Regex("/question/(\\d+)").find(it)?.groupValues?.getOrNull(1) }
@@ -602,8 +699,9 @@ private fun JsonObject.toFeedContent(): ZhihuContent? {
 }
 
 private fun JsonObject.toTargetContent(): ZhihuContent? {
-    val type = string("type")?.toZhihuContentType() ?: return null
-    val id = string("id") ?: return null
+    val urlKey = zhihuContentKeyFromUrls()
+    val type = urlKey?.type ?: string("type")?.toZhihuContentType() ?: return null
+    val id = urlKey?.id ?: string("id")?.normalizeZhihuContentId(type) ?: return null
     val question = get("question").objectOrNull()
     val author = get("author").objectOrNull()
     val pinContent = if (type == ZhihuContentType.Pin) pinContentHtml() else null
@@ -614,15 +712,20 @@ private fun JsonObject.toTargetContent(): ZhihuContent? {
             when (type) {
                 ZhihuContentType.Pin -> string("title").orEmpty()
                 else -> question?.string("title") ?: string("title") ?: "知乎内容"
-            },
-        excerpt = pinContent ?: string("excerpt") ?: string("excerpt_new") ?: string("detail") ?: string("content") ?: "",
+            }.stripZhihuHighlightHtml(),
+        excerpt = (pinContent ?: string("excerpt") ?: string("excerpt_new") ?: string("detail") ?: string("content") ?: "").stripZhihuHighlightHtml(),
         contentHtml = pinContent,
         imageUrls = (thumbnailImageUrls() + pinImageUrls()).distinct(),
         authorName = author?.string("name") ?: "知乎用户",
         authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
         authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
         authorHeadline = author?.string("headline").orEmpty(),
-        questionId = question?.string("id") ?: if (type == ZhihuContentType.Question) id else null,
+        questionId =
+            when (type) {
+                ZhihuContentType.Question -> id
+                ZhihuContentType.Answer -> question?.string("id")
+                else -> null
+            },
         answerCount = question?.long("answer_count") ?: if (type == ZhihuContentType.Question) long("answer_count") ?: 0L else 0L,
         followerCount = question?.long("follower_count") ?: if (type == ZhihuContentType.Question) long("follower_count") ?: 0L else 0L,
         voteupCount = long("voteup_count") ?: long("vote_count") ?: 0L,
@@ -643,8 +746,8 @@ private fun JsonObject.toDetailContent(key: ZhihuContentKey): ZhihuContent {
             when (key.type) {
                 ZhihuContentType.Pin -> string("title").orEmpty()
                 else -> question?.string("title") ?: string("title") ?: "知乎内容"
-            },
-        excerpt = pinContent ?: string("excerpt") ?: string("detail") ?: "",
+            }.stripZhihuHighlightHtml(),
+        excerpt = (pinContent ?: string("excerpt") ?: string("detail") ?: "").stripZhihuHighlightHtml(),
         contentHtml = pinContent ?: string("content") ?: string("detail"),
         imageUrls = (thumbnailImageUrls() + pinImageUrls()).distinct(),
         authorName = author?.string("name") ?: "知乎用户",
@@ -661,6 +764,48 @@ private fun JsonObject.toDetailContent(key: ZhihuContentKey): ZhihuContent {
     )
 }
 
+private fun JsonObject.toWebArticleContent(fallbackId: String): ZhihuContent {
+    val id = string("id") ?: fallbackId
+    val author = get("author").objectOrNull()
+    return ZhihuContent(
+        id = id,
+        type = ZhihuContentType.Article,
+        title = (string("title") ?: "知乎文章").stripZhihuHighlightHtml(),
+        excerpt = (string("excerptTitle") ?: string("excerpt") ?: "").stripZhihuHighlightHtml(),
+        contentHtml = string("content") ?: string("excerpt"),
+        imageUrls =
+            listOfNotNull(
+                string("titleImage"),
+                string("imageUrl"),
+            ).filter { it.isNotBlank() } + thumbnailImageUrls(),
+        authorName = author?.string("name") ?: "知乎用户",
+        authorId = author?.string("url_token") ?: author?.string("id") ?: "zhihu",
+        authorAvatar = author?.string("avatar_url") ?: author?.string("avatarUrl") ?: "",
+        authorHeadline = author?.string("headline").orEmpty(),
+        questionId = null,
+        answerCount = 0L,
+        followerCount = 0L,
+        voteupCount = long("voteupCount") ?: long("voteup_count") ?: long("likedCount") ?: 0L,
+        commentCount = long("commentCount") ?: long("comment_count") ?: 0L,
+        createdTime = long("created") ?: long("created_time") ?: Clock.System.now().epochSeconds,
+        url = string("url") ?: "https://zhuanlan.zhihu.com/p/$id",
+    )
+}
+
+private fun JsonObject.zhihuContentKeyFromUrls(): ZhihuContentKey? =
+    listOfNotNull(
+        string("url"),
+        string("target_url"),
+        string("redirect_url"),
+        string("share_url"),
+        string("origin_url"),
+        string("canonical_url"),
+        string("url_token"),
+        get("action").objectOrNull()?.string("intent_url"),
+        get("action").objectOrNull()?.string("url"),
+        get("action").objectOrNull()?.string("target_url"),
+    ).firstNotNullOfOrNull { ZhihuContentKey.parseOrNull(it) }
+
 private fun JsonObject.toAnswerContent(questionId: String): ZhihuContent? {
     val id = string("id") ?: return null
     val author = get("author").objectOrNull()
@@ -668,8 +813,8 @@ private fun JsonObject.toAnswerContent(questionId: String): ZhihuContent? {
     return ZhihuContent(
         id = id,
         type = ZhihuContentType.Answer,
-        title = question?.string("title") ?: string("question") ?: "知乎回答",
-        excerpt = string("excerpt").orEmpty(),
+        title = (question?.string("title") ?: string("question") ?: "知乎回答").stripZhihuHighlightHtml(),
+        excerpt = string("excerpt").orEmpty().stripZhihuHighlightHtml(),
         contentHtml = string("content"),
         imageUrls = thumbnailImageUrls(),
         authorName = author?.string("name") ?: "知乎用户",
@@ -732,9 +877,9 @@ private fun JsonObject.toViewer(fallbackId: String): ZhihuViewer =
     ZhihuViewer(
         id = string("id") ?: string("url_token") ?: fallbackId,
         urlToken = string("url_token") ?: string("id") ?: fallbackId,
-        name = string("name").orEmpty(),
+        name = string("name").orEmpty().stripZhihuHighlightHtml(),
         avatar = string("avatar_url") ?: string("avatarUrl") ?: "",
-        headline = string("headline").orEmpty(),
+        headline = string("headline").orEmpty().stripZhihuHighlightHtml(),
         followerCount = long("follower_count") ?: 0L,
         followingCount = long("following_count") ?: 0L,
         statusesCount = (long("answer_count") ?: 0L) + (long("articles_count") ?: 0L),
@@ -880,6 +1025,10 @@ private fun JsonObject.throwIfZhihuError(
     val error = get("error").objectOrNull() ?: return
     error("Zhihu $scope error id=$id code=${error.string("code")} message=${error.string("message")}")
 }
+
+private fun JsonObject.zhihuErrorCode(): String? = get("error").objectOrNull()?.string("code")
+
+private fun String.stripZhihuHighlightHtml(): String = replace(Regex("</?em>", RegexOption.IGNORE_CASE), "")
 
 private fun String.toZhihuContentType(): ZhihuContentType? =
     when (lowercase()) {

@@ -30,7 +30,6 @@ import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.collectAsUiState
 import dev.dimension.flare.ui.model.onSuccess
-import dev.dimension.flare.ui.model.toUi
 import dev.dimension.flare.ui.presenter.PresenterBase
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
@@ -44,7 +43,9 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
-public class DiscoverPresenter :
+public class DiscoverPresenter(
+    private val initialAccountType: AccountType? = null,
+) :
     PresenterBase<DiscoverState>(),
     KoinComponent {
     private val accountRepository: AccountRepository by inject()
@@ -58,9 +59,7 @@ public class DiscoverPresenter :
                     .toImmutableList()
             }.map {
                 it.map { dataSource ->
-                    val authenticated = dataSource as UserDataSource
-                    val accountKey = dataSource.accountKey
-                    authenticated.userHandler.userById(accountKey.id).toUi().map { accountKey to it }
+                    authenticatedAccountProfileFlow(dataSource)
                 }
             }.combineLatestFlowLists()
             .stableAccountProfiles()
@@ -123,9 +122,11 @@ public class DiscoverPresenter :
             }.collectAsLazyPagingItems().toPagingState()
 
         accounts.onSuccess {
-            LaunchedEffect(it.size) {
+            LaunchedEffect(it, initialAccountType) {
                 if (selectedAccountFlow.value == null) {
-                    selectedAccountFlow.value = it.firstOrNull()
+                    selectedAccountFlow.value =
+                        it.preferredProfile(initialAccountType)
+                            ?: it.firstOrNull()
                 }
             }
         }
@@ -149,6 +150,12 @@ public class DiscoverPresenter :
             }
         }
     }
+}
+
+private fun ImmutableList<UiProfile>.preferredProfile(accountType: AccountType?): UiProfile? {
+    val accountKey = (accountType as? AccountType.Specific)?.accountKey ?: return null
+    return firstOrNull { it.key == accountKey }
+        ?: firstOrNull { it.key.host == accountKey.host }
 }
 
 @Immutable

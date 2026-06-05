@@ -4,6 +4,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.navigation3.runtime.EntryProviderScope
@@ -31,6 +32,7 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
     ) { args ->
         HomeTimelineScreen(
             accountType = args.accountType,
+            onCurrentAccountChanged = LocalCurrentBrowsingAccountUpdater.current,
             toCompose = {
                 navigate(Route.Compose.New)
             },
@@ -56,6 +58,7 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
     }
     entry<Route.Discover> { args ->
         DiscoverScreen(
+            initialAccountType = LocalDiscoverInitialAccountType.current,
             onUserClick = { accountType, userKey ->
                 navigate(Route.Profile.User(accountType, userKey))
             },
@@ -144,6 +147,16 @@ internal fun EntryProviderScope<NavKey>.homeEntryBuilder(
         }
     }
 }
+
+internal val LocalDiscoverInitialAccountType =
+    staticCompositionLocalOf<AccountType?> {
+        null
+    }
+
+internal val LocalCurrentBrowsingAccountUpdater =
+    staticCompositionLocalOf<(AccountType) -> Unit> {
+        {}
+    }
 
 private fun AccountType.reloginRoute(): Route =
     when (this) {

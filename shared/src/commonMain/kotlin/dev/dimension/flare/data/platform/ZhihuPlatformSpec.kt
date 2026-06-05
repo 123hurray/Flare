@@ -16,11 +16,13 @@ import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformSpec
 import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.PlatformTypeMetadata
+import dev.dimension.flare.model.zhihuWebHost
 import dev.dimension.flare.ui.model.UiIcon
 import dev.dimension.flare.ui.model.UiInstanceMetadata
 import io.ktor.http.Url
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
 internal data object ZhihuPlatformSpec : PlatformSpec {
     override val type = PlatformType.Zhihu
@@ -34,12 +36,22 @@ internal data object ZhihuPlatformSpec : PlatformSpec {
     override fun agreementUrl(host: String): String? = "https://www.zhihu.com/term/zhihu-terms"
 
     override fun deepLinkPatterns(host: String): ImmutableList<DeepLinkPattern<out DeepLinkMapping.Type>> =
-        persistentListOf(
-            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$host/question/{handle}/answer/{id}")),
-            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$host/question/{id}")),
-            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://zhuanlan.zhihu.com/p/{id}")),
-            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$host/pin/{id}")),
-        )
+        (
+            listOf(zhihuWebHost, "zhihu.com").flatMap { webHost ->
+                listOf(
+                    DeepLinkPattern(DeepLinkMapping.Type.ZhihuAnswer.serializer(), Url("https://$webHost/question/{handle}/answer/{id}")),
+                    DeepLinkPattern(DeepLinkMapping.Type.ZhihuAnswer.serializer(), Url("https://$webHost/answer/{id}")),
+                    DeepLinkPattern(DeepLinkMapping.Type.ZhihuQuestion.serializer(), Url("https://$webHost/question/{id}")),
+                    DeepLinkPattern(DeepLinkMapping.Type.ZhihuPin.serializer(), Url("https://$webHost/pin/{id}")),
+                    DeepLinkPattern(DeepLinkMapping.Type.Profile.serializer(), Url("https://$webHost/people/{handle}")),
+                )
+            } +
+                listOf(
+                    DeepLinkPattern(DeepLinkMapping.Type.ZhihuArticle.serializer(), Url("https://zhuanlan.zhihu.com/p/{id}")),
+                    DeepLinkPattern(DeepLinkMapping.Type.ZhihuAnswer.serializer(), Url("zhihu://answers/{id}")),
+                    DeepLinkPattern(DeepLinkMapping.Type.ZhihuQuestion.serializer(), Url("zhihu://questions/{id}")),
+                )
+        ).toImmutableList()
 
     override fun defaultTimelineTabs(accountKey: MicroBlogKey): ImmutableList<TimelineTabItem> =
         persistentListOf(

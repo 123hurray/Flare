@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -18,6 +19,7 @@ import dev.dimension.flare.data.model.LocalAppearanceSettings
 import dev.dimension.flare.data.model.VideoAutoplay
 import dev.dimension.flare.data.repository.SettingsRepository
 import dev.dimension.flare.ui.common.BindAmberSignerLauncher
+import dev.dimension.flare.common.ExternalLinkAliasManager
 import dev.dimension.flare.ui.component.ComponentAppearance
 import dev.dimension.flare.ui.component.LocalComponentAppearance
 import dev.dimension.flare.ui.screen.home.HomeScreen
@@ -57,9 +59,12 @@ fun FlareApp(content: @Composable () -> Unit) {
                     }
                 }
             }
-        }
+    }
 
     val appSettings by settingsRepository.appSettings.collectAsState(AppSettings(""))
+    LaunchedEffect(appSettings.externalLinkConfig) {
+        ExternalLinkAliasManager.sync(context, appSettings.externalLinkConfig)
+    }
     CompositionLocalProvider(
         LocalUriHandler provides uriHandler,
         LocalAppearanceSettings provides appearanceSettings,

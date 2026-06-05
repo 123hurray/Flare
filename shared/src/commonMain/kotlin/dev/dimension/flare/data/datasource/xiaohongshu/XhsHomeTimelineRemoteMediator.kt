@@ -16,6 +16,7 @@ internal class XhsHomeTimelineRemoteMediator(
     private val accountKey: MicroBlogKey,
 ) : CacheableRemoteLoader<UiTimelineV2> {
     override val pagingKey: String = "xiaohongshu_home_v2_$accountKey"
+    override val replaceCacheOnRefresh: Boolean = true
 
     override suspend fun load(
         pageSize: Int,

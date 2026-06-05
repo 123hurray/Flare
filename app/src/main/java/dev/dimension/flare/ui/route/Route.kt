@@ -137,6 +137,9 @@ internal sealed interface Route : NavKey {
         data object LocalHistory : Settings
 
         @Serializable
+        data object ExternalLinks : Settings
+
+        @Serializable
         data object AiConfig : Settings
 
         @Serializable

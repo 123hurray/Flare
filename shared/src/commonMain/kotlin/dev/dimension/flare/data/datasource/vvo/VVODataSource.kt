@@ -126,8 +126,7 @@ internal class VVODataSource(
             }
             val uid = requireNotNull(config.data.uid) { "uid is null" }
             val st = requireNotNull(config.data.st) { "st is null" }
-            val profile = service.profileInfo(uid, st)
-            val user = profile.data?.user ?: error("user not found")
+            val user = service.userProfile(uid, st)
             user.render(accountKey)
         }
 

@@ -23,6 +23,7 @@ import dev.dimension.flare.ui.model.UiInstanceMetadata
 import io.ktor.http.Url
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
 internal data object DongqiudiPlatformSpec : PlatformSpec {
     override val type = PlatformType.Dongqiudi
@@ -36,9 +37,10 @@ internal data object DongqiudiPlatformSpec : PlatformSpec {
     override fun agreementUrl(host: String): String? = null
 
     override fun deepLinkPatterns(host: String): ImmutableList<DeepLinkPattern<out DeepLinkMapping.Type>> =
-        persistentListOf(
-            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$host/article/{id}")),
-        )
+        listOf(dongqiudiWebHost, "dongqiudi.com")
+            .map {
+                DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$it/article/{id}"))
+            }.toImmutableList()
 
     override fun defaultTimelineTabs(accountKey: MicroBlogKey): ImmutableList<TimelineTabItem> =
         persistentListOf(

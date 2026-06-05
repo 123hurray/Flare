@@ -16,11 +16,13 @@ import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformSpec
 import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.PlatformTypeMetadata
+import dev.dimension.flare.model.instagramWebHost
 import dev.dimension.flare.ui.model.UiIcon
 import dev.dimension.flare.ui.model.UiInstanceMetadata
 import io.ktor.http.Url
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
 internal data object InstagramPlatformSpec : PlatformSpec {
     override val type = PlatformType.Instagram
@@ -34,11 +36,14 @@ internal data object InstagramPlatformSpec : PlatformSpec {
     override fun agreementUrl(host: String): String? = "https://help.instagram.com/581066165581870"
 
     override fun deepLinkPatterns(host: String): ImmutableList<DeepLinkPattern<out DeepLinkMapping.Type>> =
-        persistentListOf(
-            DeepLinkPattern(DeepLinkMapping.Type.Profile.serializer(), Url("https://$host/{handle}")),
-            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$host/p/{id}")),
-            DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$host/reel/{id}")),
-        )
+        listOf(instagramWebHost, "instagram.com")
+            .flatMap { webHost ->
+                listOf(
+                    DeepLinkPattern(DeepLinkMapping.Type.Profile.serializer(), Url("https://$webHost/{handle}")),
+                    DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$webHost/p/{id}")),
+                    DeepLinkPattern(DeepLinkMapping.Type.Post.serializer(), Url("https://$webHost/reel/{id}")),
+                )
+            }.toImmutableList()
 
     override fun defaultTimelineTabs(accountKey: MicroBlogKey): ImmutableList<TimelineTabItem> =
         persistentListOf(

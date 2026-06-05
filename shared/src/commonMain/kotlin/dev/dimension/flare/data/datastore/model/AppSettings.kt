@@ -20,7 +20,19 @@ public data class AppSettings(
     val language: String = "",
     val translateConfig: TranslateConfig = TranslateConfig(),
     val localFilterConfig: LocalFilterConfig = LocalFilterConfig(),
+    val externalLinkConfig: ExternalLinkConfig = ExternalLinkConfig(),
 ) {
+    @Serializable
+    public data class ExternalLinkConfig(
+        val weibo: Boolean = false,
+        val x: Boolean = false,
+        val xiaohongshu: Boolean = false,
+        val instagram: Boolean = false,
+        val jike: Boolean = false,
+        val dongqiudi: Boolean = false,
+        val zhihu: Boolean = false,
+    )
+
     @Serializable
     public data class LocalFilterConfig(
         val filterDuplicateComments: Boolean = false,

@@ -58,6 +58,8 @@ internal fun RemoteLoader<UiTimelineV2>.filterDuplicateCommentPages(threshold: I
         val delegate = this
         object : CacheableRemoteLoader<UiTimelineV2> {
             override val pagingKey: String = delegate.pagingKey
+            override val supportPrepend: Boolean = delegate.supportPrepend
+            override val replaceCacheOnRefresh: Boolean = delegate.replaceCacheOnRefresh
 
             override suspend fun load(
                 pageSize: Int,

@@ -58,15 +58,13 @@ internal class VVOLoader(
 
     override suspend fun userById(id: String): UiProfile {
         val st = ensureLogin()
-        val profile = service.profileInfo(id, st)
-        val user = profile.data?.user ?: error("user not found")
+        val user = service.userProfile(id, st)
         return user.render(accountKey)
     }
 
     override suspend fun relation(userKey: MicroBlogKey): UiRelation {
         val st = ensureLogin()
-        val profile = service.profileInfo(userKey.id, st)
-        val user = profile.data?.user ?: error("user not found")
+        val user = service.userProfile(userKey.id, st)
         return UiRelation(
             following = user.following,
             isFans = user.followMe ?: false,

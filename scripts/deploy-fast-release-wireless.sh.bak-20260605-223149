@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BASE="${BASE:-$HOME/.codex/toolchains/flare-android}"
+SECRETS_FILE="${SECRETS_FILE:-$HOME/.codex/generated-secrets/flare/repository-secrets.env}"
+APK="$ROOT_DIR/app/build/outputs/apk/release/app-release.apk"
+
+export JAVA_HOME="${JAVA_HOME:-$BASE/jdks/jdk-25.0.3+9/Contents/Home}"
+export ANDROID_HOME="${ANDROID_HOME:-$BASE/android-sdk}"
+export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/build-tools/37.0.0:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+
+cd "$ROOT_DIR"
+
+if [[ ! -f "$SECRETS_FILE" ]]; then
+  echo "Missing secrets file: $SECRETS_FILE" >&2
+  exit 1
+fi
+
+set -a
+# shellcheck disable=SC1090
+. "$SECRETS_FILE"
+set +a
+
+./.github/apply_signing.sh
+
+transport_id="${ADB_TRANSPORT_ID:-}"
+if [[ -z "$transport_id" ]]; then
+  transport_id="$(
+    adb devices -l |
+      awk '/_adb-tls-connect._tcp[[:space:]]+device/ {
+        for (i = 1; i <= NF; i++) {
+          if ($i ~ /^transport_id:/) {
+            sub("transport_id:", "", $i)
+            print $i
+            exit
+          }
+        }
+      }'
+  )"
+fi
+
+if [[ -z "$transport_id" ]]; then
+  echo "No wireless adb device found. Current devices:" >&2
+  adb devices -l >&2
+  exit 1
+fi
+
+if [[ -z "${BUILD_NUMBER:-}" ]]; then
+  installed_version="$(
+    adb -t "$transport_id" shell dumpsys package dev.dimension.flare 2>/dev/null |
+      awk -F= '/versionCode=/ { split($2, parts, " "); print parts[1]; exit }'
+  )"
+  if [[ "$installed_version" =~ ^[0-9]+$ ]]; then
+    BUILD_NUMBER="$((installed_version + 1))"
+  else
+    BUILD_NUMBER=1
+  fi
+fi
+
+BUILD_VERSION="${BUILD_VERSION:-$(git branch --show-current)}"
+
+rm -rf \
+  "$ROOT_DIR/app/build/outputs/apk/release" \
+  "$ROOT_DIR/app/build/intermediates/merged_manifest/release" \
+  "$ROOT_DIR/app/build/intermediates/packaged_manifests/release" \
+  "$ROOT_DIR/app/build/intermediates/apk/release"
+
+./gradlew :app:assembleRelease \
+    -Pflare.devFastRelease=true \
+    -Pflare.buildNumber="$BUILD_NUMBER" \
+    -Pflare.buildVersion="$BUILD_VERSION" \
+    --build-cache \
+    --stacktrace \
+    -x :app:lintVitalAnalyzeRelease \
+    -x :app:lintVitalReportRelease \
+    -x :app:lintVitalRelease
+
+if [[ ! -f "$APK" ]]; then
+  echo "APK not found: $APK" >&2
+  exit 1
+fi
+
+if command -v apksigner >/dev/null 2>&1; then
+  apksigner verify --verbose --print-certs "$APK" >/dev/null
+fi
+
+if command -v aapt >/dev/null 2>&1; then
+  apk_version="$(
+    aapt dump badging "$APK" |
+      awk -F"'" '/^package:/ { print $4; exit }'
+  )"
+  if [[ "$apk_version" != "$BUILD_NUMBER" ]]; then
+    echo "APK versionCode mismatch: expected $BUILD_NUMBER, got ${apk_version:-unknown}" >&2
+    exit 1
+  fi
+fi
+
+echo "Installing $APK via adb transport_id=$transport_id versionCode=$BUILD_NUMBER"
+adb -t "$transport_id" install -r -d "$APK"
