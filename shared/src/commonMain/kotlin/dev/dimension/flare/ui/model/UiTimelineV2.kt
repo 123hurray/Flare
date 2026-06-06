@@ -221,6 +221,8 @@ public sealed class UiTimelineV2 {
         val sourceChannel: SourceChannel? = null,
         val visibility: Visibility? = null,
         val replyToHandle: String? = null,
+        @Transient
+        val relatedProfiles: SerializableImmutableList<UiProfile> = persistentListOf(),
         internal val references: SerializableImmutableList<Reference> = persistentListOf(),
         @Transient
         val parents: SerializableImmutableList<Post> = persistentListOf(),
@@ -281,6 +283,7 @@ public sealed class UiTimelineV2 {
                 .add(sourceChannel?.name)
                 .add(visibility)
                 .add(replyToHandle)
+                .add(relatedProfiles.renderSummaryHash { it.renderSummaryHash() })
                 .add(references.renderSummaryHash { it.renderSummaryHash() })
                 .add(parents.renderSummaryHash { it.renderSummaryHash() })
                 .add(internalRepost?.renderSummaryHash())
@@ -450,6 +453,7 @@ private fun UiTimelineV2.Post.renderSummaryHash(): Int =
         .add(sourceChannel?.name)
         .add(visibility)
         .add(translationDisplayState)
+        .add(relatedProfiles.renderSummaryHash { it.renderSummaryHash() })
         .add(actions.renderSummaryHash { it.renderSummaryHash() })
         .add(createdAt.value)
         .build()

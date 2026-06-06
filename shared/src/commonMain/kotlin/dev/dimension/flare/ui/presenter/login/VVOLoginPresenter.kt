@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import dev.dimension.flare.data.network.vvo.VVOService
 import dev.dimension.flare.data.repository.AccountRepository
+import dev.dimension.flare.data.repository.DebugRepository
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.vvoHost
 import dev.dimension.flare.ui.model.UiAccount
@@ -33,6 +34,11 @@ public class VVOLoginPresenter(
         return object : VVOLoginState {
             override val loading = loading
             override val error = error
+            override val errorMessage: String?
+                get() =
+                    error?.message
+                        ?: error
+                            ?.let { it::class.simpleName }
 
             override fun checkChocolate(cookie: String): Boolean = VVOService.checkChocolates(cookie)
 
@@ -50,6 +56,7 @@ public class VVOLoginPresenter(
                         )
                         toHome.invoke()
                     }.onFailure {
+                        DebugRepository.error(it)
                         error = it
                     }
                     loading = false
@@ -64,12 +71,12 @@ public class VVOLoginPresenter(
     ) {
         val service = VVOService(flowOf(chocolate))
         val config = service.config()
-        val uid = config.data?.uid
+        val data = requireNotNull(config.data) { "config is null" }
+        require(data.login == true) { "login is false" }
+        val uid = data.uid
         requireNotNull(uid) { "uid is null" }
-        val st = config.data.st
+        val st = data.st
         requireNotNull(st) { "st is null" }
-        val profile = service.profileInfo(uid, st)
-        requireNotNull(profile.data) { "profile is null" }
         accountRepository.addAccount(
             UiAccount.VVo(
                 accountKey =
@@ -90,6 +97,7 @@ public class VVOLoginPresenter(
 public interface VVOLoginState {
     public val loading: Boolean
     public val error: Throwable?
+    public val errorMessage: String?
 
     public fun checkChocolate(cookie: String): Boolean
 

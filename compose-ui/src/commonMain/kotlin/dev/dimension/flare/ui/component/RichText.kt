@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
@@ -217,7 +218,7 @@ public fun RichText(
                         }
 
                         is RichTextContent.BlockImage -> {
-                            SubcomposeNetworkImage(
+                            Box(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
@@ -235,16 +236,40 @@ public fun RichText(
                                                 it
                                             }
                                         },
-                                model = content.url,
-                                contentDescription = content.url,
-                                customHeaders = imageHeaders,
-                            )
+                            ) {
+                                SubcomposeNetworkImage(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    model = content.url,
+                                    contentDescription = content.url,
+                                    customHeaders = imageHeaders,
+                                )
+                                if (content.url.isGifUrl()) {
+                                    PlatformText(
+                                        text = "GIF",
+                                        modifier =
+                                            Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .padding(8.dp)
+                                                .background(
+                                                    color = Color.Black.copy(alpha = 0.58f),
+                                                    shape = PlatformTheme.shapes.small,
+                                                ).padding(horizontal = 6.dp, vertical = 2.dp),
+                                        color = Color.White,
+                                        style = PlatformTheme.typography.caption,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
+}
+
+private fun String.isGifUrl(): Boolean {
+    val normalized = substringBefore("#").substringBefore("?")
+    return contains("#flare-gif") || normalized.endsWith(".gif", ignoreCase = true)
 }
 
 @Composable

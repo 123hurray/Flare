@@ -1,13 +1,16 @@
 package dev.dimension.flare.common.deeplink
 
+import dev.dimension.flare.data.datasource.xiaohongshu.XhsNoteContextCache
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
 import dev.dimension.flare.model.spec
+import dev.dimension.flare.model.xiaohongshuWebHost
 import dev.dimension.flare.model.xqtHost
 import dev.dimension.flare.ui.model.UiAccount
 import dev.dimension.flare.ui.route.DeeplinkRoute
 import io.ktor.http.Url
+import io.ktor.http.encodeURLParameter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentMapOf
@@ -317,6 +320,43 @@ class DeepLinkMappingTest {
         val xPostPhotoMatch =
             DeepLinkMapping.matches("https://$xqtHost/alice/status/12345/photo/1", mapping)
         assertEquals(DeepLinkMapping.Type.PostMedia("alice", "12345", 1), xPostPhotoMatch[xAccount])
+    }
+
+    @Test
+    fun xiaohongshuShareLinkPreservesXsecContext() {
+        val account =
+            UiAccount.Xiaohongshu(
+                accountKey = MicroBlogKey(id = "user1", host = xiaohongshuWebHost),
+            )
+        val noteId = "6a1ed528000000003502d3d7"
+        val xsecToken = "CBcuW-qd6DvdsnbvlccnWjf3PzeYMTLWw4lowgKKXKZtQ="
+        val mapping: ImmutableMap<UiAccount, ImmutableList<DeepLinkPattern<out DeepLinkMapping.Type>>> =
+            persistentMapOf(
+                account to PlatformType.Xiaohongshu.spec.deepLinkPatterns(account.accountKey.host),
+            )
+
+        val matches =
+            DeepLinkMapping.matches(
+                "https://www.xiaohongshu.com/discovery/item/$noteId" +
+                    "?app_platform=ios&xsec_source=app_share&type=video&xsec_token=$xsecToken&author_share=1",
+                mapping,
+            )
+        val match = matches[account] as DeepLinkMapping.Type.XiaohongshuPost
+        val route = match.deepLink(account.accountKey)
+
+        assertEquals(
+            DeeplinkRoute.Status.Detail(
+                accountType = AccountType.Specific(account.accountKey),
+                statusKey =
+                    MicroBlogKey(
+                        "$noteId?xsec_token=${xsecToken.encodeURLParameter()}&xsec_source=app_share&type=video",
+                        xiaohongshuWebHost,
+                    ),
+            ),
+            route,
+        )
+        assertEquals(xsecToken, XhsNoteContextCache.get(noteId)?.xsecToken)
+        assertEquals("app_share", XhsNoteContextCache.get(noteId)?.xsecSource)
     }
 
     @Test

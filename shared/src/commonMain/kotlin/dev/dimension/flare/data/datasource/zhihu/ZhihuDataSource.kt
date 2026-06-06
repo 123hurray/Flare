@@ -95,6 +95,13 @@ internal class ZhihuDataSource(
             service = service,
         )
 
+    fun dailyTimeline(date: String?): RemoteLoader<UiTimelineV2> =
+        ZhihuDailyTimelineRemoteLoader(
+            accountKey = accountKey,
+            service = service,
+            date = date,
+        )
+
     override fun context(statusKey: MicroBlogKey): RemoteLoader<UiTimelineV2> =
         statusKey.id.zhihuCommentTarget()?.let { target ->
             ZhihuCommentThreadRemoteLoader(
@@ -201,6 +208,32 @@ private class ZhihuHomeTimelineRemoteLoader(
             return PagingResult(endOfPaginationReached = true)
         }
         val page = service.recommend((request as? PagingRequest.Append)?.nextKey)
+        return PagingResult(
+            data = page.items.map { it.toUiTimeline(accountKey, detail = false) },
+            nextKey = page.nextUrl,
+            endOfPaginationReached = page.isEnd || page.nextUrl.isNullOrBlank(),
+        )
+    }
+}
+
+private class ZhihuDailyTimelineRemoteLoader(
+    private val accountKey: MicroBlogKey,
+    private val service: ZhihuService,
+    private val date: String?,
+) : RemoteLoader<UiTimelineV2> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val page =
+            when (request) {
+                is PagingRequest.Append -> service.dailyBefore(request.nextKey)
+                PagingRequest.Refresh -> service.daily(date)
+                is PagingRequest.Prepend -> error("Prepend is handled above")
+            }
         return PagingResult(
             data = page.items.map { it.toUiTimeline(accountKey, detail = false) },
             nextKey = page.nextUrl,

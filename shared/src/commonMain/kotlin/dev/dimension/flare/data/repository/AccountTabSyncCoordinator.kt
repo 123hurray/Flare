@@ -9,11 +9,13 @@ import dev.dimension.flare.data.model.TabSettings
 import dev.dimension.flare.data.model.TabMetaData
 import dev.dimension.flare.data.model.TimelineTabItem
 import dev.dimension.flare.data.model.TitleType
+import dev.dimension.flare.data.model.Zhihu
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.instagramWebHost
 import dev.dimension.flare.model.jikeWebHost
 import dev.dimension.flare.model.spec
+import dev.dimension.flare.model.zhihuWebHost
 import dev.dimension.flare.ui.model.UiAccount
 import dev.dimension.flare.ui.model.UiIcon
 import kotlinx.collections.immutable.toImmutableList
@@ -35,6 +37,9 @@ internal class AccountTabSyncCoordinator(
         }
         coroutineScope.launch {
             normalizeInstagramHomeTabs()
+        }
+        coroutineScope.launch {
+            ensureZhihuDailyTabs()
         }
         coroutineScope.launch {
             accountRepository.onAdded.collect { account ->
@@ -125,6 +130,36 @@ internal class AccountTabSyncCoordinator(
                     mainTabs = normalizedTabs,
                     secondaryItems = normalizedSecondaryItems,
                 )
+            }
+        }
+    }
+
+    private suspend fun ensureZhihuDailyTabs() {
+        val zhihuAccounts =
+            accountRepository.allAccounts
+                .first()
+                .map { it.accountKey }
+                .filter { it.host == zhihuWebHost }
+        if (zhihuAccounts.isEmpty()) {
+            return
+        }
+        settingsRepository.updateTabSettings {
+            val additions =
+                zhihuAccounts.map { accountKey ->
+                    Zhihu.DailyTimelineTabItem(
+                        account = AccountType.Specific(accountKey),
+                        metaData =
+                            TabMetaData(
+                                title = TitleType.Text("知乎日报"),
+                                icon = IconType.Material(UiIcon.Feeds),
+                            ),
+                    )
+                }
+            val newTabs = (mainTabs + additions).distinctBy { it.key }
+            if (newTabs == mainTabs) {
+                this
+            } else {
+                copy(mainTabs = newTabs).sanitizeDuplicateTabKeys()
             }
         }
     }

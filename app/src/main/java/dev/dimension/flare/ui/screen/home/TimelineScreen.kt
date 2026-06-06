@@ -1,5 +1,7 @@
 package dev.dimension.flare.ui.screen.home
 
+import android.app.DatePickerDialog
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
@@ -9,13 +11,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import dev.dimension.flare.R
 import dev.dimension.flare.data.model.TimelineTabItem
+import dev.dimension.flare.data.model.Zhihu
 import dev.dimension.flare.ui.component.BackButton
 import dev.dimension.flare.ui.component.FlareLargeFlexibleTopAppBar
 import dev.dimension.flare.ui.component.FlareScaffold
@@ -25,6 +31,8 @@ import dev.dimension.flare.ui.presenter.home.UserPresenter
 import dev.dimension.flare.ui.presenter.invoke
 import kotlinx.coroutines.launch
 import moe.tlaster.precompose.molecule.producePresenter
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,8 +41,10 @@ internal fun TimelineScreen(
     toLogin: (() -> Unit)? = null,
     onBack: () -> Unit,
 ) {
-    val state by producePresenter(key = "timeline_screen_${tabItem.key}") {
-        timelinePresenter(tabItem)
+    var activeTabItem by remember(tabItem) { mutableStateOf(tabItem) }
+    val context = LocalContext.current
+    val state by producePresenter(key = "timeline_screen_${activeTabItem.key}") {
+        timelinePresenter(activeTabItem)
     }
 //    RegisterTabCallback(
 //        lazyListState = state.lazyListState,
@@ -49,13 +59,27 @@ internal fun TimelineScreen(
         topBar = {
             FlareLargeFlexibleTopAppBar(
                 title = {
-                    TabTitle(title = tabItem.metaData.title)
+                    TabTitle(title = activeTabItem.metaData.title)
                 },
                 scrollBehavior = topAppBarScrollBehavior,
                 navigationIcon = {
                     BackButton(onBack)
                 },
                 actions = {
+                    (activeTabItem as? Zhihu.DailyTimelineTabItem)?.let { dailyTab ->
+                        TextButton(
+                            onClick = {
+                                showZhihuDailyDatePicker(
+                                    context = context,
+                                    initialDate = dailyTab.date,
+                                ) { date ->
+                                    activeTabItem = dailyTab.withDate(date)
+                                }
+                            },
+                        ) {
+                            Text(text = dailyTab.date?.displayZhihuDailyDate() ?: "日期")
+                        }
+                    }
                     if (toLogin != null) {
                         state.user
                             .onError {
@@ -87,7 +111,7 @@ internal fun TimelineScreen(
                 .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
     ) { contentPadding ->
         TimelineItemContent(
-            item = tabItem,
+            item = activeTabItem,
             contentPadding = contentPadding,
             modifier = Modifier.fillMaxSize(),
             lazyStaggeredGridState = listState,
@@ -105,3 +129,30 @@ private fun timelinePresenter(tabItem: TimelineTabItem) =
             )
         }.invoke()
     }
+
+private fun showZhihuDailyDatePicker(
+    context: Context,
+    initialDate: String?,
+    onSelected: (String) -> Unit,
+) {
+    val date = initialDate?.toZhihuDailyLocalDateOrNull() ?: LocalDate.now()
+    DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth ->
+            onSelected(LocalDate.of(year, month + 1, dayOfMonth).format(DateTimeFormatter.BASIC_ISO_DATE))
+        },
+        date.year,
+        date.monthValue - 1,
+        date.dayOfMonth,
+    ).show()
+}
+
+private fun String.displayZhihuDailyDate(): String =
+    toZhihuDailyLocalDateOrNull()
+        ?.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        ?: this
+
+private fun String.toZhihuDailyLocalDateOrNull(): LocalDate? =
+    runCatching {
+        LocalDate.parse(filter { it.isDigit() }, DateTimeFormatter.BASIC_ISO_DATE)
+    }.getOrNull()

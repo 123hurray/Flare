@@ -77,7 +77,7 @@ android {
         }
         release {
             isMinifyEnabled = !fastRelease
-            isShrinkResources = false
+            isShrinkResources = !fastRelease
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

@@ -1,5 +1,6 @@
 package dev.dimension.flare.common.deeplink
 
+import dev.dimension.flare.data.datasource.xiaohongshu.cacheXhsNoteContext
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.model.UiAccount
@@ -57,11 +58,17 @@ internal object DeepLinkMapping {
             val xsec_source: String? = null,
             val type: String? = null,
         ) : Type {
-            override fun deepLink(accountKey: MicroBlogKey): DeeplinkRoute =
-                DeeplinkRoute.Status.Detail(
+            override fun deepLink(accountKey: MicroBlogKey): DeeplinkRoute {
+                cacheXhsNoteContext(
+                    noteId = id,
+                    xsecToken = xsec_token,
+                    xsecSource = xsec_source,
+                )
+                return DeeplinkRoute.Status.Detail(
                     accountType = AccountType.Specific(accountKey),
                     statusKey = MicroBlogKey(id.withXhsContext(), accountKey.host),
                 )
+            }
 
             private fun String.withXhsContext(): String {
                 val params =

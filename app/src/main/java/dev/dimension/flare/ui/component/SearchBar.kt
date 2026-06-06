@@ -168,6 +168,7 @@ internal fun LazyStaggeredGridScope.searchContent(
     searchUsers: PagingState<UiProfile>,
     searchStatus: PagingState<UiTimelineV2>,
     toUser: (MicroBlogKey) -> Unit,
+    searchUsersTitle: String? = null,
 ) {
     searchUsers
         .onSuccess {
@@ -176,7 +177,7 @@ internal fun LazyStaggeredGridScope.searchContent(
             ) {
                 ListItem(
                     headlineContent = {
-                        Text(text = stringResource(R.string.search_users))
+                        Text(text = searchUsersTitle ?: stringResource(R.string.search_users))
                     },
                     colors =
                         ListItemDefaults
@@ -221,7 +222,7 @@ internal fun LazyStaggeredGridScope.searchContent(
             ) {
                 ListItem(
                     headlineContent = {
-                        Text(text = stringResource(R.string.search_users))
+                        Text(text = searchUsersTitle ?: stringResource(R.string.search_users))
                     },
                     colors =
                         ListItemDefaults

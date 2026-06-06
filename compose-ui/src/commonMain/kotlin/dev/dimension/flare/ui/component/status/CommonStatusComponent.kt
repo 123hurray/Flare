@@ -137,6 +137,7 @@ import dev.dimension.flare.ui.model.TranslationDisplayState
 import dev.dimension.flare.ui.model.UiCard
 import dev.dimension.flare.ui.model.UiMedia
 import dev.dimension.flare.ui.model.UiPoll
+import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.brandIcon
 import dev.dimension.flare.ui.model.onError
@@ -246,9 +247,9 @@ public fun CommonStatusComponent(
                 RichText(
                     text = it,
                     modifier = Modifier.fillMaxWidth(),
-                    textStyle = PlatformTheme.typography.h3,
+                    textStyle = PlatformTheme.typography.h4,
                     headingFontScale = 1f,
-                    lineHeightScale = 1f,
+                    lineHeightScale = 0.95f,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
             }
@@ -498,6 +499,14 @@ public fun CommonStatusComponent(
                 )
             }
 
+            if (isDetail && item.platformType == PlatformType.Dongqiudi && item.relatedProfiles.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                DongqiudiRelatedProfileTags(
+                    profiles = item.relatedProfiles,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
             if (isDetail && item.hasKnownCreatedAt()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 DateTimeText(
@@ -534,6 +543,56 @@ public fun CommonStatusComponent(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DongqiudiRelatedProfileTags(
+    profiles: List<UiProfile>,
+    modifier: Modifier = Modifier,
+) {
+    val uriHandler = LocalUriHandler.current
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        profiles.forEach { profile ->
+            Row(
+                modifier =
+                    Modifier
+                        .border(
+                            width = FlareDividerDefaults.thickness,
+                            color = FlareDividerDefaults.color,
+                            shape = RoundedCornerShape(999.dp),
+                        ).clip(RoundedCornerShape(999.dp))
+                        .clickable {
+                            profile.onClicked.invoke(
+                                ClickContext(
+                                    launcher = { url ->
+                                        uriHandler.openUri(url)
+                                    },
+                                ),
+                            )
+                        }.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                AvatarComponent(
+                    data = profile.avatar,
+                    size = 20.dp,
+                )
+                PlatformText(
+                    text = profile.name.raw,
+                    style = PlatformTheme.typography.caption,
+                    color = PlatformTheme.colorScheme.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -608,6 +667,7 @@ private fun CompactCommentStatusComponent(
                     onExpandClick = null,
                 )
             }
+            CompactCommentMedia(item)
             CommentMetaAndActions(item)
             if (item.quote.isNotEmpty() || replyAction != null) {
                 CompactChildComments(
@@ -724,6 +784,7 @@ private fun CompactChildComment(
                 showExpandButton = false,
                 onExpandClick = null,
             )
+            CompactCommentMedia(item)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -748,6 +809,27 @@ private fun CompactChildComment(
             }
         }
     }
+}
+
+@Composable
+private fun CompactCommentMedia(item: UiTimelineV2.Post) {
+    if (item.images.isEmpty()) return
+    val uriHandler = LocalUriHandler.current
+    Spacer(modifier = Modifier.height(4.dp))
+    StatusMediasComponent(
+        item = item,
+        isDetail = false,
+        isQuote = true,
+        onMediaClick = { media ->
+            StatusMediaRouteCache.put(item)
+            openStatusMedia(
+                item = item,
+                media = media,
+                index = item.images.indexOf(media),
+                uriHandler = uriHandler,
+            )
+        },
+    )
 }
 
 @Composable

@@ -16,6 +16,13 @@ import dev.dimension.flare.model.zhihuWebHost
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.CancellationException
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -136,6 +143,40 @@ internal class ZhihuService(
         )
     }
 
+    suspend fun daily(date: String? = null): ZhihuTimelinePage {
+        val url =
+            if (date.isNullOrBlank()) {
+                "https://news-at.zhihu.com/api/4/news/latest"
+            } else {
+                "https://news-at.zhihu.com/api/4/news/before/${date.zhihuDailyBeforeDate()}"
+            }
+        return dailyFromUrl(url, date ?: "latest")
+    }
+
+    suspend fun dailyBefore(beforeDate: String): ZhihuTimelinePage =
+        dailyFromUrl(
+            url = "https://news-at.zhihu.com/api/4/news/before/$beforeDate",
+            logId = "before:$beforeDate",
+        )
+
+    private suspend fun dailyFromUrl(
+        url: String,
+        logId: String,
+    ): ZhihuTimelinePage {
+        val root = requestPublicJson(url)
+        root.throwIfZhihuError("daily", logId)
+        val responseDate = root.string("date")
+        val stories =
+            root["stories"]
+                .arrayOrEmpty()
+                .mapNotNull { it.objectOrNull()?.toDailyContent(responseDate) }
+        return ZhihuTimelinePage(
+            items = stories,
+            nextUrl = responseDate,
+            isEnd = stories.isEmpty() || responseDate.isNullOrBlank(),
+        )
+    }
+
     suspend fun contentDetail(statusId: String): ZhihuContent =
         runCatching {
             val key = ZhihuContentKey.parse(statusId)
@@ -162,6 +203,8 @@ internal class ZhihuService(
                             println("ZhihuService: article api detail unavailable id=${key.id} message=${it.message}")
                             return@runCatching articleDetailFromWeb(key.id)
                         }
+                    ZhihuContentType.Daily ->
+                        requestPublicJson("https://news-at.zhihu.com/api/4/news/${key.id}")
                     ZhihuContentType.Pin ->
                         requestJson("https://www.zhihu.com/api/v4/pins/${key.id}")
                     ZhihuContentType.Question -> error("Question detail should be loaded from answers feed")
@@ -169,6 +212,9 @@ internal class ZhihuService(
             root.throwIfZhihuError("detail", statusId)
             root.toDetailContent(key)
         }.getOrElse {
+            if (it is CancellationException) {
+                throw it
+            }
             println("ZhihuService: detail fallback statusId=$statusId message=${it.message}")
             ZhihuContent.placeholder(statusId)
         }
@@ -219,6 +265,7 @@ internal class ZhihuService(
                 when (key.type) {
                     ZhihuContentType.Answer -> "answers"
                     ZhihuContentType.Article -> "articles"
+                    ZhihuContentType.Daily -> return@runCatching ZhihuCommentPage(emptyList(), null, true)
                     ZhihuContentType.Pin -> "pins"
                     ZhihuContentType.Question -> "questions"
                 }
@@ -295,6 +342,37 @@ internal class ZhihuService(
                 body = body,
             )
         }
+        return JSON.decodeFromString(body)
+    }
+
+    private suspend fun requestPublicJson(url: String): JsonObject =
+        runCatching {
+            requestPublicJsonOnce(url)
+        }.getOrElse { error ->
+            if (error is CancellationException) {
+                throw error
+            }
+            if (url.startsWith("https://news-at.zhihu.com/")) {
+                val fallbackUrl = url.replaceFirst("https://", "http://")
+                println("ZhihuService: publicHttpsFallback url=$url message=${error.message}")
+                requestPublicJsonOnce(fallbackUrl)
+            } else {
+                throw error
+            }
+        }
+
+    private suspend fun requestPublicJsonOnce(url: String): JsonObject {
+        val response =
+            client.get(url) {
+                header(HttpHeaders.UserAgent, ZHIHU_WEB_USER_AGENT)
+                header(HttpHeaders.Accept, "application/json, text/plain, */*")
+                header("Referer", "https://daily.zhihu.com/")
+            }
+        val body = response.bodyAsText()
+        println(
+            "ZhihuService: publicResponse status=${response.status.value} " +
+                "url=$url body=${body.take(ZHIHU_DEBUG_BODY_LIMIT)}",
+        )
         return JSON.decodeFromString(body)
     }
 
@@ -580,6 +658,7 @@ internal data class ZhihuUserPage(
 internal enum class ZhihuContentType(val prefix: String) {
     Answer("answer"),
     Article("article"),
+    Daily("daily"),
     Pin("pin"),
     Question("question"),
 }
@@ -597,6 +676,7 @@ internal data class ZhihuContentKey(
                 when (prefix) {
                     "answer" -> ZhihuContentType.Answer
                     "article" -> ZhihuContentType.Article
+                    "daily" -> ZhihuContentType.Daily
                     "pin" -> ZhihuContentType.Pin
                     else -> ZhihuContentType.Question
                 }
@@ -615,6 +695,11 @@ internal data class ZhihuContentKey(
                 ?.groupValues
                 ?.getOrNull(1)
                 ?.let { return ZhihuContentKey(ZhihuContentType.Article, it) }
+            Regex("""(?:daily\.zhihu\.com/story/|news-at\.zhihu\.com/api/4/news/)(\d+)""")
+                .find(normalized)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let { return ZhihuContentKey(ZhihuContentType.Daily, it) }
             Regex("""/question/\d+/answer/(\d+)""")
                 .find(normalized)
                 ?.groupValues
@@ -736,6 +821,9 @@ private fun JsonObject.toTargetContent(): ZhihuContent? {
 }
 
 private fun JsonObject.toDetailContent(key: ZhihuContentKey): ZhihuContent {
+    if (key.type == ZhihuContentType.Daily) {
+        return toDailyDetailContent(key.id)
+    }
     val question = get("question").objectOrNull()
     val author = get("author").objectOrNull()
     val pinContent = if (key.type == ZhihuContentType.Pin) pinContentHtml() else null
@@ -761,6 +849,53 @@ private fun JsonObject.toDetailContent(key: ZhihuContentKey): ZhihuContent {
         commentCount = long("comment_count") ?: 0L,
         createdTime = long("created_time") ?: long("created") ?: Clock.System.now().epochSeconds,
         url = string("url") ?: string("url_token"),
+    )
+}
+
+private fun JsonObject.toDailyContent(date: String?): ZhihuContent? {
+    val id = string("id") ?: long("id")?.toString() ?: return null
+    val hint = string("hint").orEmpty().stripZhihuHighlightHtml()
+    return ZhihuContent(
+        id = id,
+        type = ZhihuContentType.Daily,
+        title = string("title").orEmpty().stripZhihuHighlightHtml(),
+        excerpt = "",
+        contentHtml = null,
+        imageUrls = thumbnailImageUrls(),
+        authorName = hint.takeIf { it.isNotBlank() } ?: "知乎日报",
+        authorId = "zhihu-daily",
+        authorAvatar = "",
+        authorHeadline = "",
+        questionId = null,
+        answerCount = 0L,
+        followerCount = 0L,
+        voteupCount = 0L,
+        commentCount = 0L,
+        createdTime = date.zhihuDailyEpochSecondsOrNow(),
+        url = string("url") ?: string("share_url") ?: "https://daily.zhihu.com/story/$id",
+    )
+}
+
+private fun JsonObject.toDailyDetailContent(fallbackId: String): ZhihuContent {
+    val id = string("id") ?: long("id")?.toString() ?: fallbackId
+    return ZhihuContent(
+        id = id,
+        type = ZhihuContentType.Daily,
+        title = string("title").orEmpty().stripZhihuHighlightHtml(),
+        excerpt = "",
+        contentHtml = string("body")?.cleanZhihuDailyBodyHtml(),
+        imageUrls = thumbnailImageUrls(),
+        authorName = string("image_source").orEmpty().takeIf { it.isNotBlank() } ?: "知乎日报",
+        authorId = "zhihu-daily",
+        authorAvatar = "",
+        authorHeadline = "",
+        questionId = null,
+        answerCount = 0L,
+        followerCount = 0L,
+        voteupCount = 0L,
+        commentCount = 0L,
+        createdTime = Clock.System.now().epochSeconds,
+        url = string("share_url") ?: string("url") ?: "https://daily.zhihu.com/story/$id",
     )
 }
 
@@ -1030,16 +1165,33 @@ private fun JsonObject.zhihuErrorCode(): String? = get("error").objectOrNull()?.
 
 private fun String.stripZhihuHighlightHtml(): String = replace(Regex("</?em>", RegexOption.IGNORE_CASE), "")
 
+private fun String.cleanZhihuDailyBodyHtml(): String =
+    replace(
+        Regex("""<div class="headline">.*?<div class="content-inner">""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)),
+        """<div class="content-inner">""",
+    ).replace(
+        Regex("""<div class="meta">.*?</div>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)),
+        "",
+    ).replace(
+        Regex("""<h2 class="question-title">\s*</h2>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)),
+        "",
+    ).replace(
+        Regex(""">\s+<"""),
+        "><",
+    )
+
 private fun String.toZhihuContentType(): ZhihuContentType? =
     when (lowercase()) {
         "answer" -> ZhihuContentType.Answer
         "article" -> ZhihuContentType.Article
+        "daily" -> ZhihuContentType.Daily
         "pin" -> ZhihuContentType.Pin
         "question" -> ZhihuContentType.Question
         else ->
             when {
                 contains("answer", ignoreCase = true) -> ZhihuContentType.Answer
                 contains("article", ignoreCase = true) || contains("zhuanlan", ignoreCase = true) -> ZhihuContentType.Article
+                contains("daily", ignoreCase = true) -> ZhihuContentType.Daily
                 contains("pin", ignoreCase = true) -> ZhihuContentType.Pin
                 contains("question", ignoreCase = true) -> ZhihuContentType.Question
                 else -> null
@@ -1050,10 +1202,36 @@ private fun String.normalizeZhihuContentId(type: ZhihuContentType): String =
     when (type) {
         ZhihuContentType.Answer,
         ZhihuContentType.Article,
+        ZhihuContentType.Daily,
         ZhihuContentType.Pin,
         ZhihuContentType.Question,
         -> Regex("""\d+""").find(this)?.value ?: this
     }
+
+internal fun String?.zhihuDailyEpochSecondsOrNow(): Long =
+    this?.toZhihuDailyDateOrNull()
+        ?.let { LocalDateTime(it.year, it.month.ordinal + 1, it.day, 0, 0).toInstant(TimeZone.UTC).epochSeconds }
+        ?: Clock.System.now().epochSeconds
+
+internal fun String.zhihuDailyBeforeDate(): String =
+    toZhihuDailyDateOrNull()
+        ?.plus(DatePeriod(days = 1))
+        ?.formatZhihuDailyDate()
+        ?: this
+
+private fun String.toZhihuDailyDateOrNull(): LocalDate? {
+    val value = filter { it.isDigit() }
+    if (value.length != 8) return null
+    val year = value.substring(0, 4).toIntOrNull() ?: return null
+    val month = value.substring(4, 6).toIntOrNull() ?: return null
+    val day = value.substring(6, 8).toIntOrNull() ?: return null
+    return runCatching { LocalDate(year, month, day) }.getOrNull()
+}
+
+private fun LocalDate.formatZhihuDailyDate(): String =
+    year.toString().padStart(4, '0') +
+        (month.ordinal + 1).toString().padStart(2, '0') +
+        day.toString().padStart(2, '0')
 
 private fun Map<String, String>.toCookieHeader(): String =
     entries

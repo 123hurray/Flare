@@ -187,6 +187,7 @@
     <string name="discover_status">热门帖子</string>
     <string name="discover_hashtags">热门话题标签</string>
     <string name="search_users">用户</string>
+    <string name="search_dongqiudi_users">球员 / 球队</string>
     <string name="search_status">帖子</string>
     <string name="quick_menu_add_account">添加账户</string>
     <string name="settings_appearance_generic">通用</string>

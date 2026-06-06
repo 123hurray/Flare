@@ -1,5 +1,7 @@
 package dev.dimension.flare.ui.screen.home
 
+import android.app.DatePickerDialog
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.animateFloatAsState
@@ -81,6 +83,7 @@ import dev.dimension.flare.common.onSuccess
 import dev.dimension.flare.data.model.BottomBarBehavior
 import dev.dimension.flare.data.model.LocalAppearanceSettings
 import dev.dimension.flare.data.model.TimelineTabItem
+import dev.dimension.flare.data.model.Zhihu
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.ui.component.AvatarComponent
 import dev.dimension.flare.ui.component.FAIcon
@@ -107,6 +110,8 @@ import dev.dimension.flare.ui.presenter.home.LoggedInPresenter
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.presenter.rememberTimelineItemPresenterWithLazyListState
 import dev.dimension.flare.ui.theme.screenHorizontalPadding
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -131,6 +136,8 @@ internal fun HomeTimelineScreen(
     }
     val loggedInState = remember { LoggedInPresenter() }.invoke()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var zhihuDailyDates by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     val topAppBarScrollBehavior =
         if (LocalAppearanceSettings.current.bottomBarBehavior == BottomBarBehavior.AlwaysShow) {
@@ -246,6 +253,36 @@ internal fun HomeTimelineScreen(
                     }
                 },
                 actions = {
+                    state.pagerState.onSuccess { pagerState ->
+                        state.tabState.onSuccess { tabs ->
+                            val selectedPage by remember(pagerState, tabs.size) {
+                                derivedStateOf {
+                                    if (tabs.isEmpty()) {
+                                        0
+                                    } else {
+                                        pagerState.currentPage.coerceIn(0, tabs.lastIndex)
+                                    }
+                                }
+                            }
+                            val dailyTab = tabs.getOrNull(selectedPage) as? Zhihu.DailyTimelineTabItem
+                            if (dailyTab != null) {
+                                val dateStateKey = dailyTab.dateStateKey()
+                                val selectedDate = zhihuDailyDates[dateStateKey] ?: dailyTab.date
+                                TextButton(
+                                    onClick = {
+                                        showZhihuDailyDatePicker(
+                                            context = context,
+                                            initialDate = selectedDate,
+                                        ) { date ->
+                                            zhihuDailyDates = zhihuDailyDates + (dateStateKey to date)
+                                        }
+                                    },
+                                ) {
+                                    Text(text = selectedDate?.displayZhihuDailyDate() ?: "日期")
+                                }
+                            }
+                        }
+                    }
                     IconButton(
                         onClick = {
                             toTabSettings.invoke()
@@ -316,10 +353,10 @@ internal fun HomeTimelineScreen(
                 HorizontalPager(
                     state = pagerState,
                     key = { index ->
-                        tabState.getOrNull(index)?.key ?: "timeline_$index"
+                        tabState.getOrNull(index)?.withZhihuDailyDate(zhihuDailyDates)?.key ?: "timeline_$index"
                     },
                 ) { index ->
-                    val item = tabState.getOrNull(index)
+                    val item = tabState.getOrNull(index)?.withZhihuDailyDate(zhihuDailyDates)
                     if (item != null) {
                         TimelineItemContent(
                             item = item,
@@ -539,6 +576,42 @@ private fun TimelineTabFanButton(
 }
 
 private fun Int.floorMod(size: Int): Int = ((this % size) + size) % size
+
+private fun TimelineTabItem.withZhihuDailyDate(dates: Map<String, String>): TimelineTabItem =
+    if (this is Zhihu.DailyTimelineTabItem) {
+        withDate(dates[dateStateKey()] ?: date)
+    } else {
+        this
+    }
+
+private fun Zhihu.DailyTimelineTabItem.dateStateKey(): String = "zhihu_daily_$account"
+
+private fun showZhihuDailyDatePicker(
+    context: Context,
+    initialDate: String?,
+    onSelected: (String) -> Unit,
+) {
+    val date = initialDate?.toZhihuDailyLocalDateOrNull() ?: LocalDate.now()
+    DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth ->
+            onSelected(LocalDate.of(year, month + 1, dayOfMonth).format(DateTimeFormatter.BASIC_ISO_DATE))
+        },
+        date.year,
+        date.monthValue - 1,
+        date.dayOfMonth,
+    ).show()
+}
+
+private fun String.displayZhihuDailyDate(): String =
+    toZhihuDailyLocalDateOrNull()
+        ?.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        ?: this
+
+private fun String.toZhihuDailyLocalDateOrNull(): LocalDate? =
+    runCatching {
+        LocalDate.parse(filter { it.isDigit() }, DateTimeFormatter.BASIC_ISO_DATE)
+    }.getOrNull()
 
 @Composable
 internal fun TimelineItemContent(

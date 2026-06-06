@@ -2,10 +2,15 @@ package dev.dimension.flare.data.datasource.dongqiudi
 
 import dev.dimension.flare.data.datasource.microblog.ActionMenu
 import dev.dimension.flare.data.network.dongqiudi.DongqiudiArticle
+import dev.dimension.flare.data.network.dongqiudi.DongqiudiArticleMedia
 import dev.dimension.flare.data.network.dongqiudi.DongqiudiAttachment
 import dev.dimension.flare.data.network.dongqiudi.DongqiudiComment
 import dev.dimension.flare.data.network.dongqiudi.DongqiudiCommentUser
+import dev.dimension.flare.data.network.dongqiudi.DongqiudiGifMedia
+import dev.dimension.flare.data.network.dongqiudi.DongqiudiRelatedEntity
 import dev.dimension.flare.data.network.dongqiudi.DongqiudiUser
+import dev.dimension.flare.data.network.dongqiudi.DongqiudiUserType
+import dev.dimension.flare.data.network.dongqiudi.DongqiudiVideoMedia
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.model.PlatformType
@@ -50,7 +55,7 @@ internal fun DongqiudiArticle.toUiTimeline(
                 .toUiPlainText(sourceLanguages)
     val images =
         if (detail) {
-            emptyList()
+            medias.filterIsInstance<DongqiudiVideoMedia>().map { it.toUiMedia() }
         } else {
             thumbnail?.let {
                 listOf(
@@ -111,6 +116,12 @@ internal fun DongqiudiArticle.toUiTimeline(
                 ),
             ),
         poll = null,
+        relatedProfiles =
+            if (detail) {
+                relatedEntities.map { it.toUiProfile(accountKey) }.toImmutableList()
+            } else {
+                persistentListOf()
+            },
         statusKey = statusKey,
         card = null,
         createdAt = UiDateTime(Instant.fromEpochMilliseconds(showTime.coerceAtLeast(0L) * 1000L)),
@@ -197,11 +208,25 @@ internal fun DongqiudiUser.toUiProfile(
     accountKey: MicroBlogKey,
     requestedId: String? = null,
 ): UiProfile {
-    val userId = id.ifBlank { requestedId ?: "dongqiudi" }
+    val userId = profileKeyId(requestedId)
     val userKey = MicroBlogKey(userId, dongqiudiWebHost)
+    val profileDescription =
+        listOfNotNull(
+            description.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
     return UiProfile(
         key = userKey,
-        handle = UiHandle(userId, "dongqiudi"),
+        handle =
+            UiHandle(
+                raw =
+                    when (type) {
+                        DongqiudiUserType.User -> id.ifBlank { requestedId ?: "dongqiudi" }
+                        DongqiudiUserType.Player,
+                        DongqiudiUserType.Team,
+                        -> ""
+                    },
+                host = "dongqiudi",
+            ),
         avatar = avatar,
         nameInternal = name.ifBlank { "懂球帝" }.toUiPlainText(sourceLanguages),
         platformType = PlatformType.Dongqiudi,
@@ -213,7 +238,7 @@ internal fun DongqiudiUser.toUiProfile(
                 ),
             ),
         banner = null,
-        description = description.takeIf { it.isNotBlank() }?.toUiPlainText(sourceLanguages),
+        description = profileDescription.takeIf { it.isNotBlank() }?.toUiPlainText(sourceLanguages),
         sourceLanguages = sourceLanguages.toImmutableList(),
         matrices =
             UiProfile.Matrices(
@@ -223,6 +248,50 @@ internal fun DongqiudiUser.toUiProfile(
             ),
         mark = persistentListOf(),
         bottomContent = null,
+    )
+}
+
+private fun DongqiudiRelatedEntity.toUiProfile(accountKey: MicroBlogKey): UiProfile =
+    DongqiudiUser(
+        id = id,
+        name = name,
+        avatar = avatar,
+        description = "",
+        fansCount = 0L,
+        followsCount = 0L,
+        statusesCount = 0L,
+        type = type,
+    ).toUiProfile(accountKey)
+
+internal data class DongqiudiProfileEntity(
+    val type: DongqiudiUserType,
+    val id: String,
+    val name: String,
+)
+
+internal fun DongqiudiUser.profileKeyId(requestedId: String? = null): String =
+    when (type) {
+        DongqiudiUserType.User -> id.ifBlank { requestedId ?: "dongqiudi" }
+        DongqiudiUserType.Player -> "dqdp_${id}_${name.ifBlank { id }}"
+        DongqiudiUserType.Team -> "dqdt_${id}_${name.ifBlank { id }}"
+    }
+
+internal fun String.dongqiudiProfileEntity(): DongqiudiProfileEntity? {
+    val type =
+        when {
+            startsWith("dqdp_") -> DongqiudiUserType.Player
+            startsWith("dqdt_") -> DongqiudiUserType.Team
+            else -> return null
+        }
+    val payload = removePrefix(if (type == DongqiudiUserType.Player) "dqdp_" else "dqdt_")
+    val separator = payload.indexOf('_')
+    if (separator <= 0) return null
+    val id = payload.substring(0, separator).takeIf { it.isNotBlank() } ?: return null
+    val name = payload.substring(separator + 1).takeIf { it.isNotBlank() } ?: id
+    return DongqiudiProfileEntity(
+        type = type,
+        id = id,
+        name = name,
     )
 }
 
@@ -252,11 +321,85 @@ private fun DongqiudiAttachment.toUiMedia(): UiMedia.Image =
         sensitive = false,
     )
 
+private fun DongqiudiArticleMedia.toUiMedia(): UiMedia =
+    when (this) {
+        is DongqiudiVideoMedia ->
+            UiMedia.Video(
+                url = url,
+                thumbnailUrl = thumb,
+                description = title,
+                height = height.toFloat(),
+                width = width.toFloat(),
+                variants =
+                    listOf(
+                        UiMedia.VideoVariant(
+                            url = url,
+                            width = width.toFloat(),
+                            height = height.toFloat(),
+                        ),
+                    ),
+            )
+        is DongqiudiGifMedia ->
+            UiMedia.Gif(
+                url = url,
+                previewUrl = preview,
+                description = title,
+                height = height.toFloat(),
+                width = width.toFloat(),
+            )
+    }
+
 private fun String.toArticleHtml(): String =
-    replace("data-src=", "src=")
+    replace(dongqiudiVideoNodeRegex, "")
+        .replace(dongqiudiImageTagRegex) { match ->
+            val attrs = match.value.htmlAttrs()
+            val gifUrl =
+                listOf(
+                    attrs["data-gif-src"],
+                    attrs["gif-src"],
+                    attrs["data-original-gif"],
+                    attrs["src"]?.takeIf { it.substringBefore("?").endsWith(".gif", ignoreCase = true) },
+                    attrs["data-src"]?.takeIf { it.substringBefore("?").endsWith(".gif", ignoreCase = true) },
+                ).firstOrNull { !it.isNullOrBlank() }?.decodeHtmlEntities()
+            if (gifUrl.isNullOrBlank()) {
+                match.value
+            } else {
+                val alt = attrs["alt"]?.decodeHtmlEntities()?.takeIf { it.isNotBlank() } ?: "GIF"
+                """<img src="${gifUrl.escapeHtml()}#flare-gif" alt="${alt.escapeHtml()}">"""
+            }
+        }
+        .replace("data-src=", "src=")
         .replace(
             Regex("<p>\\s*(<img\\b[^>]*?/?>)\\s*</p>", RegexOption.IGNORE_CASE),
             "<figure>${'$'}1</figure>",
         )
+
+private fun String.escapeHtml(): String =
+    replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
+
+private val dongqiudiVideoNodeRegex =
+    Regex("""<div\b[^>]*class\s*=\s*["'][^"']*\bvideo\b[^"']*["'][^>]*>\s*</div>""", RegexOption.IGNORE_CASE)
+
+private val dongqiudiImageTagRegex =
+    Regex("""<img\b[^>]*>""", RegexOption.IGNORE_CASE)
+
+private val htmlAttrRegex =
+    Regex("""([\w:-]+)\s*=\s*(['"])(.*?)\2""")
+
+private fun String.htmlAttrs(): Map<String, String> =
+    htmlAttrRegex
+        .findAll(this)
+        .associate { it.groupValues[1].lowercase() to it.groupValues[3] }
+
+private fun String.decodeHtmlEntities(): String =
+    replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
 
 private val sourceLanguages = listOf("zh-CN")

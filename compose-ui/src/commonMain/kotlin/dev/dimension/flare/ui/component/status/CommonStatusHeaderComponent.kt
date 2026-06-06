@@ -62,22 +62,34 @@ public fun CommonStatusHeaderComponent(
             )
         },
         supportingContent = {
-            PlatformText(
-                text = data.handle.canonical,
-                style = PlatformTheme.typography.caption,
-                color = PlatformTheme.colorScheme.caption,
-                modifier =
-                    Modifier
-                        .pointerHoverIcon(PointerIcon.Hand)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) {
-                            onUserClick(data.key)
-                        },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (data.handle.raw.isNotBlank()) {
+                PlatformText(
+                    text = data.handle.canonical,
+                    style = PlatformTheme.typography.caption,
+                    color = PlatformTheme.colorScheme.caption,
+                    modifier =
+                        Modifier
+                            .pointerHoverIcon(PointerIcon.Hand)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) {
+                                onUserClick(data.key)
+                            },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                data.description?.let {
+                    RichText(
+                        text = it,
+                        color = PlatformTheme.colorScheme.caption,
+                        textStyle = PlatformTheme.typography.caption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         },
         trailingContent = trailing,
         modifier = modifier,

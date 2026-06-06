@@ -341,6 +341,7 @@ private fun ZhihuContent.shareUrl(): String =
     url ?: when (type) {
         ZhihuContentType.Answer -> "https://$zhihuWebHost/question/${questionId.orEmpty()}/answer/$id"
         ZhihuContentType.Article -> "https://zhuanlan.zhihu.com/p/$id"
+        ZhihuContentType.Daily -> "https://daily.zhihu.com/story/$id"
         ZhihuContentType.Pin -> "https://$zhihuWebHost/pin/$id"
         ZhihuContentType.Question -> "https://$zhihuWebHost/question/$id"
     }

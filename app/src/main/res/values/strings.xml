@@ -209,6 +209,7 @@
     <string name="discover_hashtags">Trending Hashtags</string>
 
     <string name="search_users">Users</string>
+    <string name="search_dongqiudi_users">Players / Teams</string>
     <string name="search_status">Post</string>
 
     <string name="quick_menu_add_account">Add account</string>

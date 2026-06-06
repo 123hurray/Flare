@@ -56,7 +56,7 @@ internal class VVOService(
             chocolate
                 .split(';')
                 .mapNotNull {
-                    val res = it.split('=')
+                    val res = it.split('=', limit = 2)
                     val key = res.getOrNull(0)?.trim()
                     val value = res.getOrNull(1)?.trim()
                     if (key != null && value != null) {
@@ -66,7 +66,9 @@ internal class VVOService(
                     }
                 }.toMap()
                 .let {
-                    it.containsKey("MLOGIN") && it["MLOGIN"] == "1"
+                    it["MLOGIN"] == "1" &&
+                        it["SUB"].isNullOrBlank().not() &&
+                        it["XSRF-TOKEN"].isNullOrBlank().not()
                 }
     }
 

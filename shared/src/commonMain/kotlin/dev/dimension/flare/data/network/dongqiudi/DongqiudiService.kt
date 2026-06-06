@@ -74,22 +74,79 @@ internal class DongqiudiService {
         )
     }
 
+    suspend fun entityArticles(
+        type: DongqiudiUserType,
+        id: String,
+        nextUrl: String? = null,
+    ): DongqiudiTimelinePage {
+        val feedType =
+            when (type) {
+                DongqiudiUserType.Player -> "person"
+                DongqiudiUserType.Team -> "team"
+                DongqiudiUserType.User -> error("Dongqiudi user article feed is not supported")
+            }
+        val root =
+            requestJson(
+                nextUrl
+                    ?: "https://api.dongqiudi.com/v3/archive/app/channel/feeds?id=$id&type=$feedType&size=20&platform=web&version=100",
+            )
+        val data = root["data"].objectOrNull() ?: return DongqiudiTimelinePage(emptyList(), null)
+        return DongqiudiTimelinePage(
+            items =
+                data["articles"]
+                    .arrayOrEmpty()
+                    .mapNotNull { it.objectOrNull()?.toArticleSummary() },
+            nextUrl = data.string("next"),
+        )
+    }
+
     suspend fun searchUsers(
         query: String,
         page: Int,
     ): DongqiudiUserPage {
+        val players =
+            searchEntitiesByTypeOrEmpty(query, page, "player", "players") {
+                it.toSearchPlayer()
+            }
+        val teams =
+            searchEntitiesByTypeOrEmpty(query, page, "team", "teams") {
+                it.toSearchTeam()
+            }
+        val items = players + teams
+        return DongqiudiUserPage(
+            items = items,
+            nextPage = if (items.isEmpty()) null else page + 1,
+        )
+    }
+
+    private suspend fun searchEntitiesByTypeOrEmpty(
+        query: String,
+        page: Int,
+        type: String,
+        field: String,
+        mapper: (JsonObject) -> DongqiudiUser?,
+    ): List<DongqiudiUser> =
+        runCatching {
+            searchEntitiesByType(query, page, type, field, mapper)
+        }.getOrElse {
+            println("DongqiudiService: search $type unavailable query=$query page=$page message=${it.message}")
+            emptyList()
+        }
+
+    private suspend fun searchEntitiesByType(
+        query: String,
+        page: Int,
+        type: String,
+        field: String,
+        mapper: (JsonObject) -> DongqiudiUser?,
+    ): List<DongqiudiUser> {
         val root =
             requestJson(
-                "https://api.dongqiudi.com/search?keywords=${query.encodeURLParameter()}&type=user&page=$page",
+                "https://api.dongqiudi.com/search?keywords=${query.encodeURLParameter()}&type=$type&page=$page",
             )
-        val users =
-            root["users"]
-                .arrayOrEmpty()
-                .mapNotNull { it.objectOrNull()?.toSearchUser() }
-        return DongqiudiUserPage(
-            items = users,
-            nextPage = if (users.isEmpty()) null else page + 1,
-        )
+        return root[field]
+            .arrayOrEmpty()
+            .mapNotNull { it.objectOrNull()?.let(mapper) }
     }
 
     suspend fun hotComments(articleId: String): List<DongqiudiComment> {
@@ -216,12 +273,13 @@ internal class DongqiudiService {
             shareUrl = string("share"),
         )
 
-    private fun JsonObject.toArticleDetail(): DongqiudiArticle =
-        DongqiudiArticle(
+    private fun JsonObject.toArticleDetail(): DongqiudiArticle {
+        val body = string("body")
+        return DongqiudiArticle(
             id = string("article_id").orEmpty(),
             title = string("title").orEmpty(),
             description = string("description").orEmpty(),
-            bodyHtml = string("body"),
+            bodyHtml = body,
             thumbnail = null,
             commentsTotal = long("comments_total") ?: 0L,
             showTime = long("show_time") ?: 0L,
@@ -229,7 +287,15 @@ internal class DongqiudiService {
             userId = string("user_id") ?: string("showid") ?: string("writer_url")?.substringAfterLast("/") ?: "dongqiudi",
             authorAvatar = string("author_avatar").orEmpty(),
             shareUrl = "https://www.dongqiudi.com/article/${string("article_id").orEmpty()}",
+            medias = body.orEmpty().toArticleMedias(),
+            relatedEntities =
+                get("infos")
+                    .objectOrNull()
+                    ?.get("channels")
+                    .arrayOrEmpty()
+                    .mapNotNull { it.objectOrNull()?.toRelatedEntity() },
         )
+    }
 
     private fun JsonObject.toUserProfile(): DongqiudiUser =
         DongqiudiUser(
@@ -251,16 +317,74 @@ internal class DongqiudiService {
             )
     }
 
-    private fun JsonObject.toSearchUser(): DongqiudiUser? {
-        val id = string("id")?.takeIf { it.isNotBlank() } ?: return null
+    private fun JsonObject.toSearchPlayer(): DongqiudiUser? {
+        val id = string("person_id")?.takeIf { it.isNotBlank() } ?: return null
+        val name = (string("person_name") ?: id).stripDongqiudiHighlightHtml()
+        val category =
+            when (string("type")) {
+                "coach" -> "教练"
+                "player" -> "球员"
+                else -> string("position")?.takeIf { it.isNotBlank() }
+            }
+        val description =
+            listOfNotNull(
+                string("team")?.takeIf { it.isNotBlank() },
+                long("age")?.takeIf { it > 0L }?.let { "${it}岁" },
+                category,
+            ).joinToString(" · ")
         return DongqiudiUser(
             id = id,
-            name = (string("username") ?: string("name") ?: id).stripDongqiudiHighlightHtml(),
-            avatar = string("avatar").orEmpty(),
-            description = string("region").orEmpty(),
+            name = name,
+            avatar = string("person_img").orEmpty(),
+            description = description,
             fansCount = 0L,
             followsCount = 0L,
-            statusesCount = long("up_total") ?: 0L,
+            statusesCount = 0L,
+            type = DongqiudiUserType.Player,
+        )
+    }
+
+    private fun JsonObject.toRelatedEntity(): DongqiudiRelatedEntity? {
+        val href = string("href").orEmpty()
+        val type =
+            when {
+                href.contains("/player/") -> DongqiudiUserType.Player
+                href.contains("/team/") -> DongqiudiUserType.Team
+                else -> return null
+            }
+        val id =
+            href.substringAfter(if (type == DongqiudiUserType.Player) "/player/" else "/team/")
+                .substringBefore("?")
+                .substringBefore("/")
+                .takeIf { it.isNotBlank() }
+                ?: return null
+        val name = string("tag")?.takeIf { it.isNotBlank() } ?: return null
+        return DongqiudiRelatedEntity(
+            type = type,
+            id = id,
+            name = name,
+            avatar = string("thumb").orEmpty(),
+        )
+    }
+
+    private fun JsonObject.toSearchTeam(): DongqiudiUser? {
+        val id = string("team_id")?.takeIf { it.isNotBlank() } ?: return null
+        val name = (string("team_name") ?: id).stripDongqiudiHighlightHtml()
+        val description =
+            listOfNotNull(
+                string("team_en_name")?.takeIf { it.isNotBlank() }?.stripDongqiudiHighlightHtml(),
+                string("country")?.takeIf { it.isNotBlank() },
+                string("venue_name")?.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+        return DongqiudiUser(
+            id = id,
+            name = name,
+            avatar = string("team_img").orEmpty(),
+            description = description,
+            fansCount = 0L,
+            followsCount = 0L,
+            statusesCount = 0L,
+            type = DongqiudiUserType.Team,
         )
     }
 
@@ -365,6 +489,38 @@ internal data class DongqiudiArticle(
     val userId: String,
     val authorAvatar: String,
     val shareUrl: String?,
+    val medias: List<DongqiudiArticleMedia> = emptyList(),
+    val relatedEntities: List<DongqiudiRelatedEntity> = emptyList(),
+)
+
+internal sealed interface DongqiudiArticleMedia {
+    val url: String
+    val title: String?
+    val width: Long
+    val height: Long
+}
+
+internal data class DongqiudiVideoMedia(
+    override val url: String,
+    val thumb: String,
+    override val title: String?,
+    override val width: Long,
+    override val height: Long,
+) : DongqiudiArticleMedia
+
+internal data class DongqiudiGifMedia(
+    override val url: String,
+    val preview: String,
+    override val title: String?,
+    override val width: Long,
+    override val height: Long,
+) : DongqiudiArticleMedia
+
+internal data class DongqiudiRelatedEntity(
+    val type: DongqiudiUserType,
+    val id: String,
+    val name: String,
+    val avatar: String,
 )
 
 internal data class DongqiudiUser(
@@ -375,7 +531,14 @@ internal data class DongqiudiUser(
     val fansCount: Long,
     val followsCount: Long,
     val statusesCount: Long,
+    val type: DongqiudiUserType = DongqiudiUserType.User,
 )
+
+internal enum class DongqiudiUserType {
+    User,
+    Player,
+    Team,
+}
 
 internal data class DongqiudiComment(
     val id: String,
@@ -405,6 +568,72 @@ private const val DONGQIUDI_USER_AGENT = "Dongqiudi/8.4.0 Android"
 
 private fun String.stripDongqiudiHighlightHtml(): String =
     replace(Regex("</?(?:font|em)\\b[^>]*>", RegexOption.IGNORE_CASE), "")
+
+private fun String.toArticleMedias(): List<DongqiudiArticleMedia> {
+    val videos =
+        dongqiudiVideoTagRegex
+            .findAll(this)
+            .mapNotNull { match ->
+                val attrs = match.value.htmlAttrs()
+                val url = attrs["src"]?.decodeHtmlEntities()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                DongqiudiVideoMedia(
+                    url = url,
+                    thumb = attrs["thumb"]?.decodeHtmlEntities()?.takeIf { it.isNotBlank() } ?: url,
+                    title = attrs["title"]?.decodeHtmlEntities(),
+                    width = attrs["data-width"]?.toLongOrNull() ?: attrs["width"]?.toLongOrNull() ?: 0L,
+                    height = attrs["data-height"]?.toLongOrNull() ?: attrs["height"]?.toLongOrNull() ?: 0L,
+                )
+            }
+            .toList()
+    val gifs =
+        dongqiudiImageTagRegex
+            .findAll(this)
+            .mapNotNull { match ->
+                val attrs = match.value.htmlAttrs()
+                val url =
+                    listOf(
+                        attrs["data-gif-src"],
+                        attrs["gif-src"],
+                        attrs["data-original-gif"],
+                        attrs["src"]?.takeIf { it.substringBefore("?").endsWith(".gif", ignoreCase = true) },
+                        attrs["data-src"]?.takeIf { it.substringBefore("?").endsWith(".gif", ignoreCase = true) },
+                    ).firstOrNull { !it.isNullOrBlank() }?.decodeHtmlEntities() ?: return@mapNotNull null
+                DongqiudiGifMedia(
+                    url = url,
+                    preview =
+                        listOf(attrs["orig-src"], attrs["data-src"], attrs["src"])
+                            .firstOrNull { !it.isNullOrBlank() }
+                            ?.decodeHtmlEntities()
+                            ?: url,
+                    title = attrs["alt"]?.decodeHtmlEntities(),
+                    width = attrs["width"]?.toLongOrNull() ?: attrs["data-width"]?.toLongOrNull() ?: 0L,
+                    height = attrs["height"]?.toLongOrNull() ?: attrs["data-height"]?.toLongOrNull() ?: 0L,
+                )
+            }
+            .toList()
+    return (videos + gifs).distinctBy { it.url }
+}
+
+private fun String.htmlAttrs(): Map<String, String> =
+    htmlAttrRegex
+        .findAll(this)
+        .associate { it.groupValues[1].lowercase() to it.groupValues[3] }
+
+private fun String.decodeHtmlEntities(): String =
+    replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+
+private val dongqiudiVideoTagRegex =
+    Regex("""<div\b[^>]*class\s*=\s*["'][^"']*\bvideo\b[^"']*["'][^>]*>""", RegexOption.IGNORE_CASE)
+
+private val dongqiudiImageTagRegex =
+    Regex("""<img\b[^>]*>""", RegexOption.IGNORE_CASE)
+
+private val htmlAttrRegex =
+    Regex("""([\w:-]+)\s*=\s*(['"])(.*?)\2""")
 
 private fun JsonObject.string(key: String): String? =
     when (val primitive = get(key) as? JsonPrimitive) {

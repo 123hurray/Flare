@@ -41,6 +41,7 @@ import dev.dimension.flare.common.onSuccess
 import dev.dimension.flare.data.datasource.xiaohongshu.cacheXhsNoteContext
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
+import dev.dimension.flare.model.dongqiudiWebHost
 import dev.dimension.flare.model.vvoHost
 import dev.dimension.flare.model.xiaohongshuWebHost
 import dev.dimension.flare.ui.common.items
@@ -88,6 +89,7 @@ internal fun DiscoverScreen(
     val lazyListState = rememberLazyStaggeredGridState()
     val accountListState = rememberLazyListState()
     val accounts = rememberLatestAccounts(state.accounts)
+    val dongqiudiSearchUsersTitle = stringResource(R.string.search_dongqiudi_users)
     LaunchedEffect(accounts, state.selectedAccount?.key) {
         val selectedKey = state.selectedAccount?.key ?: return@LaunchedEffect
         val selectedIndex = accounts?.indexOfFirst { it.key == selectedKey } ?: -1
@@ -230,6 +232,12 @@ internal fun DiscoverScreen(
                                     onUserClick(AccountType.Specific(account.key), key)
                                 }
                             },
+                            searchUsersTitle =
+                                if (selectedSearchHost == dongqiudiWebHost) {
+                                    dongqiudiSearchUsersTitle
+                                } else {
+                                    null
+                                },
                         )
                     } else {
                         if (state.users.isLoading || state.users.isSuccess()) {

@@ -9,6 +9,7 @@ import dev.dimension.flare.data.model.TabItem
 import dev.dimension.flare.data.model.TabMetaData
 import dev.dimension.flare.data.model.TimelineTabItem
 import dev.dimension.flare.data.model.TitleType
+import dev.dimension.flare.data.model.Zhihu
 import dev.dimension.flare.data.network.nodeinfo.PlatformDetector
 import dev.dimension.flare.data.network.zhihu.ZhihuPlatformDetector
 import dev.dimension.flare.model.AccountType
@@ -63,9 +64,27 @@ internal data object ZhihuPlatformSpec : PlatformSpec {
                         icon = IconType.Material(UiIcon.Feeds),
                     ),
             ),
+            Zhihu.DailyTimelineTabItem(
+                account = AccountType.Specific(accountKey),
+                metaData =
+                    TabMetaData(
+                        title = TitleType.Text("知乎日报"),
+                        icon = IconType.Material(UiIcon.Feeds),
+                    ),
+            ),
         )
 
-    override fun secondary(accountKey: MicroBlogKey): ImmutableList<TabItem> = persistentListOf()
+    override fun secondary(accountKey: MicroBlogKey): ImmutableList<TabItem> =
+        persistentListOf(
+            Zhihu.DailyTimelineTabItem(
+                account = AccountType.Specific(accountKey),
+                metaData =
+                    TabMetaData(
+                        title = TitleType.Text("知乎日报"),
+                        icon = IconType.Material(UiIcon.Feeds),
+                    ),
+            ),
+        )
 
     override suspend fun instanceMetadata(host: String): UiInstanceMetadata =
         throw UnsupportedOperationException("${type.name} is not supported yet")

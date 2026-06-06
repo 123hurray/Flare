@@ -31,6 +31,7 @@ import dev.dimension.flare.ui.presenter.home.rss.RssTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.rss.SubscriptionTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.vvo.VVOFavouriteTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.vvo.VVOLikeTimelinePresenter
+import dev.dimension.flare.ui.presenter.home.zhihu.ZhihuDailyTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.jike.JikeBookmarkTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.jike.JikeFeaturedTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.jike.JikeTopicTimelinePresenter
@@ -786,6 +787,24 @@ public object Instagram {
         override fun createPresenter(): TimelinePresenter = InstagramRecommendedTimelinePresenter(account)
 
         override fun update(metaData: TabMetaData): TabItem = copy(metaData = metaData)
+    }
+}
+
+public object Zhihu {
+    @Immutable
+    @Serializable
+    public data class DailyTimelineTabItem(
+        override val account: AccountType,
+        val date: String? = null,
+        override val metaData: TabMetaData,
+    ) : TimelineTabItem() {
+        override val key: String = "zhihu_daily_${date ?: "latest"}_$account"
+
+        override fun createPresenter(): TimelinePresenter = ZhihuDailyTimelinePresenter(account, date)
+
+        override fun update(metaData: TabMetaData): TabItem = copy(metaData = metaData)
+
+        public fun withDate(date: String?): DailyTimelineTabItem = copy(date = date?.takeIf { it.isNotBlank() })
     }
 }
 

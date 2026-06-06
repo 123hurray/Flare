@@ -96,7 +96,14 @@ internal class DongqiudiDataSource(
     override fun userTimeline(
         userKey: MicroBlogKey,
         mediaOnly: Boolean,
-    ): RemoteLoader<UiTimelineV2> = notSupported()
+    ): RemoteLoader<UiTimelineV2> =
+        userKey.id.dongqiudiProfileEntity()?.let { entity ->
+            DongqiudiEntityTimelineRemoteLoader(
+                accountKey = accountKey,
+                service = service,
+                entity = entity,
+            )
+        } ?: notSupported()
 
     override fun searchStatus(query: String): RemoteLoader<UiTimelineV2> =
         DongqiudiSearchStatusRemoteLoader(
@@ -163,6 +170,18 @@ private class DongqiudiLoader(
     override suspend fun userByHandleAndHost(uiHandle: UiHandle): UiProfile = userById(uiHandle.normalizedRaw)
 
     override suspend fun userById(id: String): UiProfile {
+        id.dongqiudiProfileEntity()?.let { entity ->
+            return DongqiudiUser(
+                id = entity.id,
+                name = entity.name,
+                avatar = "",
+                description = "",
+                fansCount = 0L,
+                followsCount = 0L,
+                statusesCount = 0L,
+                type = entity.type,
+            ).toUiProfile(accountKey, requestedId = id)
+        }
         if (id == "anonymous" || id == "dongqiudi") {
             return DongqiudiUser(
                 id = id,
@@ -179,6 +198,32 @@ private class DongqiudiLoader(
 
     override suspend fun deleteStatus(statusKey: MicroBlogKey) {
         throw UnsupportedOperationException("Dongqiudi delete is not supported")
+    }
+}
+
+private class DongqiudiEntityTimelineRemoteLoader(
+    private val accountKey: MicroBlogKey,
+    private val service: DongqiudiService,
+    private val entity: DongqiudiProfileEntity,
+) : RemoteLoader<UiTimelineV2> {
+    override suspend fun load(
+        pageSize: Int,
+        request: PagingRequest,
+    ): PagingResult<UiTimelineV2> {
+        if (request is PagingRequest.Prepend) {
+            return PagingResult(endOfPaginationReached = true)
+        }
+        val page = service.entityArticles(entity.type, entity.id, (request as? PagingRequest.Append)?.nextKey)
+        val items =
+            page.items
+                .filter { it.id.isNotBlank() }
+                .map { it.withResolvedAuthor(service) }
+                .map { it.toUiTimeline(accountKey, detail = false) }
+        return PagingResult(
+            data = items,
+            nextKey = page.nextUrl,
+            endOfPaginationReached = page.nextUrl.isNullOrBlank() || items.isEmpty(),
+        )
     }
 }
 

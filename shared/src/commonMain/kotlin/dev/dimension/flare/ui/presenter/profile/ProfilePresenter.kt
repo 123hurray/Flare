@@ -80,7 +80,9 @@ public class ProfilePresenter(
 
     private val relationStateFlow by lazy {
         serviceFlow.flatMapLatest { service ->
-            require(service is RelationDataSource)
+            if (service !is RelationDataSource) {
+                return@flatMapLatest flowOf(UiState.Success(UiRelation()))
+            }
             val actualUserKey =
                 userKey ?: if (service is AuthenticatedMicroblogDataSource) {
                     service.accountKey
@@ -89,7 +91,7 @@ public class ProfilePresenter(
                 } ?: run {
                     throw NoActiveAccountException
                 }
-            (service as RelationDataSource).relationHandler.relation(actualUserKey).toUi()
+            service.relationHandler.relation(actualUserKey).toUi()
         }
     }
 
