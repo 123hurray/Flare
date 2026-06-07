@@ -91,6 +91,7 @@ public data class AppSettings(
             level = DeprecationLevel.ERROR,
         )
         val preTranslation: Boolean = false,
+        val agentPrompt: String = AiPromptDefaults.AGENT_PROMPT,
     ) {
         public companion object {
             // for iOS

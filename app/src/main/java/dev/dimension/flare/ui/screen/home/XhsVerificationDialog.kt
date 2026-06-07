@@ -36,6 +36,7 @@ import dev.dimension.flare.model.xiaohongshuWebHost
 import dev.dimension.flare.ui.presenter.home.DiscoverState
 import dev.dimension.flare.ui.presenter.home.SearchState
 import dev.dimension.flare.ui.presenter.home.XhsVerificationPresenter
+import dev.dimension.flare.ui.presenter.TimelineItemPresenter
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.screen.serviceselect.XHS_LOGIN_USER_AGENT
 import dev.dimension.flare.ui.screen.serviceselect.hasAuthenticatedXhsCookie
@@ -203,6 +204,13 @@ internal suspend fun DiscoverState.refreshAfterXhsVerificationSuspend() {
     users.refreshAfterXhsVerification()
     status.refreshAfterXhsVerification()
     hashtags.refreshAfterXhsVerification()
+}
+
+internal fun TimelineItemPresenter.State.xhsVerificationException(): XhsVerificationRequiredException? =
+    listState.xhsVerificationException()
+
+internal suspend fun TimelineItemPresenter.State.refreshAfterXhsVerificationSuspend() {
+    listState.refreshAfterXhsVerification()
 }
 
 private fun PagingState<*>.xhsVerificationException(): XhsVerificationRequiredException? =

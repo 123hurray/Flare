@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -40,6 +43,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,13 +70,17 @@ import compose.icons.fontawesomeicons.solid.Bars
 import compose.icons.fontawesomeicons.solid.Check
 import compose.icons.fontawesomeicons.solid.Plus
 import compose.icons.fontawesomeicons.solid.Trash
+import dev.dimension.flare.data.agent.AGENT_FAILURE_MESSAGE_PREFIX
 import dev.dimension.flare.data.agent.AgentConversationSummary
 import dev.dimension.flare.data.agent.AgentConversationItemView
 import dev.dimension.flare.data.agent.AgentNativeArtifact
 import dev.dimension.flare.data.agent.AgentSourceContext
 import dev.dimension.flare.data.agent.AgentTimelineItem
+import dev.dimension.flare.data.agent.AgentToolOption
 import dev.dimension.flare.data.agent.AgentToolActivityView
 import dev.dimension.flare.data.agent.toUiTimelinePost
+import dev.dimension.flare.data.network.xiaohongshu.XhsVerificationRequiredException
+import dev.dimension.flare.data.repository.VVOCaptchaRequiredException
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.component.BackButton
@@ -84,6 +92,8 @@ import dev.dimension.flare.ui.component.status.StatusItem
 import dev.dimension.flare.ui.presenter.agent.AgentChatPresenter
 import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.route.Route
+import dev.dimension.flare.ui.screen.home.VvoCaptchaDialog
+import dev.dimension.flare.ui.screen.home.XhsVerificationDialog
 import kotlin.time.Instant
 import moe.tlaster.precompose.molecule.producePresenter
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
@@ -175,6 +185,14 @@ internal fun AgentChatScreen(
     val topAppBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     var showConversationManager by remember { mutableStateOf(false) }
     var showPlatformPicker by remember { mutableStateOf(false) }
+    var editingPrompt by remember { mutableStateOf<AgentPromptEditTarget?>(null) }
+    var pendingVerification by remember { mutableStateOf<AgentNativeArtifact.VerificationRequiredRef?>(null) }
+    LaunchedEffect(state.streamingArtifacts) {
+        state.streamingArtifacts
+            .filterIsInstance<AgentNativeArtifact.VerificationRequiredRef>()
+            .lastOrNull()
+            ?.let { pendingVerification = it }
+    }
     Box(Modifier.fillMaxSize()) {
         FlareScaffold(
             topBar = {
@@ -231,10 +249,35 @@ internal fun AgentChatScreen(
                                         text = item.value.text,
                                         artifacts = item.value.artifacts,
                                         navigate = navigate,
+                                        onOpenVerification = { pendingVerification = it },
+                                        onEdit =
+                                            if (item.value.role == "user") {
+                                                {
+                                                    editingPrompt =
+                                                        AgentPromptEditTarget(
+                                                            messageId = item.value.id,
+                                                            text = item.value.text,
+                                                        )
+                                                }
+                                            } else {
+                                                null
+                                            },
+                                        onRetry =
+                                            if (item.value.role == "assistant" && item.value.text.startsWith(AGENT_FAILURE_MESSAGE_PREFIX)) {
+                                                {
+                                                    state.retry(item.value.id)
+                                                }
+                                            } else {
+                                                null
+                                            },
                                     )
 
                                 is AgentConversationItemView.ToolActivity ->
-                                    AgentToolActivityRow(item.value, navigate)
+                                    AgentToolActivityRow(
+                                        activity = item.value,
+                                        navigate = navigate,
+                                        onOpenVerification = { pendingVerification = it },
+                                    )
                             }
                         }
                         if (state.draftStreamingText.isNotBlank() || state.streamingArtifacts.isNotEmpty()) {
@@ -244,6 +287,7 @@ internal fun AgentChatScreen(
                                     text = state.draftStreamingText,
                                     artifacts = state.streamingArtifacts,
                                     navigate = navigate,
+                                    onOpenVerification = { pendingVerification = it },
                                 )
                             }
                         }
@@ -307,11 +351,84 @@ internal fun AgentChatScreen(
         AgentPlatformPickerDialog(
             availablePlatforms = state.availablePlatforms,
             selectedPlatforms = state.selectedPlatforms,
+            availableTools = state.availableTools,
+            selectedTools = state.selectedTools,
             onDismiss = { showPlatformPicker = false },
             onAllPlatforms = state::clearPlatforms,
             onTogglePlatform = state::togglePlatform,
+            onAllTools = state::clearTools,
+            onToggleTool = state::toggleTool,
         )
     }
+    pendingVerification?.let { artifact ->
+        when (artifact.platform) {
+            "微博" -> {
+                val key = artifact.accountKey
+                if (key != null) {
+                    VvoCaptchaDialog(
+                        exception = VVOCaptchaRequiredException(key, artifact.url),
+                        onDismiss = { pendingVerification = null },
+                        onVerified = { pendingVerification = null },
+                    )
+                } else {
+                    AgentVerificationUnavailableDialog(
+                        platform = artifact.platform,
+                        message = artifact.message,
+                        onDismiss = { pendingVerification = null },
+                    )
+                }
+            }
+
+            "小红书" -> {
+                XhsVerificationDialog(
+                    exception = XhsVerificationRequiredException(artifact.accountKey, artifact.message, artifact.url),
+                    onDismiss = { pendingVerification = null },
+                    onVerified = { pendingVerification = null },
+                )
+            }
+
+            else -> {
+                AgentVerificationUnavailableDialog(
+                    platform = artifact.platform,
+                    message = artifact.message,
+                    onDismiss = { pendingVerification = null },
+                )
+            }
+        }
+    }
+    editingPrompt?.let { target ->
+        AgentPromptEditDialog(
+            initialText = target.text,
+            onDismiss = { editingPrompt = null },
+            onConfirm = { newText ->
+                editingPrompt = null
+                state.editAndResend(target.messageId, newText)
+            },
+        )
+    }
+}
+
+private data class AgentPromptEditTarget(
+    val messageId: String,
+    val text: String,
+)
+
+@Composable
+private fun AgentVerificationUnavailableDialog(
+    platform: String,
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("$platform 验证") },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("知道了")
+            }
+        },
+    )
 }
 
 @Composable
@@ -477,9 +594,13 @@ private fun AgentPromptPill(
 private fun AgentPlatformPickerDialog(
     availablePlatforms: List<String>,
     selectedPlatforms: List<String>,
+    availableTools: List<AgentToolOption>,
+    selectedTools: List<String>,
     onDismiss: () -> Unit,
     onAllPlatforms: () -> Unit,
     onTogglePlatform: (String) -> Unit,
+    onAllTools: () -> Unit,
+    onToggleTool: (String) -> Unit,
 ) {
     Box(
         modifier =
@@ -499,12 +620,21 @@ private fun AgentPlatformPickerDialog(
                     .clickable { },
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                modifier =
+                    Modifier
+                        .heightIn(max = 560.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text(
-                    text = "搜索平台",
+                    text = "Agent 范围",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                )
+                Text(
+                    text = "平台",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -533,6 +663,55 @@ private fun AgentPlatformPickerDialog(
                             selected = selected,
                             onClick = { onTogglePlatform(platform) },
                             label = { Text(platform) },
+                            leadingIcon =
+                                if (selected) {
+                                    {
+                                        FAIcon(
+                                            imageVector = FontAwesomeIcons.Solid.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                        )
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text(
+                    text = "工具",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val allToolsSelected = selectedTools.size == availableTools.size
+                    FilterChip(
+                        selected = allToolsSelected,
+                        onClick = onAllTools,
+                        label = { Text("全部工具") },
+                        leadingIcon =
+                            if (allToolsSelected) {
+                                {
+                                    FAIcon(
+                                        imageVector = FontAwesomeIcons.Solid.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                    )
+                    availableTools.forEach { tool ->
+                        val selected = selectedTools.contains(tool.name)
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onToggleTool(tool.name) },
+                            label = { Text(tool.label) },
                             leadingIcon =
                                 if (selected) {
                                     {
@@ -702,6 +881,9 @@ private fun AgentMessageBubble(
     text: String,
     artifacts: List<AgentNativeArtifact>,
     navigate: (Route) -> Unit,
+    onOpenVerification: (AgentNativeArtifact.VerificationRequiredRef) -> Unit = {},
+    onEdit: (() -> Unit)? = null,
+    onRetry: (() -> Unit)? = null,
 ) {
     val isUser = role == "user"
     Column(
@@ -726,14 +908,74 @@ private fun AgentMessageBubble(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+            onEdit?.let {
+                TextButton(onClick = it) {
+                    Text("编辑")
+                }
+            }
         } else {
             AgentMessageContent(
                 text = text.ifBlank { "..." },
                 artifacts = artifacts,
                 navigate = navigate,
+                onOpenVerification = onOpenVerification,
             )
+            onRetry?.let {
+                TextButton(onClick = it) {
+                    Text("重试")
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun AgentPromptEditDialog(
+    initialText: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember(initialText) { mutableStateOf(initialText) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("编辑提示词")
+        },
+        text = {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                BasicTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    minLines = 4,
+                    maxLines = 8,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(text)
+                },
+                enabled = text.isNotBlank(),
+            ) {
+                Text("发送")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+    )
 }
 
 @Composable
@@ -845,12 +1087,16 @@ private fun AgentMessageContent(
     text: String,
     artifacts: List<AgentNativeArtifact>,
     navigate: (Route) -> Unit,
+    onOpenVerification: (AgentNativeArtifact.VerificationRequiredRef) -> Unit = {},
 ) {
     val segments = remember(text) { text.toAgentMarkdownSegments() }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        artifacts.filterIsInstance<AgentNativeArtifact.VerificationRequiredRef>().forEach { artifact ->
+            AgentVerificationCard(artifact, onOpenVerification)
+        }
         segments.forEach { segment ->
             when (segment) {
                 is AgentMarkdownSegment.Card -> {
@@ -865,6 +1111,45 @@ private fun AgentMessageContent(
                 is AgentMarkdownSegment.Markdown -> {
                     AgentMarkdownText(segment.text, artifacts, navigate)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentVerificationCard(
+    artifact: AgentNativeArtifact.VerificationRequiredRef,
+    onOpenVerification: (AgentNativeArtifact.VerificationRequiredRef) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PlatformContextBadge(artifact.platform)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "${artifact.platform} 需要验证",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    text = artifact.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
+            TextButton(onClick = { onOpenVerification(artifact) }) {
+                Text("打开")
             }
         }
     }
@@ -1229,6 +1514,7 @@ private fun AnnotatedString.Builder.appendMarkdownInlineNode(
 private fun AgentToolActivityRow(
     activity: AgentToolActivityView,
     navigate: (Route) -> Unit,
+    onOpenVerification: (AgentNativeArtifact.VerificationRequiredRef) -> Unit,
 ) {
     var expanded by remember(activity.id) { mutableStateOf(false) }
     Surface(
@@ -1259,7 +1545,7 @@ private fun AgentToolActivityRow(
             if (expanded) {
                 Spacer(Modifier.height(8.dp))
                 if (activity.artifacts.isNotEmpty()) {
-                    AgentArtifactsContent(activity.artifacts, navigate)
+                    AgentArtifactsContent(activity.artifacts, navigate, onOpenVerification)
                 } else {
                     Text(
                         text = activity.resultPreview?.takeIf { it.isNotBlank() } ?: "没有可展示的卡片结果",
@@ -1281,6 +1567,7 @@ private fun AgentToolActivityRow(
 private fun AgentArtifactsContent(
     artifacts: List<AgentNativeArtifact>,
     navigate: (Route) -> Unit,
+    onOpenVerification: (AgentNativeArtifact.VerificationRequiredRef) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -1300,6 +1587,7 @@ private fun AgentArtifactsContent(
                 is AgentNativeArtifact.SubjectGroupRef -> AgentSubjectGroupCard(artifact, navigate)
                 is AgentNativeArtifact.StatusContextRef -> AgentStatusContextCard(artifact, navigate)
                 is AgentNativeArtifact.TextQuoteRef -> AgentTextQuoteContextCard(artifact)
+                is AgentNativeArtifact.VerificationRequiredRef -> AgentVerificationCard(artifact, onOpenVerification)
             }
         }
     }
@@ -1688,6 +1976,7 @@ private fun List<AgentNativeArtifact>.resolveItem(
                 is AgentNativeArtifact.DetailLinkRef -> emptySequence()
                 is AgentNativeArtifact.StatusContextRef -> emptySequence()
                 is AgentNativeArtifact.TextQuoteRef -> emptySequence()
+                is AgentNativeArtifact.VerificationRequiredRef -> emptySequence()
             }
         }
         .toList()

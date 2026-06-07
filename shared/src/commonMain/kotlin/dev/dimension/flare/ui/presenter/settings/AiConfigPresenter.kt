@@ -81,6 +81,7 @@ public class AiConfigPresenter :
         public val aiTldr: Boolean
         public val translatePrompt: String
         public val tldrPrompt: String
+        public val agentPrompt: String
         public val preTranslate: Boolean
         public val autoTranslateExcludedLanguages: ImmutableList<String>
 
@@ -115,6 +116,8 @@ public class AiConfigPresenter :
         public fun setTranslatePrompt(value: String)
 
         public fun setTldrPrompt(value: String)
+
+        public fun setAgentPrompt(value: String)
 
         public fun setPreTranslate(value: Boolean)
 
@@ -268,6 +271,7 @@ public class AiConfigPresenter :
             override val aiTldr: Boolean = appSettings.aiConfig.tldr
             override val translatePrompt: String = appSettings.aiConfig.translatePrompt
             override val tldrPrompt: String = appSettings.aiConfig.tldrPrompt
+            override val agentPrompt: String = appSettings.aiConfig.agentPrompt
             override val preTranslate: Boolean = appSettings.translateConfig.preTranslate
             override val autoTranslateExcludedLanguages: ImmutableList<String> =
                 appSettings.translateConfig.autoTranslateExcludedLanguages.toImmutableList()
@@ -292,6 +296,14 @@ public class AiConfigPresenter :
                 update {
                     copy(
                         tldrPrompt = value,
+                    )
+                }
+            }
+
+            override fun setAgentPrompt(value: String) {
+                update {
+                    copy(
+                        agentPrompt = value,
                     )
                 }
             }

@@ -30,6 +30,7 @@ import dev.dimension.flare.ui.presenter.home.rss.AllRssTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.rss.RssTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.rss.SubscriptionTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.vvo.VVOFavouriteTimelinePresenter
+import dev.dimension.flare.ui.presenter.home.vvo.VVOGroupTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.vvo.VVOLikeTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.zhihu.ZhihuDailyTimelinePresenter
 import dev.dimension.flare.ui.presenter.home.jike.JikeBookmarkTimelinePresenter
@@ -679,6 +680,28 @@ public object Bluesky {
 }
 
 public object VVo {
+    @Immutable
+    @Serializable
+    public data class GroupTimelineTabItem(
+        override val account: AccountType,
+        val gid: String,
+        val listId: String,
+        override val metaData: TabMetaData,
+        val autoAdded: Boolean = true,
+    ) : TimelineTabItem() {
+        override val key: String = "vvo_group_${account}_$listId"
+
+        override fun createPresenter(): TimelinePresenter =
+            VVOGroupTimelinePresenter(
+                accountType = account,
+                gid = gid,
+                listId = listId,
+                title = (metaData.title as? TitleType.Text)?.content ?: listId,
+            )
+
+        override fun update(metaData: TabMetaData): TabItem = copy(metaData = metaData)
+    }
+
     @Immutable
     @Serializable
     public data class FeaturedTimelineTabItem(

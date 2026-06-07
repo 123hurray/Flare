@@ -58,4 +58,15 @@ public sealed class UiList {
         val isFavorited: Boolean? = null,
         override val readonly: Boolean = false,
     ) : UiList()
+
+    @Serializable
+    @Immutable
+    public data class VvoGroup(
+        val gid: String,
+        val listId: String,
+        override val title: String,
+        override val readonly: Boolean = true,
+    ) : UiList() {
+        override val id: String = "$gid:$listId"
+    }
 }

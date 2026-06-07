@@ -29,6 +29,7 @@ import dev.dimension.flare.data.datasource.microblog.paging.toPagingSource
 import dev.dimension.flare.data.datasource.microblog.pagingConfig
 import dev.dimension.flare.data.datastore.model.AppSettings
 import dev.dimension.flare.data.datastore.AppDataStore
+import dev.dimension.flare.data.repository.DebugRepository
 import dev.dimension.flare.data.repository.LocalFilterRepository
 import dev.dimension.flare.data.repository.LoginExpiredException
 import dev.dimension.flare.data.repository.VVOCaptchaRequiredException
@@ -138,7 +139,12 @@ public abstract class TimelinePresenter :
                         allowLongText = allowLongText,
                         preTranslationService = preTranslationService,
                         notifyError = { e ->
-                            println("TimelinePresenter: timeline load error message=${e.message}")
+                            val line =
+                                "TimelinePresenter: timeline load error type=${e::class.simpleName ?: e::class.qualifiedName} " +
+                                    "message=${e.message.orEmpty()} " +
+                                    "cause=${e.cause?.let { cause -> "${cause::class.simpleName ?: cause::class.qualifiedName}:${cause.message.orEmpty()}" }.orEmpty()}"
+                            println(line)
+                            DebugRepository.log(line)
                             when (e) {
                                 is VVOCaptchaRequiredException -> Unit
                                 is LoginExpiredException -> inAppNotification.onError(Message.LoginExpired, e)

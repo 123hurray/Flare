@@ -15,17 +15,16 @@ import dev.dimension.flare.common.combineLatestFlowLists
 import dev.dimension.flare.common.emptyFlow
 import dev.dimension.flare.common.refreshSuspend
 import dev.dimension.flare.data.datasource.microblog.AuthenticatedMicroblogDataSource
-import dev.dimension.flare.data.datasource.microblog.datasource.UserDataSource
 import dev.dimension.flare.data.datasource.microblog.paging.toPagingSource
 import dev.dimension.flare.data.datasource.microblog.pagingConfig
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.data.repository.accountServiceFlow
-import dev.dimension.flare.data.repository.allAccountServicesFlow
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiState
 import dev.dimension.flare.ui.model.UiTimelineV2
 import dev.dimension.flare.ui.model.collectAsUiState
+import dev.dimension.flare.ui.model.fallbackProfile
 import dev.dimension.flare.ui.model.onSuccess
 import dev.dimension.flare.ui.presenter.PresenterBase
 import kotlinx.collections.immutable.ImmutableList
@@ -35,6 +34,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -48,15 +48,22 @@ public class SearchPresenter(
     private val accountRepository: AccountRepository by inject()
 
     private val accountsFlow by lazy {
-        allAccountServicesFlow(accountRepository)
-            .map {
-                it
-                    .filterIsInstance<UserDataSource>()
-                    .filterIsInstance<AuthenticatedMicroblogDataSource>()
-                    .toImmutableList()
-            }.map {
-                it.map { dataSource ->
-                    authenticatedAccountProfileFlow(dataSource)
+        accountRepository.allAccounts
+            .map { accounts ->
+                accounts.map { account ->
+                    accountServiceFlow(AccountType.Specific(account.accountKey), accountRepository)
+                        .flatMapLatest { dataSource ->
+                            if (dataSource is AuthenticatedMicroblogDataSource) {
+                                authenticatedAccountProfileFlow(account, dataSource)
+                            } else {
+                                flowOf(
+                                    AccountProfileState(
+                                        fallback = account.fallbackProfile(),
+                                        state = UiState.Error(IllegalStateException("Account service is not authenticated user data source")),
+                                    ),
+                                )
+                            }
+                        }
                 }
             }.combineLatestFlowLists()
             .stableAccountProfiles()

@@ -34,7 +34,7 @@ internal class SearchStatusRemoteMediator(
             SearchStatusType.Realtime -> "100103type=61&q=$query&t="
             SearchStatusType.Video -> "100103type=64&q=$query&t="
             SearchStatusType.Image -> "100103type=63&q=$query&t="
-            SearchStatusType.Following -> "100103type=1&q=$query"
+            SearchStatusType.Following -> error("微博关注搜索接口未确认，不能使用综合搜索结果模拟。")
         }
     }
 

@@ -17,7 +17,10 @@ import dev.dimension.flare.data.agent.AgentNativeArtifact
 import dev.dimension.flare.data.agent.AgentRunRequest
 import dev.dimension.flare.data.agent.AgentRuntime
 import dev.dimension.flare.data.agent.AgentSourceContext
+import dev.dimension.flare.data.agent.AgentToolCatalog
+import dev.dimension.flare.data.agent.AgentToolOption
 import dev.dimension.flare.data.agent.FlareAgentEvent
+import dev.dimension.flare.data.agent.AGENT_FAILURE_MESSAGE_PREFIX
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.presenter.PresenterBase
@@ -46,6 +49,8 @@ public class AgentChatPresenter(
         public val streamingArtifacts: ImmutableList<AgentNativeArtifact>
         public val availablePlatforms: ImmutableList<String>
         public val selectedPlatforms: ImmutableList<String>
+        public val availableTools: ImmutableList<AgentToolOption>
+        public val selectedTools: ImmutableList<String>
         public val selectedStatusPlatform: String?
         public val selectedStatusText: String?
         public val selectedText: String?
@@ -57,9 +62,20 @@ public class AgentChatPresenter(
 
         public fun send(text: String)
 
+        public fun editAndResend(
+            messageId: String,
+            text: String,
+        )
+
+        public fun retry(messageId: String)
+
         public fun togglePlatform(platform: String)
 
         public fun clearPlatforms()
+
+        public fun toggleTool(toolName: String)
+
+        public fun clearTools()
 
         public fun dismissStatusContext()
 
@@ -94,11 +110,106 @@ public class AgentChatPresenter(
         var statusText by remember { mutableStateOf<String?>(null) }
         var errorText by remember { mutableStateOf<String?>(null) }
         val selectedPlatforms = remember { mutableStateListOf<String>() }
+        val selectedTools =
+            remember {
+                mutableStateListOf<String>().apply {
+                    addAll(AgentToolCatalog.options.map { it.name })
+                }
+            }
         var includeStatusContext by remember(sourceContext.selectedStatusText) {
             mutableStateOf(!sourceContext.selectedStatusText.isNullOrBlank())
         }
         var includeSelectedTextContext by remember(sourceContext.selectedText) {
             mutableStateOf(!sourceContext.selectedText.isNullOrBlank())
+        }
+
+        suspend fun runConversation(
+            id: String,
+            userTextForModel: String,
+        ) {
+            val history = repository.history(id)
+            draftStreamingText = ""
+            streamingArtifacts.clear()
+            statusText = null
+            errorText = null
+            isRunning = true
+            repository.setStatus(id, AgentConversationStatus.Active)
+            val completedText = StringBuilder()
+            val completedArtifacts = mutableListOf<AgentNativeArtifact>()
+            runtime
+                .runConversation(
+                    request =
+                        AgentRunRequest(
+                            conversationId = id,
+                            userText = userTextForModel,
+                            sourceContext =
+                                sourceContext.copy(
+                                    selectedText = null,
+                                    allowedPlatforms = selectedPlatforms.toList(),
+                                    allowedTools = selectedTools.toList(),
+                                ),
+                        ),
+                    history = history,
+                ).collect { event ->
+                    repository.recordEvent(id, null, event)
+                    when (event) {
+                        is FlareAgentEvent.AssistantTextDelta -> {
+                            draftStreamingText += event.text
+                            completedText.append(event.text)
+                        }
+
+                        is FlareAgentEvent.AssistantTextComplete -> {
+                            draftStreamingText = event.text
+                            completedText.clear()
+                            completedText.append(event.text)
+                        }
+
+                        is FlareAgentEvent.NativeArtifactEmitted -> {
+                            streamingArtifacts += event.artifact
+                            completedArtifacts += event.artifact
+                        }
+
+                        is FlareAgentEvent.ReasoningStatus -> {
+                            statusText = event.text
+                        }
+
+                        is FlareAgentEvent.ToolCallStarted -> {
+                            statusText = event.description
+                        }
+
+                        is FlareAgentEvent.ToolCallCompleted -> {
+                            statusText = if (event.isError) "${event.description}失败" else event.description
+                        }
+
+                        is FlareAgentEvent.RequiresUserInput -> {
+                            repository.addAssistantMessage(id, event.prompt, completedArtifacts)
+                            repository.setStatus(id, AgentConversationStatus.Paused)
+                            draftStreamingText = ""
+                            isRunning = false
+                        }
+
+                        FlareAgentEvent.Completed -> {
+                            repository.addAssistantMessage(id, completedText.toString(), completedArtifacts)
+                            repository.setStatus(id, AgentConversationStatus.Completed)
+                            draftStreamingText = ""
+                            streamingArtifacts.clear()
+                            statusText = null
+                            isRunning = false
+                        }
+
+                        is FlareAgentEvent.Failed -> {
+                            val message = event.message
+                            errorText = message
+                            repository.addAssistantMessage(id, "$AGENT_FAILURE_MESSAGE_PREFIX$message", completedArtifacts)
+                            repository.setStatus(id, AgentConversationStatus.Failed)
+                            draftStreamingText = ""
+                            streamingArtifacts.clear()
+                            statusText = null
+                            isRunning = false
+                        }
+                    }
+                }
+            isRunning = false
         }
 
         fun sendInternal(text: String) {
@@ -119,99 +230,13 @@ public class AgentChatPresenter(
                         includeSelectedTextContext = includeSelectedTextInThisRun,
                         statusKey = sourceContext.statusKey,
                     )
-                val userTextForModel =
-                    text.withAgentContext(
-                        platform = sourceContext.selectedStatusPlatform,
-                        statusText = sourceContext.selectedStatusText,
-                        authorName = sourceContext.selectedStatusAuthorName,
-                        authorHandle = sourceContext.selectedStatusAuthorHandle,
-                        createdAtEpochMillis = sourceContext.selectedStatusCreatedAtEpochMillis,
-                        includeStatusContext = includeStatusInThisRun,
-                        selectedText = sourceContext.selectedText,
-                        includeSelectedTextContext = includeSelectedTextInThisRun,
-                    )
+                val userTextForModel = text.withAgentContext(contextArtifacts)
                 val id = repository.ensureConversation(conversationId, text)
                 conversationId = id
                 repository.addUserMessage(id, text, contextArtifacts)
-                val history = repository.history(id)
                 includeStatusContext = false
                 includeSelectedTextContext = false
-                draftStreamingText = ""
-                streamingArtifacts.clear()
-                statusText = null
-                errorText = null
-                isRunning = true
-                repository.setStatus(id, AgentConversationStatus.Active)
-                val completedText = StringBuilder()
-                val completedArtifacts = mutableListOf<AgentNativeArtifact>()
-                runtime
-                    .runConversation(
-                        request =
-                            AgentRunRequest(
-                                conversationId = id,
-                                userText = userTextForModel,
-                                sourceContext =
-                                    sourceContext.copy(
-                                        selectedText = null,
-                                        allowedPlatforms = selectedPlatforms.toList(),
-                                    ),
-                            ),
-                        history = history,
-                    ).collect { event ->
-                        repository.recordEvent(id, null, event)
-                        when (event) {
-                            is FlareAgentEvent.AssistantTextDelta -> {
-                                draftStreamingText += event.text
-                                completedText.append(event.text)
-                            }
-
-                            is FlareAgentEvent.AssistantTextComplete -> {
-                                draftStreamingText = event.text
-                                completedText.clear()
-                                completedText.append(event.text)
-                            }
-
-                            is FlareAgentEvent.NativeArtifactEmitted -> {
-                                streamingArtifacts += event.artifact
-                                completedArtifacts += event.artifact
-                            }
-
-                            is FlareAgentEvent.ReasoningStatus -> {
-                                statusText = event.text
-                            }
-
-                            is FlareAgentEvent.ToolCallStarted -> {
-                                statusText = event.description
-                            }
-
-                            is FlareAgentEvent.ToolCallCompleted -> {
-                                statusText = if (event.isError) "${event.description}失败" else event.description
-                            }
-
-                            is FlareAgentEvent.RequiresUserInput -> {
-                                repository.addAssistantMessage(id, event.prompt, completedArtifacts)
-                                repository.setStatus(id, AgentConversationStatus.Paused)
-                                draftStreamingText = ""
-                                isRunning = false
-                            }
-
-                            FlareAgentEvent.Completed -> {
-                                repository.addAssistantMessage(id, completedText.toString(), completedArtifacts)
-                                repository.setStatus(id, AgentConversationStatus.Completed)
-                                draftStreamingText = ""
-                                streamingArtifacts.clear()
-                                statusText = null
-                                isRunning = false
-                            }
-
-                            is FlareAgentEvent.Failed -> {
-                                errorText = event.message
-                                repository.setStatus(id, AgentConversationStatus.Failed)
-                                isRunning = false
-                            }
-                        }
-                    }
-                isRunning = false
+                runConversation(id, userTextForModel)
             }
         }
 
@@ -223,6 +248,8 @@ public class AgentChatPresenter(
             override val streamingArtifacts = streamingArtifacts.toImmutableList()
             override val availablePlatforms = availablePlatforms.toImmutableList()
             override val selectedPlatforms = selectedPlatforms.toImmutableList()
+            override val availableTools = AgentToolCatalog.options.toImmutableList()
+            override val selectedTools = selectedTools.toImmutableList()
             override val selectedStatusPlatform = sourceContext.selectedStatusPlatform
             override val selectedStatusText = sourceContext.selectedStatusText
             override val selectedText = sourceContext.selectedText
@@ -236,6 +263,27 @@ public class AgentChatPresenter(
                 sendInternal(text)
             }
 
+            override fun editAndResend(
+                messageId: String,
+                text: String,
+            ) {
+                if (text.isBlank() || isRunning) return
+                scope.launch {
+                    val target = repository.replaceUserMessageFrom(messageId, text) ?: return@launch
+                    conversationId = target.conversationId
+                    runConversation(target.conversationId, target.text.withAgentContext(target.artifacts))
+                }
+            }
+
+            override fun retry(messageId: String) {
+                if (isRunning) return
+                scope.launch {
+                    val target = repository.retryFromAssistantMessage(messageId) ?: return@launch
+                    conversationId = target.conversationId
+                    runConversation(target.conversationId, target.text.withAgentContext(target.artifacts))
+                }
+            }
+
             override fun togglePlatform(platform: String) {
                 if (selectedPlatforms.contains(platform)) {
                     selectedPlatforms.remove(platform)
@@ -246,6 +294,21 @@ public class AgentChatPresenter(
 
             override fun clearPlatforms() {
                 selectedPlatforms.clear()
+            }
+
+            override fun toggleTool(toolName: String) {
+                if (selectedTools.contains(toolName)) {
+                    if (selectedTools.size > 1) {
+                        selectedTools.remove(toolName)
+                    }
+                } else {
+                    selectedTools += toolName
+                }
+            }
+
+            override fun clearTools() {
+                selectedTools.clear()
+                selectedTools.addAll(AgentToolCatalog.options.map { it.name })
             }
 
             override fun dismissStatusContext() {
@@ -290,36 +353,34 @@ public class AgentChatPresenter(
     }
 }
 
-private fun String.withAgentContext(
-    platform: String?,
-    statusText: String?,
-    authorName: String?,
-    authorHandle: String?,
-    createdAtEpochMillis: Long?,
-    includeStatusContext: Boolean,
-    selectedText: String?,
-    includeSelectedTextContext: Boolean,
-): String =
+private fun String.withAgentContext(artifacts: List<AgentNativeArtifact>): String =
     buildString {
-        if (includeStatusContext && !statusText.isNullOrBlank()) {
-            append("当前用户选择的帖子：")
-            append("平台：")
-            append(platform?.takeIf { it.isNotBlank() } ?: "未知")
-            append('\n')
-            append("账号：")
-            append(formatAgentAccount(authorName, authorHandle))
-            append('\n')
-            append("发帖时间：")
-            append(createdAtEpochMillis?.let { Instant.fromEpochMilliseconds(it).toString() } ?: "未知")
-            append('\n')
-            append("正文：")
-            append(statusText)
-            append("\n\n")
-        }
-        if (includeSelectedTextContext && !selectedText.isNullOrBlank()) {
-            append("用户引用的文本：")
-            append(selectedText)
-            append("\n\n")
+        artifacts.forEach { artifact ->
+            when (artifact) {
+                is AgentNativeArtifact.StatusContextRef -> {
+                    append("当前用户选择的帖子：")
+                    append("平台：")
+                    append(artifact.platform?.takeIf { it.isNotBlank() } ?: "未知")
+                    append('\n')
+                    append("账号：")
+                    append(formatAgentAccount(artifact.authorName, artifact.authorHandle))
+                    append('\n')
+                    append("发帖时间：")
+                    append(artifact.createdAtEpochMillis?.let { Instant.fromEpochMilliseconds(it).toString() } ?: "未知")
+                    append('\n')
+                    append("正文：")
+                    append(artifact.text)
+                    append("\n\n")
+                }
+
+                is AgentNativeArtifact.TextQuoteRef -> {
+                    append("用户引用的文本：")
+                    append(artifact.text)
+                    append("\n\n")
+                }
+
+                else -> Unit
+            }
         }
         append(this@withAgentContext)
     }

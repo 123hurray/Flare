@@ -20,6 +20,7 @@ public data class AgentSourceContext(
     val selectedStatusDeeplink: String? = null,
     val feedSnapshot: List<AgentTimelineItem> = emptyList(),
     val allowedPlatforms: List<String> = emptyList(),
+    val allowedTools: List<String> = emptyList(),
 )
 
 @Serializable
@@ -139,6 +140,16 @@ public sealed interface AgentNativeArtifact {
     public data class TextQuoteRef(
         override val id: String,
         val text: String,
+    ) : AgentNativeArtifact
+
+    @Serializable
+    @SerialName("verification_required_ref")
+    public data class VerificationRequiredRef(
+        override val id: String,
+        val platform: String,
+        val url: String,
+        val accountKey: MicroBlogKey? = null,
+        val message: String,
     ) : AgentNativeArtifact
 }
 

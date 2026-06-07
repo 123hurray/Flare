@@ -2,6 +2,7 @@ package dev.dimension.flare.data.agent
 
 import dev.dimension.flare.common.JSON
 import dev.dimension.flare.data.datastore.AppDataStore
+import dev.dimension.flare.data.datastore.model.AiPromptDefaults
 import dev.dimension.flare.data.datastore.model.AppSettings
 import dev.dimension.flare.data.network.httpClientEngine
 import io.ktor.client.HttpClient
@@ -81,7 +82,8 @@ internal class KoogAgentRuntime(
                 return@flow
             }
 
-            val messages = buildInitialMessages(request, history).toMutableList()
+            val systemPrompt = config.agentPrompt.takeIf { it.isNotBlank() } ?: AiPromptDefaults.AGENT_PROMPT
+            val messages = buildInitialMessages(request, history, systemPrompt).toMutableList()
             val toolSpecs = tools.specs(request.sourceContext)
             val allArtifacts = mutableListOf<AgentNativeArtifact>()
             repeat(MAX_AGENT_STEPS) {
@@ -330,9 +332,10 @@ internal class KoogAgentRuntime(
     private fun buildInitialMessages(
         request: AgentRunRequest,
         history: List<AgentStoredMessage>,
+        systemPrompt: String,
     ): List<OpenAIMessage> =
         buildList {
-            add(OpenAIMessage(role = "system", content = SYSTEM_PROMPT))
+            add(OpenAIMessage(role = "system", content = systemPrompt))
             request.sourceContext.statusKey?.let {
                 add(OpenAIMessage(role = "system", content = "Current status key: ${it.id}@${it.host}"))
             }
@@ -384,8 +387,6 @@ internal class KoogAgentRuntime(
         const val MAX_AGENT_STEPS = 6
         const val MODEL_REQUEST_TIMEOUT_MS = 120_000L
         const val MODEL_CONNECT_TIMEOUT_MS = 30_000L
-        const val SYSTEM_PROMPT =
-            "你是 Flare ，一个端侧社交媒体聚合 agent。你可以跨账号检索feed流、读取帖子详情，并根据这些工具回答用户的问题。回答使用用户语言及 Markdown 格式，但不要滥用大标题。需要信息时先调用工具；如果范围不清楚或需要用户确认，直接提出一个简短澄清问题。不要声称已经查看未由工具提供的数据。调用任何工具时必须填写 description 字段，用一句用户能看懂的话说明你调用工具的意图。搜索时必须把用户的自然语言问题拆成关键词或短语进行检索，不要把完整自然语言句子直接作为 query。工具的 platform 参数默认填 ALL；如果用户限制了可搜索平台，只能在允许的平台中搜索。一般来说，搜索国内新闻和资讯优先使用微博；生活、兴趣及攻略使用小红书；查证原始推文、国际动态使用X（twitter）；足球相关使用懂球帝和instagram；引用或展示帖子时使用以下简单格式，平台和值必须来自工具结果：卡片 {{card:Platform:id}}；文本链接 {{link:Platform:id|展示文本}}。工具返回的 item.id 是类似 amber_river 的短 id，引用和展示帖子时必须优先使用这个短 id，不要自行生成或改写成长数字 id。只有工具结果没有短 id 时，才使用原始 item id 或 status id。当向用户展示希望用户点击的内容时，优先使用卡片，链接主要用于表明你得出结论的参考内容。卡片在显示时会全宽展示，因此在返回结果中，需要注意不要将卡片放置在句子的中间。"
     }
 }
 

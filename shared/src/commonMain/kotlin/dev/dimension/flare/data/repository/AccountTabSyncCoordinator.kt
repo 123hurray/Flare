@@ -9,6 +9,7 @@ import dev.dimension.flare.data.model.TabSettings
 import dev.dimension.flare.data.model.TabMetaData
 import dev.dimension.flare.data.model.TimelineTabItem
 import dev.dimension.flare.data.model.TitleType
+import dev.dimension.flare.data.model.VVo
 import dev.dimension.flare.data.model.Zhihu
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
@@ -40,6 +41,9 @@ internal class AccountTabSyncCoordinator(
         }
         coroutineScope.launch {
             ensureZhihuDailyTabs()
+        }
+        coroutineScope.launch {
+            removeLegacyAutoVvoGroupTabs()
         }
         coroutineScope.launch {
             accountRepository.onAdded.collect { account ->
@@ -179,6 +183,40 @@ internal class AccountTabSyncCoordinator(
         }
     }
 
+    private suspend fun removeLegacyAutoVvoGroupTabs() {
+        settingsRepository.updateTabSettings {
+            val normalizedTabs =
+                mainTabs
+                    .mapNotNull { tab ->
+                        when (tab) {
+                            is VVo.GroupTimelineTabItem -> tab.takeUnless { it.autoAdded || it.isBlockedVvoGroup() }
+                            is MixedTimelineTabItem -> {
+                                val subTabs =
+                                    tab.subTimelineTabItem
+                                        .mapNotNull { subTab ->
+                                            if (subTab is VVo.GroupTimelineTabItem && (subTab.autoAdded || subTab.isBlockedVvoGroup())) {
+                                                null
+                                            } else {
+                                                subTab
+                                            }
+                                        }.toImmutableList()
+                                if (subTabs.isEmpty()) {
+                                    null
+                                } else {
+                                    tab.copy(subTimelineTabItem = subTabs)
+                                }
+                            }
+                            else -> tab
+                        }
+                    }.toImmutableList()
+            if (normalizedTabs == mainTabs) {
+                this
+            } else {
+                copy(mainTabs = normalizedTabs).sanitizeDuplicateTabKeys()
+            }
+        }
+    }
+
     private fun TabSettings.cleanupForExistingAccounts(
         accountKeys: Set<MicroBlogKey>,
         retainAccounts: Boolean = true,
@@ -307,3 +345,8 @@ private fun TimelineTabItem.sanitizeDuplicateTabKeys(): TimelineTabItem? =
             this
         }
     }
+
+private fun VVo.GroupTimelineTabItem.isBlockedVvoGroup(): Boolean =
+    ((metaData.title as? TitleType.Text)?.content ?: "").trim() in blockedVvoGroupTitles
+
+private val blockedVvoGroupTitles = setOf("最新微博")

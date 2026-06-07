@@ -49,9 +49,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Solid
+import compose.icons.fontawesomeicons.solid.ArrowsRotate
 import compose.icons.fontawesomeicons.solid.Bars
 import compose.icons.fontawesomeicons.solid.EllipsisVertical
 import compose.icons.fontawesomeicons.solid.FaceSadTear
+import compose.icons.fontawesomeicons.solid.Globe
 import compose.icons.fontawesomeicons.solid.List
 import compose.icons.fontawesomeicons.solid.Plus
 import compose.icons.fontawesomeicons.solid.Trash
@@ -77,6 +79,7 @@ import dev.dimension.flare.ui.model.onError
 import dev.dimension.flare.ui.model.onLoading
 import dev.dimension.flare.ui.model.onSuccess
 import dev.dimension.flare.ui.presenter.invoke
+import dev.dimension.flare.ui.presenter.settings.AccountsState.AccountHomeWebSession
 import dev.dimension.flare.ui.presenter.settings.AccountsState.AccountItem
 import dev.dimension.flare.ui.theme.screenHorizontalPadding
 import dev.dimension.flare.ui.theme.segmentedShapes2
@@ -98,6 +101,7 @@ internal fun AccountsScreen(
     }
     var pendingDeleteAccountKey by remember { mutableStateOf<MicroBlogKey?>(null) }
     var pendingDeleteAccountLabel by remember { mutableStateOf<String?>(null) }
+    var pendingHomeWebSession by remember { mutableStateOf<AccountHomeWebSession?>(null) }
     val lazyListState = rememberLazyListState()
     val haptics = LocalHapticFeedback.current
     val reorderableLazyColumnState =
@@ -138,7 +142,9 @@ internal fun AccountsScreen(
             verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
             state = lazyListState,
         ) {
-            itemsIndexed(state.currentItems, key = { _, item -> item.account.accountKey.toString() }) { index, (account, data) ->
+            itemsIndexed(state.currentItems, key = { _, item -> item.account.accountKey.toString() }) { index, item ->
+                val account = item.account
+                val data = item.profile
                 val swipeState =
                     rememberSwipeToDismissBoxState()
                 val shape = ListItemDefaults.segmentedShapes2(index, state.currentItems.size)
@@ -196,11 +202,56 @@ internal fun AccountsScreen(
                                 showMenu = true
                             },
                             toLogin = toLogin,
+                            onRefresh = {
+                                state.refreshAccount(account.accountKey)
+                            },
+                            fallbackAccountKey = account.accountKey,
+                            supportingContent = { user ->
+                                item.profileError?.let { error ->
+                                    Text(
+                                        text = "${user.handle.canonical}\n${error.accountLoadErrorDetail()}",
+                                        maxLines = 3,
+                                    )
+                                } ?: Text(text = user.handle.canonical, maxLines = 1)
+                            },
+                            errorTrailingContent = {
+                                AccountMoreMenu(
+                                    accountKey = account.accountKey,
+                                    platformType = account.platformType,
+                                    profile = data,
+                                    homeWebSession = item.homeWebSession,
+                                    expanded = showMenu,
+                                    onExpandedChange = {
+                                        showMenu = it
+                                    },
+                                    toNostrRelays = toNostrRelays,
+                                    onOpenHome = {
+                                        pendingHomeWebSession = it
+                                    },
+                                    onDelete = { key, label ->
+                                        pendingDeleteAccountKey = key
+                                        pendingDeleteAccountLabel = label
+                                    },
+                                )
+                            },
                             trailingContent = { user ->
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
+                                    if (item.profileError != null) {
+                                        IconButton(
+                                            onClick = {
+                                                state.refreshAccount(account.accountKey)
+                                            },
+                                        ) {
+                                            FAIcon(
+                                                FontAwesomeIcons.Solid.ArrowsRotate,
+                                                contentDescription = stringResource(id = R.string.status_loadmore_error_retry),
+                                            )
+                                        }
+                                    }
+
                                     state.activeAccount.onSuccess {
                                         RadioButton(
                                             selected = it.accountKey == account.accountKey,
@@ -232,72 +283,24 @@ internal fun AccountsScreen(
                                         )
                                     }
 
-                                    IconButton(
-                                        onClick = {
-                                            showMenu = true
+                                    AccountMoreMenu(
+                                        accountKey = account.accountKey,
+                                        platformType = account.platformType,
+                                        profile = data,
+                                        homeWebSession = item.homeWebSession,
+                                        expanded = showMenu,
+                                        onExpandedChange = {
+                                            showMenu = it
                                         },
-                                    ) {
-                                        FAIcon(
-                                            FontAwesomeIcons.Solid.EllipsisVertical,
-                                            contentDescription = stringResource(id = R.string.more),
-                                        )
-                                        DropdownMenu(
-                                            expanded = showMenu,
-                                            onDismissRequest = {
-                                                showMenu = false
-                                            },
-                                        ) {
-                                            if (account.platformType == PlatformType.Nostr) {
-                                                DropdownMenuItem(
-                                                    text = {
-                                                        Text(
-                                                            text = stringResource(id = R.string.settings_nostr_relays_manage),
-                                                        )
-                                                    },
-                                                    onClick = {
-                                                        showMenu = false
-                                                        toNostrRelays(account.accountKey)
-                                                    },
-                                                    leadingIcon = {
-                                                        FAIcon(
-                                                            imageVector = FontAwesomeIcons.Solid.List,
-                                                            contentDescription =
-                                                                stringResource(
-                                                                    id = R.string.settings_nostr_relays_manage,
-                                                                ),
-                                                        )
-                                                    },
-                                                )
-                                            }
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        text = stringResource(id = R.string.settings_accounts_remove),
-                                                        color = MaterialTheme.colorScheme.error,
-                                                    )
-                                                },
-                                                onClick = {
-                                                    showMenu = false
-                                                    pendingDeleteAccountKey = account.accountKey
-                                                    pendingDeleteAccountLabel =
-                                                        when (val profile = data) {
-                                                            is UiState.Success -> profile.data.handle.canonical
-                                                            is UiState.Error, is UiState.Loading -> account.accountKey.toString()
-                                                        }
-                                                },
-                                                leadingIcon = {
-                                                    FAIcon(
-                                                        imageVector = FontAwesomeIcons.Solid.Trash,
-                                                        contentDescription =
-                                                            stringResource(
-                                                                id = R.string.settings_accounts_remove,
-                                                            ),
-                                                        tint = MaterialTheme.colorScheme.error,
-                                                    )
-                                                },
-                                            )
-                                        }
-                                    }
+                                        toNostrRelays = toNostrRelays,
+                                        onOpenHome = {
+                                            pendingHomeWebSession = it
+                                        },
+                                        onDelete = { key, label ->
+                                            pendingDeleteAccountKey = key
+                                            pendingDeleteAccountLabel = label
+                                        },
+                                    )
                                 }
                             },
                         )
@@ -348,6 +351,109 @@ internal fun AccountsScreen(
             },
         )
     }
+    pendingHomeWebSession?.let { session ->
+        AccountHomeWebDialog(
+            session = session,
+            onDismiss = {
+                pendingHomeWebSession = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun AccountMoreMenu(
+    accountKey: MicroBlogKey,
+    platformType: PlatformType,
+    profile: UiState<UiProfile>,
+    homeWebSession: AccountHomeWebSession,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    toNostrRelays: (MicroBlogKey) -> Unit,
+    onOpenHome: (AccountHomeWebSession) -> Unit,
+    onDelete: (MicroBlogKey, String) -> Unit,
+) {
+    IconButton(
+        onClick = {
+            onExpandedChange(true)
+        },
+    ) {
+        FAIcon(
+            FontAwesomeIcons.Solid.EllipsisVertical,
+            contentDescription = stringResource(id = R.string.more),
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = {
+                onExpandedChange(false)
+            },
+        ) {
+            if (platformType == PlatformType.Nostr) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(id = R.string.settings_nostr_relays_manage),
+                        )
+                    },
+                    onClick = {
+                        onExpandedChange(false)
+                        toNostrRelays(accountKey)
+                    },
+                    leadingIcon = {
+                        FAIcon(
+                            imageVector = FontAwesomeIcons.Solid.List,
+                            contentDescription =
+                                stringResource(
+                                    id = R.string.settings_nostr_relays_manage,
+                                ),
+                        )
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = {
+                    Text(text = "打开主页")
+                },
+                onClick = {
+                    onExpandedChange(false)
+                    onOpenHome(homeWebSession)
+                },
+                leadingIcon = {
+                    FAIcon(
+                        imageVector = FontAwesomeIcons.Solid.Globe,
+                        contentDescription = "打开主页",
+                    )
+                },
+            )
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(id = R.string.settings_accounts_remove),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                onClick = {
+                    onExpandedChange(false)
+                    val label =
+                        when (profile) {
+                            is UiState.Success -> profile.data.handle.canonical
+                            is UiState.Error, is UiState.Loading -> accountKey.toString()
+                        }
+                    onDelete(accountKey, label)
+                },
+                leadingIcon = {
+                    FAIcon(
+                        imageVector = FontAwesomeIcons.Solid.Trash,
+                        contentDescription =
+                            stringResource(
+                                id = R.string.settings_accounts_remove,
+                            ),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                },
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -358,6 +464,7 @@ fun AccountItem(
     toLogin: () -> Unit,
     modifier: Modifier = Modifier,
     trailingContent: @Composable (UiProfile) -> Unit = { },
+    errorTrailingContent: @Composable (Throwable) -> Unit = { },
     headlineContent: @Composable (UiProfile) -> Unit = {
         RichText(text = it.name, maxLines = 1)
     },
@@ -371,6 +478,8 @@ fun AccountItem(
     selected: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     onLongClickLabel: String? = null,
+    onRefresh: (() -> Unit)? = null,
+    fallbackAccountKey: MicroBlogKey? = null,
 ) {
     userState
         .onSuccess { data ->
@@ -430,7 +539,9 @@ fun AccountItem(
         }.onError { throwable ->
             SegmentedListItem(
                 selected = selected,
-                onClick = {},
+                onClick = {
+                    fallbackAccountKey?.let(onClick)
+                },
                 onLongClick = onLongClick,
                 onLongClickLabel = onLongClickLabel,
                 elevation = elevation,
@@ -458,25 +569,58 @@ fun AccountItem(
                     )
                 },
                 supportingContent = {
-                    if (throwable is LoginExpiredException) {
-                        Text(text = throwable.accountKey.toString())
-                    } else {
-                        Text(text = stringResource(id = R.string.account_item_error_message))
-                    }
+                    Text(text = throwable.accountLoadErrorDetail())
                 },
-                trailingContent =
-                    if (throwable is LoginExpiredException) {
-                        {
+                trailingContent = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (throwable is LoginExpiredException) {
+                            onRefresh?.let {
+                                IconButton(onClick = it) {
+                                    FAIcon(
+                                        FontAwesomeIcons.Solid.ArrowsRotate,
+                                        contentDescription = stringResource(id = R.string.status_loadmore_error_retry),
+                                    )
+                                }
+                            }
                             TextButton(onClick = toLogin) {
                                 Text(text = stringResource(id = R.string.login_expired_relogin))
                             }
+                        } else {
+                            onRefresh?.let {
+                                TextButton(onClick = it) {
+                                    FAIcon(
+                                        FontAwesomeIcons.Solid.ArrowsRotate,
+                                        contentDescription = stringResource(id = R.string.status_loadmore_error_retry),
+                                    )
+                                    Text(text = stringResource(id = R.string.status_loadmore_error_retry))
+                                }
+                            }
                         }
-                    } else {
-                        null
-                    },
+                        errorTrailingContent(throwable)
+                    }
+                },
                 colors = colors,
             )
         }
+}
+
+private fun Throwable.accountLoadErrorDetail(): String {
+    val type = this::class.simpleName ?: this::class.qualifiedName ?: "Throwable"
+    val currentMessage = message?.takeIf { it.isNotBlank() }
+    if (currentMessage != null) {
+        return "$type: $currentMessage"
+    }
+    cause?.let {
+        val causeType = it::class.simpleName ?: it::class.qualifiedName ?: "Throwable"
+        val causeMessage = it.message?.takeIf { message -> message.isNotBlank() }
+        if (causeMessage != null) {
+            return "$type caused by $causeType: $causeMessage"
+        }
+    }
+    return stackTraceToString().lineSequence().take(6).joinToString("\n").ifBlank { type }
 }
 
 @Composable

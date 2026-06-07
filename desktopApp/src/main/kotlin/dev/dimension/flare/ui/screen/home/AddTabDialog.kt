@@ -263,8 +263,14 @@ internal fun AddTabDialog(
                                                             is PinnableTimelineTabPresenter.State.Tab.Channel -> {
                                                                 Res.string.channel_title
                                                             }
+
+                                                            is PinnableTimelineTabPresenter.State.Tab.VvoGroup -> {
+                                                                null
+                                                            }
                                                         }
-                                                    }.map { stringResource(it) }
+                                                    }.map { resource ->
+                                                        resource?.let { stringResource(it) } ?: "分组"
+                                                    }
                                         LiteFilter(
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {

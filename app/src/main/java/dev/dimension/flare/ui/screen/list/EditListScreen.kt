@@ -176,6 +176,7 @@ internal fun EditListScreen(
                                                         is dev.dimension.flare.ui.model.UiList.Feed -> it.avatar
                                                         is dev.dimension.flare.ui.model.UiList.Channel -> it.banner
                                                         is dev.dimension.flare.ui.model.UiList.Antenna -> null
+                                                        is dev.dimension.flare.ui.model.UiList.VvoGroup -> null
                                                     }
                                                 if (avatar != null) {
                                                     NetworkImage(
@@ -393,6 +394,7 @@ private fun presenter(
                         is dev.dimension.flare.ui.model.UiList.Feed -> it.description
                         is dev.dimension.flare.ui.model.UiList.Channel -> null
                         is dev.dimension.flare.ui.model.UiList.Antenna -> null
+                        is dev.dimension.flare.ui.model.UiList.VvoGroup -> null
                     }
                 if (desc != null) {
                     append(desc)

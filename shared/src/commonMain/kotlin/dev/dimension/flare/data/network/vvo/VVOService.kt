@@ -1,6 +1,7 @@
 package dev.dimension.flare.data.network.vvo
 
 import dev.dimension.flare.common.decodeJson
+import dev.dimension.flare.common.JSON
 import dev.dimension.flare.data.network.ktorClient
 import dev.dimension.flare.data.network.ktorfit
 import dev.dimension.flare.data.network.vvo.api.ConfigApi
@@ -12,8 +13,12 @@ import dev.dimension.flare.data.network.vvo.api.createStatusApi
 import dev.dimension.flare.data.network.vvo.api.createTimelineApi
 import dev.dimension.flare.data.network.vvo.api.createUserApi
 import dev.dimension.flare.data.network.vvo.model.EmojiData
+import dev.dimension.flare.data.network.vvo.model.Status
+import dev.dimension.flare.data.network.vvo.model.VVOFeedGroup
+import dev.dimension.flare.data.network.vvo.model.VVOGroupTimelinePage
 import dev.dimension.flare.data.network.vvo.model.UploadResponse
 import dev.dimension.flare.model.vvoHost
+import dev.dimension.flare.model.vvoHostLong
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.api.createClientPlugin
@@ -22,11 +27,18 @@ import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.encodeURLParameter
 import io.ktor.utils.io.core.writeFully
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlin.time.Duration.Companion.minutes
@@ -51,6 +63,15 @@ internal class VVOService(
     UserApi by config(chocolateFlow = chocolateFlow, onChocolateUpdated = onChocolateUpdated).createUserApi(),
     ConfigApi by config(chocolateFlow = chocolateFlow, onChocolateUpdated = onChocolateUpdated).createConfigApi(),
     StatusApi by config(chocolateFlow = chocolateFlow, onChocolateUpdated = onChocolateUpdated).createStatusApi() {
+    private val desktopClient by lazy {
+        ktorClient {
+            install(VVOHeaderPlugin) {
+                this.chocolateFlow = this@VVOService.chocolateFlow
+                this.onChocolateUpdated = onChocolateUpdated
+            }
+        }
+    }
+
     companion object {
         fun checkChocolates(chocolate: String): Boolean =
             chocolate
@@ -125,6 +146,39 @@ internal class VVOService(
             .decodeJson<UploadResponse>()
 
     suspend fun emojis(): EmojiData = ktorClient().get("https://flareapp.moe/emoji.json").body()
+
+    suspend fun feedGroups(): List<VVOFeedGroup> {
+        val root =
+            desktopClient
+                .get("https://$vvoHostLong/ajax/feed/allGroups") {
+                    header(HttpHeaders.Referrer, "https://$vvoHostLong/mygroups")
+                    parameter("is_new_segment", 1)
+                    parameter("fetch_hot", 1)
+                }.bodyAsText()
+                .decodeJson<JsonObject>()
+        return root.extractFeedGroups()
+    }
+
+    suspend fun groupTimeline(
+        group: VVOFeedGroup,
+        maxId: String? = null,
+        count: Int = 20,
+    ): VVOGroupTimelinePage {
+        val root =
+            desktopClient
+                .get("https://$vvoHostLong/ajax/feed/groupstimeline") {
+                    header(HttpHeaders.Referrer, "https://$vvoHostLong/mygroups?gid=${group.gid}")
+                    parameter("list_id", group.listId)
+                    parameter("refresh", if (maxId == null) 4 else 0)
+                    parameter("fast_refresh", 1)
+                    parameter("count", count)
+                    maxId?.takeIf { it.isNotBlank() }?.let {
+                        parameter("max_id", it)
+                    }
+                }.bodyAsText()
+                .decodeJson<JsonObject>()
+        return root.extractGroupTimelinePage()
+    }
 }
 
 private class VVOHeaderConfig {
@@ -182,7 +236,9 @@ private val VVOHeaderPlugin =
                 } else {
                     "https://$vvoHost/"
                 }
-            request.headers.append("Referer", referer)
+            if (!request.headers.contains(HttpHeaders.Referrer) && !request.headers.contains("Referer")) {
+                request.headers.append(HttpHeaders.Referrer, referer)
+            }
         }
         onResponse { response ->
             val currentChocolate = chocolateFlow?.firstOrNull() ?: return@onResponse
@@ -227,3 +283,94 @@ private fun mergeSetCookies(
     }
     return cookies.entries.joinToString("; ") { (name, value) -> "$name=$value" }
 }
+
+private fun JsonObject.extractFeedGroups(): List<VVOFeedGroup> {
+    val groupsPayload = this["groups"] ?: (this["data"] as? JsonObject)?.get("groups")
+    val payload =
+        ((groupsPayload as? JsonArray)
+            ?.getOrNull(1) as? JsonObject)
+            ?.get("group")
+            ?: groupsPayload
+    val records = mutableListOf<VVOFeedGroup>()
+    val seen = mutableSetOf<Triple<String, String, String>>()
+
+    fun visit(element: JsonElement?) {
+        when (element) {
+            is JsonArray -> element.forEach { visit(it) }
+            is JsonObject -> {
+                element.toFeedGroupOrNull()?.let { group ->
+                    val key = Triple(group.gid, group.listId, group.title)
+                    if (seen.add(key)) {
+                        records += group
+                    }
+                }
+                element.values.forEach { value ->
+                    if (value is JsonObject || value is JsonArray) {
+                        visit(value)
+                    }
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    visit(payload)
+    return records.filterNot { it.title.trim() in blockedFeedGroupTitles }
+}
+
+private fun JsonObject.toFeedGroupOrNull(): VVOFeedGroup? {
+    val gid = numericString("gid") ?: numericString("group_id")
+    val listId =
+        numericString("list_id")
+            ?: numericString("listid")
+            ?: numericString("list_idstr")
+            ?: gid
+    val normalizedGid = gid ?: listId ?: return null
+    val normalizedListId = listId ?: normalizedGid
+    val title =
+        string("title")
+            ?: string("name")
+            ?: string("group_name")
+            ?: string("label")
+            ?: string("text")
+            ?: return null
+    return VVOFeedGroup(
+        gid = normalizedGid,
+        listId = normalizedListId,
+        title = title,
+    )
+}
+
+private val blockedFeedGroupTitles = setOf("最新微博")
+
+private fun JsonObject.extractGroupTimelinePage(): VVOGroupTimelinePage {
+    val data = this["data"] as? JsonObject
+    val rawStatuses =
+        this["statuses"] as? JsonArray
+            ?: data?.get("statuses") as? JsonArray
+            ?: data?.get("list") as? JsonArray
+            ?: JsonArray(emptyList())
+    val statuses =
+        rawStatuses.mapNotNull { element ->
+            runCatching { JSON.decodeFromJsonElement<Status>(element) }.getOrNull()
+        }
+    val nextKey =
+        string("max_id_str")
+            ?: data?.string("max_id_str")
+            ?: string("max_id")
+            ?: data?.string("max_id")
+    return VVOGroupTimelinePage(
+        statuses = statuses,
+        nextKey = nextKey?.takeUnless { it == "0" },
+    )
+}
+
+private fun JsonObject.string(key: String): String? =
+    (this[key] as? JsonPrimitive)
+        ?.jsonPrimitive
+        ?.content
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+
+private fun JsonObject.numericString(key: String): String? =
+    string(key)?.takeIf { value -> value.all { it.isDigit() } }

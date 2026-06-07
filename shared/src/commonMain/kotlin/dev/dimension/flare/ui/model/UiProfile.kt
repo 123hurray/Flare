@@ -165,6 +165,34 @@ public fun createSampleUser(): UiProfile =
         bottomContent = null,
     )
 
+internal fun UiAccount.fallbackProfile(): UiProfile = accountKey.fallbackProfile(platformType)
+
+internal fun MicroBlogKey.fallbackProfile(platformType: PlatformType): UiProfile {
+    val fallbackName = id.ifBlank { host.ifBlank { platformType.name } }
+    return UiProfile(
+        key = this,
+        handle =
+            UiHandle(
+                raw = id,
+                host = host,
+            ),
+        avatar = "",
+        nameInternal = fallbackName.toUiPlainText(),
+        platformType = platformType,
+        clickEvent = ClickEvent.Noop,
+        banner = null,
+        description = null,
+        matrices =
+            UiProfile.Matrices(
+                fansCount = 0,
+                followsCount = 0,
+                statusesCount = 0,
+            ),
+        mark = persistentListOf(),
+        bottomContent = null,
+    )
+}
+
 private fun UiProfile.Matrices.mergeWith(existing: UiProfile.Matrices): UiProfile.Matrices =
     UiProfile.Matrices(
         fansCount = fansCount.takeUnless { it == 0L && existing.fansCount > 0L } ?: existing.fansCount,

@@ -87,23 +87,27 @@ internal class XhsLoader(
 
     private suspend fun loadPost(statusKey: MicroBlogKey): UiTimelineV2.Post? {
         val cached = XhsNoteContextCache.get(statusKey.id)
-        return if (cached != null && XhsSigning.IS_MAIN_API_SIGNING_VERIFIED) {
-            service
-                .feed(
-                    XhsFeedRequest(
-                        sourceNoteId = statusKey.id,
-                        xsecSource = cached.xsecSource,
-                        xsecToken = cached.xsecToken,
-                    ),
-                ).data
-                ?.items
-                .orEmpty()
-                .firstOrNull()
-                ?.toUiTimeline(accountKey)
-        } else {
-            XhsHtmlParser
-                .parseNote(statusKey.id, service.noteHtml(statusKey.id))
-                ?.toUiTimeline(accountKey, statusKey.id)
+        return XhsDetailPostCache.getOrLoad(
+            key = XhsDetailPostCache.key(accountKey, statusKey.id, cached),
+        ) {
+            if (cached != null && XhsSigning.IS_MAIN_API_SIGNING_VERIFIED) {
+                service
+                    .feed(
+                        XhsFeedRequest(
+                            sourceNoteId = statusKey.id,
+                            xsecSource = cached.xsecSource,
+                            xsecToken = cached.xsecToken,
+                        ),
+                    ).data
+                    ?.items
+                    .orEmpty()
+                    .firstOrNull()
+                    ?.toUiTimeline(accountKey)
+            } else {
+                XhsHtmlParser
+                    .parseNote(statusKey.id, service.noteHtml(statusKey.id))
+                    ?.toUiTimeline(accountKey, statusKey.id)
+            }
         }
     }
 

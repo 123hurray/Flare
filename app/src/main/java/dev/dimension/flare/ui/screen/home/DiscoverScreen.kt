@@ -208,7 +208,7 @@ internal fun DiscoverScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.padding(bottom = 8.dp),
                                 ) {
-                                    val types = SearchStatusType.entries
+                                    val types = SearchStatusType.entries.filterNot { it == SearchStatusType.Following }
                                     items(types.size) { index ->
                                         val type = types[index]
                                         FilterChip(

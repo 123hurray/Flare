@@ -231,8 +231,14 @@ internal fun TabAddBottomSheet(
                                                     is PinnableTimelineTabPresenter.State.Tab.Channel -> {
                                                         R.string.channel_title
                                                     }
+
+                                                    is PinnableTimelineTabPresenter.State.Tab.VvoGroup -> {
+                                                        null
+                                                    }
                                                 }
-                                            }.map { stringResource(id = it) }
+                                            }.map { resource ->
+                                                resource?.let { stringResource(id = it) } ?: "分组"
+                                            }
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                                     modifier = Modifier.fillMaxWidth(),

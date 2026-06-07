@@ -7,6 +7,7 @@ import dev.dimension.flare.data.model.Misskey
 import dev.dimension.flare.data.model.TabItem
 import dev.dimension.flare.data.model.TabMetaData
 import dev.dimension.flare.data.model.TitleType
+import dev.dimension.flare.data.model.VVo
 import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 
@@ -58,6 +59,20 @@ public fun UiList.toTabItem(accountKey: MicroBlogKey): TabItem =
             Misskey.ChannelTimelineTabItem(
                 account = AccountType.Specific(accountKey),
                 channelId = id,
+                metaData =
+                    TabMetaData(
+                        title = TitleType.Text(title),
+                        icon = IconType.Material(dev.dimension.flare.ui.model.UiIcon.List),
+                ),
+            )
+        }
+
+        is UiList.VvoGroup -> {
+            VVo.GroupTimelineTabItem(
+                account = AccountType.Specific(accountKey),
+                gid = gid,
+                listId = listId,
+                autoAdded = false,
                 metaData =
                     TabMetaData(
                         title = TitleType.Text(title),

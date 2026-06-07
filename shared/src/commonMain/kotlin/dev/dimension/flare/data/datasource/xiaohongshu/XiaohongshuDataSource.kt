@@ -264,23 +264,27 @@ internal class XiaohongshuDataSource(
         val statusContext = statusKey.id.xhsNoteStatusContext()
         val linkContext = statusContext.toNoteContext()?.also { XhsNoteContextCache.put(it) }
         val detailContext = linkContext ?: XhsNoteContextCache.get(statusContext.noteId)
-        return if (detailContext != null && XhsSigning.IS_MAIN_API_SIGNING_VERIFIED) {
-            service
-                .feed(
-                    XhsFeedRequest(
-                        sourceNoteId = statusContext.noteId,
-                        xsecSource = detailContext.xsecSource,
-                        xsecToken = detailContext.xsecToken,
-                    ),
-                ).data
-                ?.items
-                .orEmpty()
-                .firstOrNull()
-                ?.toUiTimeline(accountKey)
-        } else {
-            XhsHtmlParser
-                .parseNote(statusContext.noteId, service.noteHtml(statusContext.noteId))
-                ?.toUiTimeline(accountKey, statusContext.noteId)
+        return XhsDetailPostCache.getOrLoad(
+            key = XhsDetailPostCache.key(accountKey, statusContext.noteId, detailContext),
+        ) {
+            if (detailContext != null && XhsSigning.IS_MAIN_API_SIGNING_VERIFIED) {
+                service
+                    .feed(
+                        XhsFeedRequest(
+                            sourceNoteId = statusContext.noteId,
+                            xsecSource = detailContext.xsecSource,
+                            xsecToken = detailContext.xsecToken,
+                        ),
+                    ).data
+                    ?.items
+                    .orEmpty()
+                    .firstOrNull()
+                    ?.toUiTimeline(accountKey)
+            } else {
+                XhsHtmlParser
+                    .parseNote(statusContext.noteId, service.noteHtml(statusContext.noteId))
+                    ?.toUiTimeline(accountKey, statusContext.noteId)
+            }
         }
     }
 

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import androidx.paging.compose.collectAsLazyPagingItems
 import dev.dimension.flare.common.ImmutableListWrapper
@@ -13,6 +14,7 @@ import dev.dimension.flare.common.toPagingState
 import dev.dimension.flare.data.datasource.bluesky.BlueskyDataSource
 import dev.dimension.flare.data.datasource.microblog.datasource.ListDataSource
 import dev.dimension.flare.data.datasource.misskey.MisskeyDataSource
+import dev.dimension.flare.data.datasource.vvo.VVODataSource
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.data.repository.accountServiceProvider
 import dev.dimension.flare.model.AccountType
@@ -22,6 +24,7 @@ import dev.dimension.flare.ui.model.map
 import dev.dimension.flare.ui.model.mapNotNull
 import dev.dimension.flare.ui.presenter.PresenterBase
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.flow
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -53,6 +56,10 @@ public class PinnableTimelineTabPresenter(
 
             public data class Channel(
                 override val data: PagingState<UiList>,
+            ) : Tab
+
+            public data class VvoGroup(
+                override val data: PagingState<out UiList>,
             ) : Tab
         }
 
@@ -106,12 +113,35 @@ public class PinnableTimelineTabPresenter(
                     }.collectAsLazyPagingItems()
                 }.toPagingState()
 
+        val vvoGroups =
+            serviceState
+                .mapNotNull {
+                    it as? VVODataSource
+                }.mapNotNull { service ->
+                    remember(service) {
+                        flow {
+                            emit(
+                                PagingData.from(
+                                    service.feedGroups().map { group ->
+                                        UiList.VvoGroup(
+                                            gid = group.gid,
+                                            listId = group.listId,
+                                            title = group.title,
+                                        )
+                                    },
+                                ),
+                            )
+                        }.cachedIn(scope)
+                    }.collectAsLazyPagingItems()
+                }.toPagingState()
+
         val tabs =
             serviceState.map { service ->
                 remember(
                     service,
                     items,
                     feeds,
+                    vvoGroups,
                 ) {
                     listOfNotNull(
                         if (service is BlueskyDataSource) {
@@ -131,6 +161,11 @@ public class PinnableTimelineTabPresenter(
                         },
                         if (service is MisskeyDataSource) {
                             State.Tab.Channel(channel)
+                        } else {
+                            null
+                        },
+                        if (service is VVODataSource) {
+                            State.Tab.VvoGroup(vvoGroups)
                         } else {
                             null
                         },

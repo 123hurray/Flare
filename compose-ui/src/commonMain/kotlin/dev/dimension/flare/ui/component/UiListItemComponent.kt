@@ -160,6 +160,24 @@ public fun <T : UiList> UiListItem(
                 modifier = modifier,
             )
         }
+
+        is UiList.VvoGroup -> {
+            UiListCard(
+                item =
+                    UiList.List(
+                        id = item.id,
+                        title = item.title,
+                        readonly = item.readonly,
+                    ),
+                onClicked = onClicked,
+                trailingContent = {
+                    trailingContent.invoke(this, item)
+                },
+                index = index,
+                totalCount = totalCount,
+                modifier = modifier,
+            )
+        }
     }
 }
 

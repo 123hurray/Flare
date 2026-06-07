@@ -7,6 +7,7 @@ import dev.dimension.flare.data.database.app.model.DbAgentArtifact
 import dev.dimension.flare.data.database.app.model.DbAgentConversation
 import dev.dimension.flare.data.database.app.model.DbAgentEvent
 import dev.dimension.flare.data.database.app.model.DbAgentMessage
+import dev.dimension.flare.data.database.cache.connect
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -146,6 +147,41 @@ internal class AgentConversationRepository(
             )
         }
 
+    suspend fun replaceUserMessageFrom(
+        messageId: String,
+        text: String,
+    ): AgentUserMessageRunTarget? {
+        val message = database.agentDao().message(messageId)
+            ?.takeIf { it.role == AgentMessageRole.User.value }
+            ?: return null
+        val artifacts = database.agentDao().artifactSnapshot(message.id).decodeArtifacts()
+        database.connect {
+            database.agentDao().deleteEventsFrom(message.conversation_id, message.created_at)
+            database.agentDao().deleteMessagesFrom(message.conversation_id, message.created_at)
+        }
+        val newMessageId = addUserMessage(message.conversation_id, text, artifacts)
+        setStatus(message.conversation_id, AgentConversationStatus.Active)
+        return AgentUserMessageRunTarget(
+            conversationId = message.conversation_id,
+            messageId = newMessageId,
+            text = text,
+            artifacts = artifacts,
+        )
+    }
+
+    suspend fun retryFromAssistantMessage(messageId: String): AgentUserMessageRunTarget? {
+        val message = database.agentDao().message(messageId)
+            ?.takeIf { it.role == AgentMessageRole.Assistant.value }
+            ?: return null
+        val previousUser =
+            database.agentDao().previousMessage(
+                conversationId = message.conversation_id,
+                role = AgentMessageRole.User.value,
+                createdAt = message.created_at,
+            ) ?: return null
+        return replaceUserMessageFrom(previousUser.id, previousUser.text)
+    }
+
     suspend fun addUserMessage(
         conversationId: String,
         text: String,
@@ -263,6 +299,22 @@ internal class AgentConversationRepository(
     @OptIn(ExperimentalUuidApi::class)
     private fun newId(): String = Uuid.random().toString()
 }
+
+public const val AGENT_FAILURE_MESSAGE_PREFIX: String = "生成失败："
+
+internal data class AgentUserMessageRunTarget(
+    val conversationId: String,
+    val messageId: String,
+    val text: String,
+    val artifacts: List<AgentNativeArtifact>,
+)
+
+private fun List<DbAgentArtifact>.decodeArtifacts(): List<AgentNativeArtifact> =
+    mapNotNull { artifact ->
+        runCatching {
+            artifact.payload_json.decodeJson(AgentNativeArtifact.serializer())
+        }.getOrNull()
+    }
 
 private fun List<DbAgentEvent>.toToolActivityItems(): List<AgentConversationItemView.ToolActivity> {
     val activities = linkedMapOf<String, AgentToolActivityView>()

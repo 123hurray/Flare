@@ -13,6 +13,7 @@ import dev.dimension.flare.model.AccountType
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.model.UiProfile
 import dev.dimension.flare.ui.model.UiState
+import dev.dimension.flare.ui.model.fallbackProfile
 import dev.dimension.flare.ui.model.map
 import dev.dimension.flare.ui.model.takeSuccess
 import dev.dimension.flare.ui.presenter.PresenterBase
@@ -33,7 +34,7 @@ public class AllTabsPresenter(
             accountState.accounts.map {
                 it
                     .toImmutableList()
-                    .mapNotNull { it.profile.takeSuccess() }
+                    .map { it.profile.takeSuccess() ?: it.account.fallbackProfile() }
                     .map { user ->
                         val tabs =
                             remember(user.key) {

@@ -645,6 +645,22 @@ internal fun TimelineItemContent(
         )
     }
     val scope = rememberCoroutineScope()
+    var dismissedXhsVerificationUrl by remember { mutableStateOf<String?>(null) }
+    state.xhsVerificationException()?.let { exception ->
+        if (dismissedXhsVerificationUrl != exception.url) {
+            XhsVerificationDialog(
+                exception = exception,
+                onDismiss = {
+                    dismissedXhsVerificationUrl = exception.url
+                },
+                onVerified = {
+                    scope.launch {
+                        state.refreshAfterXhsVerificationSuspend()
+                    }
+                },
+            )
+        }
+    }
     RefreshContainer(
         modifier = modifier,
         onRefresh = {

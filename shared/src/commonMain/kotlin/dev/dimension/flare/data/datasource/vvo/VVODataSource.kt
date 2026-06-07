@@ -28,6 +28,7 @@ import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
 import dev.dimension.flare.data.datasource.microblog.paging.PagingResult
 import dev.dimension.flare.data.datasource.microblog.paging.RemoteLoader
 import dev.dimension.flare.data.network.vvo.VVOService
+import dev.dimension.flare.data.network.vvo.model.VVOFeedGroup
 import dev.dimension.flare.data.network.vvo.model.StatusDetailItem
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.data.repository.LoginExpiredException
@@ -170,6 +171,15 @@ internal class VVODataSource(
         HomeTimelineRemoteMediator(
             service = service,
             accountKey = accountKey,
+        )
+
+    suspend fun feedGroups(): List<VVOFeedGroup> = service.feedGroups()
+
+    fun groupTimeline(group: VVOFeedGroup): RemoteLoader<UiTimelineV2> =
+        GroupTimelineRemoteMediator(
+            service = service,
+            accountKey = accountKey,
+            group = group,
         )
 
     override fun notification(type: NotificationFilter): RemoteLoader<UiTimelineV2> =

@@ -33,6 +33,9 @@ internal interface AgentDao {
     @Query("SELECT * FROM DbAgentConversation WHERE id = :id")
     suspend fun conversation(id: String): DbAgentConversation?
 
+    @Query("SELECT * FROM DbAgentMessage WHERE id = :id")
+    suspend fun message(id: String): DbAgentMessage?
+
     @Query("SELECT * FROM DbAgentMessage WHERE conversation_id = :conversationId ORDER BY created_at ASC")
     fun messages(conversationId: String): Flow<List<DbAgentMessage>>
 
@@ -54,6 +57,16 @@ internal interface AgentDao {
     @Query("SELECT * FROM DbAgentArtifact WHERE message_id IN (:messageIds) ORDER BY created_at ASC")
     fun artifacts(messageIds: List<String>): Flow<List<DbAgentArtifact>>
 
+    @Query("SELECT * FROM DbAgentArtifact WHERE message_id = :messageId ORDER BY created_at ASC")
+    suspend fun artifactSnapshot(messageId: String): List<DbAgentArtifact>
+
+    @Query("SELECT * FROM DbAgentMessage WHERE conversation_id = :conversationId AND role = :role AND created_at < :createdAt ORDER BY created_at DESC LIMIT 1")
+    suspend fun previousMessage(
+        conversationId: String,
+        role: String,
+        createdAt: Long,
+    ): DbAgentMessage?
+
     @Query("UPDATE DbAgentConversation SET title = :title, status = :status, updated_at = :updatedAt WHERE id = :id")
     suspend fun updateConversation(
         id: String,
@@ -71,4 +84,16 @@ internal interface AgentDao {
 
     @Query("DELETE FROM DbAgentConversation WHERE id = :id")
     suspend fun deleteConversation(id: String)
+
+    @Query("DELETE FROM DbAgentEvent WHERE conversation_id = :conversationId AND created_at >= :createdAt")
+    suspend fun deleteEventsFrom(
+        conversationId: String,
+        createdAt: Long,
+    )
+
+    @Query("DELETE FROM DbAgentMessage WHERE conversation_id = :conversationId AND created_at >= :createdAt")
+    suspend fun deleteMessagesFrom(
+        conversationId: String,
+        createdAt: Long,
+    )
 }

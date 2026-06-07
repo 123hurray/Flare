@@ -41,7 +41,7 @@ internal fun AccountSelectionModal(
                 verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
             ) {
                 for (index in 0 until it.size) {
-                    val (accountKey, data) = it[index]
+                    val (account, data) = it[index]
                     AccountItem(
                         userState = data,
                         shapes = ListItemDefaults.segmentedShapes2(index, it.size),
@@ -52,6 +52,10 @@ internal fun AccountSelectionModal(
                         toLogin = {
                             navigate(Route.ServiceSelect.Selection)
                         },
+                        onRefresh = {
+                            state.refreshAccount(account.accountKey)
+                        },
+                        fallbackAccountKey = account.accountKey,
                         trailingContent = { user ->
                             state.activeAccount.onSuccess {
                                 RadioButton(

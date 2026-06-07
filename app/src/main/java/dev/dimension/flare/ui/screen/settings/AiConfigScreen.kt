@@ -410,6 +410,44 @@ internal fun AiConfigScreen(onBack: () -> Unit) {
                     },
                 )
             }
+            AnimatedVisibility(visible = state.aiType == AiTypeOption.OpenAI) {
+                SegmentedListItem(
+                    checked = state.textEditDialog?.field == AiConfigEditField.AgentPrompt,
+                    onCheckedChange = { checked ->
+                        if (checked) {
+                            state.setTextEditDialog(
+                                TextEditDialogState(
+                                    field = AiConfigEditField.AgentPrompt,
+                                    title = "Agent 提示词",
+                                    placeholder = "",
+                                    value = state.agentPrompt,
+                                    minLines = 6,
+                                    maxLines = 12,
+                                    onConfirm = { newValue ->
+                                        state.setAgentPrompt(newValue)
+                                    },
+                                ),
+                            )
+                        } else if (state.textEditDialog?.field == AiConfigEditField.AgentPrompt) {
+                            state.setTextEditDialog(null)
+                        }
+                    },
+                    shapes = ListItemDefaults.single(),
+                    content = {
+                        Text(text = "Agent 提示词")
+                    },
+                    supportingContent = {
+                        Text(
+                            text =
+                                state.agentPrompt.ifBlank {
+                                    stringResource(id = R.string.settings_ai_config_value_empty_placeholder)
+                                },
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                        )
+                    },
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             SegmentedListItem(
                 onClick = {
@@ -484,6 +522,8 @@ internal fun AiConfigScreen(onBack: () -> Unit) {
             value = dialog.value,
             suggestions = dialog.suggestions,
             hint = dialog.hint,
+            minLines = dialog.minLines,
+            maxLines = dialog.maxLines,
             onDismiss = {
                 state.setTextEditDialog(null)
             },
@@ -544,6 +584,8 @@ private data class TextEditDialogState(
     val value: String,
     val suggestions: ImmutableList<String> = persistentListOf(),
     val hint: String = "",
+    val minLines: Int = 1,
+    val maxLines: Int = 4,
     val onConfirm: (String) -> Unit,
 )
 
@@ -552,6 +594,7 @@ private enum class AiConfigEditField {
     ApiKey,
     Model,
     TldrPrompt,
+    AgentPrompt,
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -562,6 +605,8 @@ private fun TextEditDialog(
     value: String,
     suggestions: ImmutableList<String>,
     hint: String,
+    minLines: Int = 1,
+    maxLines: Int = 4,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -587,6 +632,8 @@ private fun TextEditDialog(
                             text = it
                         },
                         modifier = Modifier.fillMaxWidth(),
+                        minLines = minLines,
+                        maxLines = maxLines,
                         placeholder = {
                             if (placeholder.isNotBlank()) {
                                 Text(text = placeholder)
@@ -604,13 +651,15 @@ private fun TextEditDialog(
                                 text = it
                                 showSuggestions = true
                             },
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                            placeholder = {
-                                if (placeholder.isNotBlank()) {
-                                    Text(text = placeholder)
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                                    minLines = minLines,
+                                    maxLines = maxLines,
+                                    placeholder = {
+                                        if (placeholder.isNotBlank()) {
+                                            Text(text = placeholder)
                                 }
                             },
                             trailingIcon = {
