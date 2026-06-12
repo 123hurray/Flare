@@ -21,12 +21,18 @@ import dev.dimension.flare.data.agent.AgentToolCatalog
 import dev.dimension.flare.data.agent.AgentToolOption
 import dev.dimension.flare.data.agent.FlareAgentEvent
 import dev.dimension.flare.data.agent.AGENT_FAILURE_MESSAGE_PREFIX
+import dev.dimension.flare.data.datastore.AppDataStore
+import dev.dimension.flare.data.datastore.model.AppSettings
+import dev.dimension.flare.data.network.ai.OpenAIService
 import dev.dimension.flare.data.repository.AccountRepository
 import dev.dimension.flare.model.MicroBlogKey
 import dev.dimension.flare.ui.presenter.PresenterBase
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import kotlin.time.Instant
@@ -39,6 +45,8 @@ public class AgentChatPresenter(
     private val repository: AgentConversationRepository by inject()
     private val accountRepository: AccountRepository by inject()
     private val runtime: AgentRuntime by inject()
+    private val appDataStore: AppDataStore by inject()
+    private val openAIService: OpenAIService by inject()
 
     @Immutable
     public interface State {
@@ -57,10 +65,21 @@ public class AgentChatPresenter(
         public val includeStatusContext: Boolean
         public val includeSelectedTextContext: Boolean
         public val isRunning: Boolean
+        public val isTranscribingVoice: Boolean
         public val statusText: String?
         public val errorText: String?
 
         public fun send(text: String)
+
+        public fun transcribeVoice(
+            fileName: String,
+            audio: ByteArray,
+            onText: (String) -> Unit,
+        )
+
+        public fun cancelVoiceTranscription()
+
+        public fun resumeAfterVerification()
 
         public fun editAndResend(
             messageId: String,
@@ -107,6 +126,9 @@ public class AgentChatPresenter(
         var draftStreamingText by remember { mutableStateOf("") }
         val streamingArtifacts = remember { mutableStateListOf<AgentNativeArtifact>() }
         var isRunning by remember { mutableStateOf(false) }
+        var isTranscribingVoice by remember { mutableStateOf(false) }
+        var voiceTranscriptionJob by remember { mutableStateOf<Job?>(null) }
+        var verificationPauseMessageId by remember { mutableStateOf<String?>(null) }
         var statusText by remember { mutableStateOf<String?>(null) }
         var errorText by remember { mutableStateOf<String?>(null) }
         val selectedPlatforms = remember { mutableStateListOf<String>() }
@@ -182,7 +204,10 @@ public class AgentChatPresenter(
                         }
 
                         is FlareAgentEvent.RequiresUserInput -> {
-                            repository.addAssistantMessage(id, event.prompt, completedArtifacts)
+                            val messageId = repository.addAssistantMessage(id, event.prompt, completedArtifacts)
+                            if (event.reason == "verification_required") {
+                                verificationPauseMessageId = messageId
+                            }
                             repository.setStatus(id, AgentConversationStatus.Paused)
                             draftStreamingText = ""
                             isRunning = false
@@ -256,11 +281,64 @@ public class AgentChatPresenter(
             override val includeStatusContext = includeStatusContext
             override val includeSelectedTextContext = includeSelectedTextContext
             override val isRunning = isRunning
+            override val isTranscribingVoice = isTranscribingVoice
             override val statusText = statusText
             override val errorText = errorText
 
             override fun send(text: String) {
                 sendInternal(text)
+            }
+
+            override fun transcribeVoice(
+                fileName: String,
+                audio: ByteArray,
+                onText: (String) -> Unit,
+            ) {
+                if (isTranscribingVoice || isRunning || audio.isEmpty()) return
+                voiceTranscriptionJob =
+                    scope.launch {
+                        isTranscribingVoice = true
+                        statusText = "正在识别语音"
+                        errorText = null
+                        val text =
+                            runCatching {
+                                val config = appDataStore.appSettingsStore.data.first().aiConfig.type as? AppSettings.AiConfig.Type.OpenAI
+                                    ?: error("AI speech model is not configured.")
+                                openAIService.transcribeAudio(
+                                    config = config,
+                                    audio = audio,
+                                    fileName = fileName,
+                                )
+                            }.getOrElse {
+                                if (it is CancellationException) {
+                                    ""
+                                } else {
+                                    errorText = it.message ?: "语音识别失败"
+                                    ""
+                                }
+                            }
+                        if (text.isNotBlank()) {
+                            onText(text)
+                        }
+                        statusText = null
+                        isTranscribingVoice = false
+                        voiceTranscriptionJob = null
+                    }
+            }
+
+            override fun cancelVoiceTranscription() {
+                voiceTranscriptionJob?.cancel()
+                voiceTranscriptionJob = null
+                isTranscribingVoice = false
+                if (statusText == "正在识别语音") {
+                    statusText = null
+                }
+            }
+
+            override fun resumeAfterVerification() {
+                val messageId = verificationPauseMessageId ?: return
+                verificationPauseMessageId = null
+                retry(messageId)
             }
 
             override fun editAndResend(

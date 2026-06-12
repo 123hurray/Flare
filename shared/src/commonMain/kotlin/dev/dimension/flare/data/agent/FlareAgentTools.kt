@@ -4,6 +4,7 @@ import dev.dimension.flare.common.JSON
 import dev.dimension.flare.common.CacheState
 import dev.dimension.flare.common.decodeJson
 import dev.dimension.flare.common.encodeJson
+import dev.dimension.flare.data.datasource.microblog.AuthenticatedMicroblogDataSource
 import dev.dimension.flare.data.datasource.microblog.MicroblogDataSource
 import dev.dimension.flare.data.datasource.microblog.datasource.PostDataSource
 import dev.dimension.flare.data.datasource.microblog.paging.PagingRequest
@@ -398,7 +399,9 @@ internal class FlareAgentTools(
                     items = items.toModelItems(),
                     warnings = loaded.warnings,
                 ).encodeJson(),
-            artifacts = items.map { AgentNativeArtifact.FeedCardRef(id = "artifact-${it.id}", item = it) },
+            artifacts =
+                items.map { AgentNativeArtifact.FeedCardRef(id = "artifact-${it.id}", item = it) } +
+                    loaded.artifacts,
         )
     }
 
@@ -917,8 +920,16 @@ private suspend fun List<Pair<String, MicroblogDataSource>>.loadInParallel(
                         )
                     },
                     onFailure = {
+                        val verification = it.toVerificationToolResult()
+                        val fallbackVerification =
+                            if (verification == null && action == "搜索" && servicePlatform.matchesPlatformScope("微博", emptyList())) {
+                                service.weiboSearchVerificationToolResult(it)
+                            } else {
+                                null
+                            }
                         AgentToolLoadResult(
                             warnings = listOf("$servicePlatform ${action}失败：${it.agentToolMessage()}"),
+                            artifacts = verification?.artifacts.orEmpty() + fallbackVerification?.artifacts.orEmpty(),
                         )
                     },
                 )
@@ -927,6 +938,7 @@ private suspend fun List<Pair<String, MicroblogDataSource>>.loadInParallel(
             AgentToolLoadResult(
                 items = results.flatMap { it.items },
                 warnings = results.flatMap { it.warnings },
+                artifacts = results.flatMap { it.artifacts },
             )
         }
     }
@@ -1184,6 +1196,30 @@ private fun Throwable.toVerificationToolResult(): AgentToolResult? =
         else -> null
     }
 
+private fun MicroblogDataSource.weiboSearchVerificationToolResult(error: Throwable): AgentToolResult? {
+    val accountKey = (this as? AuthenticatedMicroblogDataSource)?.accountKey ?: return null
+    val url = "https://m.weibo.cn/search"
+    return AgentToolResult(
+        text =
+            AgentVerificationResponse(
+                platform = "微博",
+                url = url,
+                message = "微博搜索失败，可能需要在 WebView 中完成验证后重试：${error.agentToolMessage()}",
+            ).encodeJson(),
+        artifacts =
+            listOf(
+                AgentNativeArtifact.VerificationRequiredRef(
+                    id = "verify-weibo-search-${accountKey.host}-${accountKey.id}-${url.hashCode()}",
+                    platform = "微博",
+                    url = url,
+                    accountKey = accountKey,
+                    message = "微博搜索失败，请在 WebView 中完成验证后重试。",
+                ),
+            ),
+        isError = false,
+    )
+}
+
 private fun String.compactForAgent(maxLength: Int = 1200): String =
     replace(Regex("\\s+"), " ").trim().let {
         if (it.length > maxLength) it.take(maxLength) + "..." else it
@@ -1252,6 +1288,7 @@ private const val AGENT_TOOL_SERVICE_TIMEOUT_MS = 8_000L
 private data class AgentToolLoadResult(
     val items: List<AgentTimelineItem> = emptyList(),
     val warnings: List<String> = emptyList(),
+    val artifacts: List<AgentNativeArtifact> = emptyList(),
 )
 
 private data class AgentProfileLoadResult(

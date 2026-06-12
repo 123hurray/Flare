@@ -90,7 +90,9 @@ internal class KoogAgentRuntime(
                 emit(FlareAgentEvent.ReasoningStatus("思考中"))
                 val stepResult =
                     try {
-                        streamOneModelStep(openAIConfig, messages, toolSpecs)
+                        streamOneModelStep(openAIConfig, messages, toolSpecs) { event ->
+                            emit(event)
+                        }
                     } catch (e: Exception) {
                         emit(FlareAgentEvent.Failed(e.message ?: "Model request failed."))
                         return@flow
@@ -133,11 +135,24 @@ internal class KoogAgentRuntime(
                             id = toolCall.id,
                             name = toolCall.name,
                             description = toolCall.description.ifBlank { toolCall.name },
+                            result = result.text,
                             resultPreview = result.text.take(600),
                             artifacts = result.artifacts,
                             isError = result.isError,
                         ),
                     )
+                    result.artifacts
+                        .filterIsInstance<AgentNativeArtifact.VerificationRequiredRef>()
+                        .firstOrNull()
+                        ?.let { verification ->
+                            emit(
+                                FlareAgentEvent.RequiresUserInput(
+                                    prompt = verification.message,
+                                    reason = "verification_required",
+                                ),
+                            )
+                            return@flow
+                        }
                     messages.add(
                         OpenAIMessage(
                             role = "tool",
@@ -156,6 +171,7 @@ internal class KoogAgentRuntime(
         config: AppSettings.AiConfig.Type.OpenAI,
         messages: List<OpenAIMessage>,
         toolSpecs: List<AgentToolSpec>,
+        onEvent: suspend (FlareAgentEvent) -> Unit,
     ): ModelStepResult {
         val response =
             client.post(chatCompletionsUrl(config.serverUrl)) {
@@ -200,11 +216,11 @@ internal class KoogAgentRuntime(
             val choice = json["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
             val delta = choice["delta"]?.jsonObject ?: continue
             delta["reasoning_content"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }?.let {
-                events += FlareAgentEvent.ReasoningStatus(it)
+                onEvent(FlareAgentEvent.ReasoningStatus("思考中"))
             }
             delta["content"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() }?.let {
                 text.append(it)
-                events += FlareAgentEvent.AssistantTextDelta(it)
+                onEvent(FlareAgentEvent.AssistantTextDelta(it))
             }
             delta["tool_calls"]?.jsonArray?.forEach { element ->
                 val toolCall = element.jsonObject

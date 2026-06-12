@@ -1,8 +1,18 @@
 package dev.dimension.flare.ui.screen.agent
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -43,6 +53,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,9 +61,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -94,6 +107,9 @@ import dev.dimension.flare.ui.presenter.invoke
 import dev.dimension.flare.ui.route.Route
 import dev.dimension.flare.ui.screen.home.VvoCaptchaDialog
 import dev.dimension.flare.ui.screen.home.XhsVerificationDialog
+import kotlinx.coroutines.delay
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Instant
 import moe.tlaster.precompose.molecule.producePresenter
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
@@ -187,6 +203,7 @@ internal fun AgentChatScreen(
     var showPlatformPicker by remember { mutableStateOf(false) }
     var editingPrompt by remember { mutableStateOf<AgentPromptEditTarget?>(null) }
     var pendingVerification by remember { mutableStateOf<AgentNativeArtifact.VerificationRequiredRef?>(null) }
+    var selectedToolActivity by remember { mutableStateOf<AgentToolActivityView?>(null) }
     LaunchedEffect(state.streamingArtifacts) {
         state.streamingArtifacts
             .filterIsInstance<AgentNativeArtifact.VerificationRequiredRef>()
@@ -275,8 +292,7 @@ internal fun AgentChatScreen(
                                 is AgentConversationItemView.ToolActivity ->
                                     AgentToolActivityRow(
                                         activity = item.value,
-                                        navigate = navigate,
-                                        onOpenVerification = { pendingVerification = it },
+                                        onOpen = { selectedToolActivity = item.value },
                                     )
                             }
                         }
@@ -319,8 +335,11 @@ internal fun AgentChatScreen(
                 AgentInputBar(
                     enabled = !state.isRunning,
                     selectedPlatforms = state.selectedPlatforms,
+                    isTranscribingVoice = state.isTranscribingVoice,
                     onPlatformClick = { showPlatformPicker = true },
                     onSend = state::send,
+                    onVoiceRecorded = state::transcribeVoice,
+                    onCancelVoiceTranscription = state::cancelVoiceTranscription,
                     modifier =
                         Modifier
                             .fillMaxWidth()
@@ -347,6 +366,14 @@ internal fun AgentChatScreen(
             )
         }
     }
+    selectedToolActivity?.let { activity ->
+        AgentToolActivityDetailPage(
+            activity = activity,
+            navigate = navigate,
+            onOpenVerification = { pendingVerification = it },
+            onDismiss = { selectedToolActivity = null },
+        )
+    }
     if (showPlatformPicker) {
         AgentPlatformPickerDialog(
             availablePlatforms = state.availablePlatforms,
@@ -368,7 +395,10 @@ internal fun AgentChatScreen(
                     VvoCaptchaDialog(
                         exception = VVOCaptchaRequiredException(key, artifact.url),
                         onDismiss = { pendingVerification = null },
-                        onVerified = { pendingVerification = null },
+                        onVerified = {
+                            pendingVerification = null
+                            state.resumeAfterVerification()
+                        },
                     )
                 } else {
                     AgentVerificationUnavailableDialog(
@@ -383,7 +413,10 @@ internal fun AgentChatScreen(
                 XhsVerificationDialog(
                     exception = XhsVerificationRequiredException(artifact.accountKey, artifact.message, artifact.url),
                     onDismiss = { pendingVerification = null },
-                    onVerified = { pendingVerification = null },
+                    onVerified = {
+                        pendingVerification = null
+                        state.resumeAfterVerification()
+                    },
                 )
             }
 
@@ -520,6 +553,11 @@ private fun String.compactContextPreview(): String =
         .trim()
         .let { if (it.length > 80) it.take(80) + "..." else it }
 
+private fun String.compactToolPreview(): String =
+    replace(Regex("\\s+"), " ")
+        .trim()
+        .let { if (it.length > 120) it.take(120) + "..." else it }
+
 private fun AgentNativeArtifact.StatusContextRef.statusSubtitle(): String? {
     val account =
         listOfNotNull(
@@ -534,6 +572,12 @@ private fun AgentNativeArtifact.StatusContextRef.statusSubtitle(): String? {
         .joinToString(" · ")
         .takeIf { it.isNotBlank() }
 }
+
+@Composable
+private fun Modifier.agentCardChrome(shape: RoundedCornerShape = RoundedCornerShape(14.dp)): Modifier =
+    this
+        .shadow(elevation = 3.dp, shape = shape, clip = false)
+        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -915,7 +959,7 @@ private fun AgentMessageBubble(
             }
         } else {
             AgentMessageContent(
-                text = text.ifBlank { "..." },
+                text = text,
                 artifacts = artifacts,
                 navigate = navigate,
                 onOpenVerification = onOpenVerification,
@@ -1036,16 +1080,19 @@ private fun AgentContextSnapshotCard(
     deeplink: String? = null,
     navigate: (Route) -> Unit = {},
 ) {
+    val shape = RoundedCornerShape(16.dp)
     val uriHandler = LocalUriHandler.current
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         tonalElevation = 1.dp,
         modifier =
-            Modifier.clickable(enabled = !deeplink.isNullOrBlank()) {
-                val value = deeplink ?: return@clickable
-                Route.parse(value)?.let(navigate) ?: uriHandler.openUri(value)
-            },
+            Modifier
+                .agentCardChrome(shape)
+                .clickable(enabled = !deeplink.isNullOrBlank()) {
+                    val value = deeplink ?: return@clickable
+                    Route.parse(value)?.let(navigate) ?: uriHandler.openUri(value)
+                },
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1121,10 +1168,13 @@ private fun AgentVerificationCard(
     artifact: AgentNativeArtifact.VerificationRequiredRef,
     onOpenVerification: (AgentNativeArtifact.VerificationRequiredRef) -> Unit,
 ) {
+    val shape = RoundedCornerShape(14.dp)
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = shape,
         color = MaterialTheme.colorScheme.tertiaryContainer,
         tonalElevation = 1.dp,
+        shadowElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -1157,10 +1207,13 @@ private fun AgentVerificationCard(
 
 @Composable
 private fun AgentUnresolvedCard(token: AgentReferenceToken) {
+    val shape = RoundedCornerShape(14.dp)
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = shape,
         color = MaterialTheme.colorScheme.errorContainer,
         tonalElevation = 1.dp,
+        shadowElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
@@ -1455,6 +1508,7 @@ private fun AgentMarkdownInlineText(
         ClickableText(
             text = annotatedContent,
             style = style.copy(color = MaterialTheme.colorScheme.onSurface),
+            modifier = Modifier.fillMaxWidth(),
             onClick = { offset ->
                 annotatedContent
                     .getStringAnnotations(INLINE_DEEPLINK_TAG, offset, offset)
@@ -1513,14 +1567,18 @@ private fun AnnotatedString.Builder.appendMarkdownInlineNode(
 @Composable
 private fun AgentToolActivityRow(
     activity: AgentToolActivityView,
-    navigate: (Route) -> Unit,
-    onOpenVerification: (AgentNativeArtifact.VerificationRequiredRef) -> Unit,
+    onOpen: () -> Unit,
 ) {
-    var expanded by remember(activity.id) { mutableStateOf(false) }
+    val shape = RoundedCornerShape(12.dp)
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        shape = MaterialTheme.shapes.small,
-        modifier = Modifier.fillMaxWidth(),
+        shape = shape,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpen),
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(
@@ -1539,27 +1597,115 @@ private fun AgentToolActivityRow(
                     text = ">",
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.clickable { expanded = !expanded },
                 )
             }
-            if (expanded) {
-                Spacer(Modifier.height(8.dp))
-                if (activity.artifacts.isNotEmpty()) {
-                    AgentArtifactsContent(activity.artifacts, navigate, onOpenVerification)
-                } else {
+            Text(
+                text = "工具：${activity.name}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+            activity.arguments.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = "参数：${it.compactToolPreview()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentToolActivityDetailPage(
+    activity: AgentToolActivityView,
+    navigate: (Route) -> Unit,
+    onOpenVerification: (AgentNativeArtifact.VerificationRequiredRef) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
                     Text(
-                        text = activity.resultPreview?.takeIf { it.isNotBlank() } ?: "没有可展示的卡片结果",
-                        style = MaterialTheme.typography.bodySmall,
-                        color =
-                            if (activity.isError) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                        text = activity.description.ifBlank { activity.name },
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     )
+                    Text(
+                        text = "工具：${activity.name}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("关闭")
+                }
+            }
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    text = if (activity.isRunning) "状态：调用中" else if (activity.isError) "状态：失败" else "状态：完成",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (activity.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                AgentToolDetailSection("调用参数", activity.arguments.ifBlank { "{}" })
+                AgentToolDetailSection(
+                    title = "调用结果",
+                    value =
+                        activity.result
+                            ?.takeIf { it.isNotBlank() }
+                            ?: activity.resultPreview
+                            ?: if (activity.isRunning) "等待工具返回结果" else "没有文本结果",
+                    error = activity.isError,
+                )
+                if (activity.artifacts.isNotEmpty()) {
+                    Text(
+                        text = "结果卡片",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    )
+                    AgentArtifactsContent(activity.artifacts, navigate, onOpenVerification)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AgentToolDetailSection(
+    title: String,
+    value: String,
+    error: Boolean = false,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        )
+        AgentMarkdownCodeBlock(value.trim(), null)
     }
 }
 
@@ -1598,11 +1744,13 @@ private fun AgentTimelineCard(
     item: AgentTimelineItem,
     navigate: (Route) -> Unit,
 ) {
+    val shape = RoundedCornerShape(14.dp)
     val uriHandler = LocalUriHandler.current
     AdaptiveCard(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .agentCardChrome(shape)
                 .clickable(enabled = !item.deeplink.isNullOrBlank()) {
                     val deeplink = item.deeplink ?: return@clickable
                     Route.parse(deeplink)?.let(navigate) ?: uriHandler.openUri(deeplink)
@@ -1620,10 +1768,13 @@ private fun AgentSubjectGroupCard(
     group: AgentNativeArtifact.SubjectGroupRef,
     navigate: (Route) -> Unit,
 ) {
+    val shape = RoundedCornerShape(12.dp)
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.small,
+        shape = shape,
         tonalElevation = 1.dp,
+        shadowElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
@@ -1651,93 +1802,493 @@ private fun AgentSubjectGroupCard(
 private fun AgentInputBar(
     enabled: Boolean,
     selectedPlatforms: List<String>,
+    isTranscribingVoice: Boolean,
     onPlatformClick: () -> Unit,
     onSend: (String) -> Unit,
+    onVoiceRecorded: (String, ByteArray, (String) -> Unit) -> Unit,
+    onCancelVoiceTranscription: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     var text by remember { mutableStateOf("") }
-    Row(
+    var recording by remember { mutableStateOf<AgentVoiceRecording?>(null) }
+    var recordingSeconds by remember { mutableStateOf(0) }
+    var waveformLevels by remember { mutableStateOf(List(38) { 0.04f }) }
+    fun startRecording() {
+        if (!enabled || isTranscribingVoice || recording != null) return
+        startAgentVoiceRecording(context)?.let {
+            recording = it
+            recordingSeconds = 0
+            waveformLevels = List(38) { 0.04f }
+        }
+    }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                startRecording()
+            }
+        }
+    fun requestOrStartRecording() {
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            startRecording()
+        } else {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+    fun stopRecording() {
+        val session = recording ?: return
+        recording = null
+        val bytes = stopAgentVoiceRecording(session)
+        if (bytes.isNotEmpty()) {
+            onVoiceRecorded(session.fileName, bytes) { recognizedText ->
+                text = text.appendRecognizedVoiceText(recognizedText)
+            }
+        }
+    }
+    fun cancelRecording() {
+        recording?.let {
+            cancelAgentVoiceRecording(it)
+        }
+        recording = null
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            recording?.let {
+                cancelAgentVoiceRecording(it)
+            }
+        }
+    }
+    LaunchedEffect(recording?.startedAtMillis) {
+        var smoothedLevel = 0.04f
+        while (recording != null) {
+            val currentRecording = recording
+            recordingSeconds = ((System.currentTimeMillis() - (currentRecording?.startedAtMillis ?: 0L)) / 1000L).toInt()
+            val amplitude =
+                currentRecording
+                    ?.level
+                    ?: 0f
+            val level = kotlin.math.sqrt(amplitude.coerceIn(0f, 1f))
+            smoothedLevel = (smoothedLevel * 0.25f + level * 0.75f).coerceIn(0.04f, 1f)
+            waveformLevels = waveformLevels.drop(1) + smoothedLevel
+            delay(50L)
+        }
+    }
+    Column(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.Bottom,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Surface(
-            onClick = onPlatformClick,
-            enabled = enabled,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-            tonalElevation = 1.dp,
-            modifier = Modifier.size(52.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                FAIcon(
-                    imageVector = FontAwesomeIcons.Solid.Plus,
-                    contentDescription = selectedPlatforms.platformSummary(),
+        when {
+            recording != null -> {
+                AgentRecordingBar(
+                    seconds = recordingSeconds,
+                    waveformLevels = waveformLevels,
+                    onCancel = ::cancelRecording,
+                    onStop = ::stopRecording,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
-        }
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-            tonalElevation = 1.dp,
-            modifier = Modifier.weight(1f),
-        ) {
-            Row(
-                modifier = Modifier.padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .padding(vertical = 9.dp),
+
+            isTranscribingVoice -> {
+                AgentVoiceTranscribingBar(
+                    onCancel = onCancelVoiceTranscription,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            else -> {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Bottom,
                 ) {
-                    BasicTextField(
-                        value = text,
-                        onValueChange = { text = it },
+                    Surface(
+                        onClick = onPlatformClick,
                         enabled = enabled,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                        maxLines = 4,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    if (text.isBlank()) {
-                        Text(
-                            text = "询问跨账号内容、聚合主体或总结 feed",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.size(52.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            FAIcon(
+                                imageVector = FontAwesomeIcons.Solid.Plus,
+                                contentDescription = selectedPlatforms.platformSummary(),
+                            )
+                        }
                     }
-                }
-                Surface(
-                    onClick = {
-                        val value = text
-                        text = ""
-                        onSend(value)
-                    },
-                    enabled = enabled && text.isNotBlank(),
-                    shape = CircleShape,
-                    color =
-                        if (enabled && text.isNotBlank()) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                    modifier = Modifier.size(44.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        SendArrowIcon(
-                            color =
-                                if (enabled && text.isNotBlank()) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .padding(vertical = 9.dp),
+                            ) {
+                                BasicTextField(
+                                    value = text,
+                                    onValueChange = { text = it },
+                                    enabled = enabled,
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                                    maxLines = 4,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                if (text.isBlank()) {
+                                    Text(
+                                        text = "询问跨账号内容、聚合主体或总结 feed",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            Surface(
+                                onClick = ::requestOrStartRecording,
+                                enabled = enabled,
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    AgentMicrophoneIcon(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Surface(
+                                onClick = {
+                                    val value = text
+                                    text = ""
+                                    onSend(value)
                                 },
-                        )
+                                enabled = enabled && text.isNotBlank(),
+                                shape = CircleShape,
+                                color =
+                                    if (enabled && text.isNotBlank()) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    SendArrowIcon(
+                                        color =
+                                            if (enabled && text.isNotBlank()) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+private class AgentVoiceRecording(
+    val fileName: String,
+    val audioRecord: AudioRecord,
+    val running: AtomicBoolean,
+    val pcmBuffer: ByteArrayOutputStream,
+    val thread: Thread,
+    val startedAtMillis: Long,
+) {
+    @Volatile
+    var level: Float = 0f
+}
+
+@SuppressLint("MissingPermission")
+private fun startAgentVoiceRecording(context: Context): AgentVoiceRecording? =
+    runCatching {
+        val sampleRate = 16_000
+        val minBufferSize =
+            AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+            )
+        val bufferSize = maxOf(minBufferSize, sampleRate / 5)
+        val audioRecord =
+            AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize,
+            )
+        val running = AtomicBoolean(true)
+        val pcmBuffer = ByteArrayOutputStream()
+        lateinit var session: AgentVoiceRecording
+        val thread =
+            Thread {
+                val samples = ShortArray(bufferSize / 2)
+                audioRecord.startRecording()
+                while (running.get()) {
+                    val count = audioRecord.read(samples, 0, samples.size)
+                    if (count > 0) {
+                        var sum = 0.0
+                        synchronized(pcmBuffer) {
+                            repeat(count) { index ->
+                                val sample = samples[index].toInt()
+                                sum += sample * sample
+                                pcmBuffer.write(sample and 0xFF)
+                                pcmBuffer.write((sample shr 8) and 0xFF)
+                            }
+                        }
+                        val rms = kotlin.math.sqrt(sum / count) / 32768.0
+                        session.level = (rms * 12.0).toFloat().coerceIn(0f, 1f)
+                    }
+                }
+            }.apply {
+                name = "agent-voice-recorder"
+                isDaemon = true
+            }
+        session =
+            AgentVoiceRecording(
+                fileName = "agent_voice_${System.currentTimeMillis()}.wav",
+                audioRecord = audioRecord,
+                running = running,
+                pcmBuffer = pcmBuffer,
+                thread = thread,
+                startedAtMillis = System.currentTimeMillis(),
+            )
+        thread.start()
+        session
+    }.getOrNull()
+
+private fun stopAgentVoiceRecording(session: AgentVoiceRecording): ByteArray {
+    session.running.set(false)
+    runCatching { session.thread.join(500L) }
+    runCatching { session.audioRecord.stop() }
+    runCatching { session.audioRecord.release() }
+    val pcm =
+        synchronized(session.pcmBuffer) {
+            session.pcmBuffer.toByteArray()
+        }
+    return pcm.toWavBytes(sampleRate = 16_000, channels = 1)
+}
+
+private fun cancelAgentVoiceRecording(session: AgentVoiceRecording) {
+    session.running.set(false)
+    runCatching { session.thread.join(300L) }
+    runCatching { session.audioRecord.stop() }
+    runCatching { session.audioRecord.release() }
+}
+
+private fun ByteArray.toWavBytes(
+    sampleRate: Int,
+    channels: Int,
+): ByteArray {
+    val byteRate = sampleRate * channels * 2
+    val dataSize = size
+    val output = ByteArrayOutputStream(44 + dataSize)
+    output.writeAscii("RIFF")
+    output.writeIntLe(36 + dataSize)
+    output.writeAscii("WAVE")
+    output.writeAscii("fmt ")
+    output.writeIntLe(16)
+    output.writeShortLe(1)
+    output.writeShortLe(channels)
+    output.writeIntLe(sampleRate)
+    output.writeIntLe(byteRate)
+    output.writeShortLe(channels * 2)
+    output.writeShortLe(16)
+    output.writeAscii("data")
+    output.writeIntLe(dataSize)
+    output.write(this)
+    return output.toByteArray()
+}
+
+private fun ByteArrayOutputStream.writeAscii(value: String) {
+    value.forEach { write(it.code) }
+}
+
+private fun ByteArrayOutputStream.writeIntLe(value: Int) {
+    write(value and 0xFF)
+    write((value shr 8) and 0xFF)
+    write((value shr 16) and 0xFF)
+    write((value shr 24) and 0xFF)
+}
+
+private fun ByteArrayOutputStream.writeShortLe(value: Int) {
+    write(value and 0xFF)
+    write((value shr 8) and 0xFF)
+}
+
+@Composable
+private fun AgentRecordingBar(
+    seconds: Int,
+    waveformLevels: List<Float>,
+    onCancel: () -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = Color(0xFF2A2A2A),
+        shape = RoundedCornerShape(24.dp),
+        modifier = modifier.height(72.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onCancel) {
+                Text("取消", color = Color.White.copy(alpha = 0.86f))
+            }
+            AgentRecordingWaveform(
+                levels = waveformLevels,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(30.dp),
+            )
+            Text(
+                text = seconds.formatRecordingSeconds(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.82f),
+            )
+            Surface(
+                onClick = onStop,
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.08f),
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    AgentStopIcon(color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentVoiceTranscribingBar(
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier.height(72.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+            Text(
+                text = "正在识别语音",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onCancel) {
+                Text("取消")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentRecordingWaveform(
+    levels: List<Float>,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        val centerY = size.height / 2f
+        val bars = levels.size.coerceAtLeast(1)
+        val gap = size.width / bars
+        levels.forEachIndexed { index, level ->
+            val height = size.height * (0.12f + level.coerceIn(0f, 1f) * 0.88f)
+            val x = index * gap
+            drawLine(
+                color = Color.White.copy(alpha = 0.42f + level.coerceIn(0f, 1f) * 0.5f),
+                start = Offset(x, centerY - height / 2f),
+                end = Offset(x, centerY + height / 2f),
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AgentMicrophoneIcon(
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier.size(20.dp)) {
+        val strokeWidth = 2.dp.toPx()
+        val centerX = size.width / 2f
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(size.width * 0.36f, size.height * 0.1f),
+            size = androidx.compose.ui.geometry.Size(size.width * 0.28f, size.height * 0.48f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.width * 0.14f, size.width * 0.14f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth),
+        )
+        drawLine(
+            color = color,
+            start = Offset(centerX, size.height * 0.68f),
+            end = Offset(centerX, size.height * 0.88f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round,
+        )
+        drawLine(
+            color = color,
+            start = Offset(size.width * 0.34f, size.height * 0.88f),
+            end = Offset(size.width * 0.66f, size.height * 0.88f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round,
+        )
+        drawArc(
+            color = color,
+            startAngle = 20f,
+            sweepAngle = 140f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.22f, size.height * 0.32f),
+            size = androidx.compose.ui.geometry.Size(size.width * 0.56f, size.height * 0.44f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = StrokeCap.Round),
+        )
+    }
+}
+
+@Composable
+private fun AgentStopIcon(
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier.size(18.dp)) {
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(size.width * 0.3f, size.height * 0.3f),
+            size = androidx.compose.ui.geometry.Size(size.width * 0.4f, size.height * 0.4f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx()),
+        )
+    }
+}
+
+private fun Int.formatRecordingSeconds(): String = "${this / 60}:${(this % 60).toString().padStart(2, '0')}"
+
+private fun String.appendRecognizedVoiceText(value: String): String {
+    val recognized = value.trim()
+    if (recognized.isBlank()) return this
+    return if (isBlank()) {
+        recognized
+    } else {
+        trimEnd() + "\n" + recognized
     }
 }
 

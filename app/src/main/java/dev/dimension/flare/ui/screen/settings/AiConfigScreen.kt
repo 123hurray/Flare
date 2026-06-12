@@ -105,6 +105,8 @@ internal fun AiConfigScreen(onBack: () -> Unit) {
             val apiKeyHint = stringResource(id = R.string.settings_ai_config_api_key_hint)
             val modelTitle = stringResource(id = R.string.settings_ai_config_model)
             val modelPlaceholder = stringResource(id = R.string.settings_ai_config_model_select)
+            val speechModelTitle = "语音模型"
+            val speechModelPlaceholder = "选择或输入语音识别模型"
             val tldrPromptTitle = stringResource(id = R.string.settings_ai_config_tldr_prompt)
             val shouldShowManualModelInput =
                 when (val openAIModels = state.openAIModels) {
@@ -308,7 +310,7 @@ internal fun AiConfigScreen(onBack: () -> Unit) {
                     onCheckedChange = { checked ->
                         state.setShowModelDropdown(checked)
                     },
-                    shapes = ListItemDefaults.last(),
+                    shapes = ListItemDefaults.item(),
                     content = {
                         Text(text = stringResource(id = R.string.settings_ai_config_model))
                     },
@@ -395,7 +397,7 @@ internal fun AiConfigScreen(onBack: () -> Unit) {
                             state.setTextEditDialog(null)
                         }
                     },
-                    shapes = ListItemDefaults.last(),
+                    shapes = ListItemDefaults.item(),
                     content = {
                         Text(text = stringResource(id = R.string.settings_ai_config_model_manual_input))
                     },
@@ -404,6 +406,114 @@ internal fun AiConfigScreen(onBack: () -> Unit) {
                             text =
                                 state.openAIModel.ifBlank {
                                     stringResource(id = R.string.settings_ai_config_value_empty_placeholder)
+                                },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    },
+                )
+            }
+            AnimatedVisibility(visible = state.aiType == AiTypeOption.OpenAI && !shouldShowManualModelInput) {
+                SegmentedListItem(
+                    checked = state.showSpeechModelDropdown,
+                    onCheckedChange = { checked ->
+                        state.setShowSpeechModelDropdown(checked)
+                    },
+                    shapes = ListItemDefaults.last(),
+                    content = {
+                        Text(text = speechModelTitle)
+                    },
+                    supportingContent = {
+                        Text(
+                            text = "语音输入转文字使用的模型；留空时使用普通模型",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    },
+                    trailingContent = {
+                        Box {
+                            TextButton(
+                                onClick = {
+                                    state.setShowSpeechModelDropdown(true)
+                                },
+                            ) {
+                                Text(
+                                    text =
+                                        state.openAISpeechModel.ifBlank {
+                                            "默认：${state.openAIModel.ifBlank { modelPlaceholder }}"
+                                        },
+                                )
+                            }
+                            FlareDropdownMenu(
+                                expanded = state.showSpeechModelDropdown,
+                                onDismissRequest = {
+                                    state.setShowSpeechModelDropdown(false)
+                                },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("使用普通模型") },
+                                    onClick = {
+                                        state.setShowSpeechModelDropdown(false)
+                                        state.setOpenAISpeechModel("")
+                                    },
+                                )
+                                state.openAIModels
+                                    .onLoading {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(id = R.string.settings_ai_config_model_loading)) },
+                                            onClick = {},
+                                            enabled = false,
+                                        )
+                                    }.onError {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(id = R.string.settings_ai_config_model_error)) },
+                                            onClick = {},
+                                            enabled = false,
+                                        )
+                                    }.onSuccess { models ->
+                                        models.forEach { model ->
+                                            DropdownMenuItem(
+                                                text = { Text(model) },
+                                                onClick = {
+                                                    state.setShowSpeechModelDropdown(false)
+                                                    state.setOpenAISpeechModel(model)
+                                                },
+                                            )
+                                        }
+                                    }
+                            }
+                        }
+                    },
+                )
+            }
+            AnimatedVisibility(visible = state.aiType == AiTypeOption.OpenAI && shouldShowManualModelInput) {
+                SegmentedListItem(
+                    checked = state.textEditDialog?.field == AiConfigEditField.SpeechModel,
+                    onCheckedChange = { checked ->
+                        if (checked) {
+                            state.setTextEditDialog(
+                                TextEditDialogState(
+                                    field = AiConfigEditField.SpeechModel,
+                                    title = speechModelTitle,
+                                    placeholder = speechModelPlaceholder,
+                                    value = state.openAISpeechModel,
+                                    hint = "留空时使用普通模型",
+                                    onConfirm = { newValue ->
+                                        state.setOpenAISpeechModel(newValue)
+                                    },
+                                ),
+                            )
+                        } else if (state.textEditDialog?.field == AiConfigEditField.SpeechModel) {
+                            state.setTextEditDialog(null)
+                        }
+                    },
+                    shapes = ListItemDefaults.last(),
+                    content = {
+                        Text(text = speechModelTitle)
+                    },
+                    supportingContent = {
+                        Text(
+                            text =
+                                state.openAISpeechModel.ifBlank {
+                                    "默认：${state.openAIModel.ifBlank { modelPlaceholder }}"
                                 },
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -541,12 +651,14 @@ private fun presenter() =
         val businessState = remember { AiConfigPresenter() }.invoke()
         var showTypeDropdown by remember { mutableStateOf(false) }
         var showModelDropdown by remember { mutableStateOf(false) }
+        var showSpeechModelDropdown by remember { mutableStateOf(false) }
         var showReasoningEffortDropdown by remember { mutableStateOf(false) }
         var textEditDialog by remember { mutableStateOf<TextEditDialogState?>(null) }
 
         object : AiConfigPresenter.State by businessState {
             val showTypeDropdown = showTypeDropdown
             val showModelDropdown = showModelDropdown
+            val showSpeechModelDropdown = showSpeechModelDropdown
             val showReasoningEffortDropdown = showReasoningEffortDropdown
             val textEditDialog = textEditDialog
 
@@ -556,6 +668,10 @@ private fun presenter() =
 
             fun setShowModelDropdown(value: Boolean) {
                 showModelDropdown = value
+            }
+
+            fun setShowSpeechModelDropdown(value: Boolean) {
+                showSpeechModelDropdown = value
             }
 
             fun setShowReasoningEffortDropdown(value: Boolean) {
@@ -593,6 +709,7 @@ private enum class AiConfigEditField {
     ServerUrl,
     ApiKey,
     Model,
+    SpeechModel,
     TldrPrompt,
     AgentPrompt,
 }

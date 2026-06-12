@@ -65,6 +65,7 @@ public sealed interface FlareAgentEvent {
         val id: String,
         val name: String,
         val description: String,
+        val result: String = "",
         val resultPreview: String,
         val artifacts: List<AgentNativeArtifact> = emptyList(),
         val isError: Boolean = false,

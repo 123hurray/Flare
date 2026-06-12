@@ -66,6 +66,7 @@ public class AiConfigPresenter :
         public val openAIServerUrl: String
         public val openAIApiKey: String
         public val openAIModel: String
+        public val openAISpeechModel: String
         public val openAIReasoningEffort: AiReasoningEffortOption
         public val translateProvider: TranslateProviderOption
         public val deepLApiKey: String
@@ -98,6 +99,8 @@ public class AiConfigPresenter :
         public fun setOpenAIApiKey(value: String)
 
         public fun setOpenAIModel(value: String)
+
+        public fun setOpenAISpeechModel(value: String)
 
         public fun setOpenAIReasoningEffort(value: AiReasoningEffortOption)
 
@@ -263,6 +266,9 @@ public class AiConfigPresenter :
             override val openAIModel: String =
                 (appSettings.aiConfig.type as? AppSettings.AiConfig.Type.OpenAI)?.model ?: ""
 
+            override val openAISpeechModel: String =
+                (appSettings.aiConfig.type as? AppSettings.AiConfig.Type.OpenAI)?.speechModel ?: ""
+
             override val openAIReasoningEffort: AiReasoningEffortOption =
                 AiReasoningEffortOption.entries.firstOrNull {
                     it.value == (appSettings.aiConfig.type as? AppSettings.AiConfig.Type.OpenAI)?.reasoningEffort.orEmpty()
@@ -339,6 +345,7 @@ public class AiConfigPresenter :
                                         apiKey = "",
                                         model = "",
                                         reasoningEffort = "",
+                                        speechModel = "",
                                     )
                                 }
                             },
@@ -355,6 +362,7 @@ public class AiConfigPresenter :
                                 apiKey = openAIApiKey,
                                 model = openAIModel,
                                 reasoningEffort = openAIReasoningEffort.value,
+                                speechModel = openAISpeechModel,
                             ),
                     )
                 }
@@ -369,6 +377,7 @@ public class AiConfigPresenter :
                                 apiKey = value,
                                 model = openAIModel,
                                 reasoningEffort = openAIReasoningEffort.value,
+                                speechModel = openAISpeechModel,
                             ),
                     )
                 }
@@ -383,6 +392,22 @@ public class AiConfigPresenter :
                                 apiKey = openAIApiKey,
                                 model = value,
                                 reasoningEffort = openAIReasoningEffort.value,
+                                speechModel = openAISpeechModel,
+                            ),
+                    )
+                }
+            }
+
+            override fun setOpenAISpeechModel(value: String) {
+                update {
+                    copy(
+                        type =
+                            AppSettings.AiConfig.Type.OpenAI(
+                                serverUrl = openAIServerUrl,
+                                apiKey = openAIApiKey,
+                                model = openAIModel,
+                                reasoningEffort = openAIReasoningEffort.value,
+                                speechModel = value,
                             ),
                     )
                 }
@@ -397,6 +422,7 @@ public class AiConfigPresenter :
                                 apiKey = openAIApiKey,
                                 model = openAIModel,
                                 reasoningEffort = value.value,
+                                speechModel = openAISpeechModel,
                             ),
                     )
                 }
@@ -501,6 +527,7 @@ public class AiConfigPresenter :
                                             apiKey = "",
                                             model = "",
                                             reasoningEffort = "",
+                                            speechModel = "",
                                         ),
                             )
                         }
