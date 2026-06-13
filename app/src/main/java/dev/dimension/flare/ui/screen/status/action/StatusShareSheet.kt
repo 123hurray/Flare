@@ -472,6 +472,7 @@ private fun StatusShareCard(
                         StatusItem(
                             item = status,
                             detailStatusKey = statusKey,
+                            maxLines = Int.MAX_VALUE,
                         )
                     }
                     if (blockInteractions) {
@@ -659,6 +660,7 @@ private suspend fun captureShareBitmap(
             }
 
             createBitmap(captureWidth, captureHeight).also { bitmap ->
+                composeView.layout(0, 0, captureWidth, captureHeight)
                 composeView.draw(Canvas(bitmap))
             }
         } finally {

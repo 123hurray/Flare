@@ -56,7 +56,7 @@ internal class UserTimelineRemoteMediator(
             containerid = service.getContainerIndex(type = "uid", value = userKey.id).data?.timelineContainerId(userKey.id)
         }
 
-        val response =
+        var response =
             when (request) {
                 PagingRequest.Refresh -> {
                     service.getContainerIndex(
@@ -100,13 +100,10 @@ internal class UserTimelineRemoteMediator(
                 val fallbackStatuses = fallback.data?.cards.orEmpty().extractStatuses()
                 if (fallbackStatuses.isNotEmpty()) {
                     containerid = fallbackContainerId
+                    response = fallback
                     statuses = fallbackStatuses
                 }
             }
-        }
-
-        if (request is PagingRequest.Refresh && statuses.isEmpty() && st != null) {
-            statuses = service.profileInfo(userKey.id, st).data?.statuses.orEmpty()
         }
 
         val data =

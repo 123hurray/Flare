@@ -352,6 +352,15 @@ internal class KoogAgentRuntime(
     ): List<OpenAIMessage> =
         buildList {
             add(OpenAIMessage(role = "system", content = systemPrompt))
+            add(
+                OpenAIMessage(
+                    role = "system",
+                    content =
+                        "Tool platform arguments must be a single concrete platform from the tool enum; never use ALL. " +
+                            "When displaying feed/status cards, use {{card:id}} with the short item.id from tool results. " +
+                            "Legacy {{card:Platform:id}} references may appear in history, but new answers should omit Platform.",
+                ),
+            )
             request.sourceContext.statusKey?.let {
                 add(OpenAIMessage(role = "system", content = "Current status key: ${it.id}@${it.host}"))
             }

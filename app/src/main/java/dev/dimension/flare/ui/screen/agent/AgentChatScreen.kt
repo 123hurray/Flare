@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -32,10 +33,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -204,6 +207,7 @@ internal fun AgentChatScreen(
     var editingPrompt by remember { mutableStateOf<AgentPromptEditTarget?>(null) }
     var pendingVerification by remember { mutableStateOf<AgentNativeArtifact.VerificationRequiredRef?>(null) }
     var selectedToolActivity by remember { mutableStateOf<AgentToolActivityView?>(null) }
+    val conversationListState = rememberLazyListState()
     LaunchedEffect(state.streamingArtifacts) {
         state.streamingArtifacts
             .filterIsInstance<AgentNativeArtifact.VerificationRequiredRef>()
@@ -251,6 +255,7 @@ internal fun AgentChatScreen(
                     )
                 } else {
                     LazyColumn(
+                        state = conversationListState,
                         modifier =
                             Modifier
                                 .weight(1f)
@@ -1227,7 +1232,7 @@ private fun AgentUnresolvedCard(token: AgentReferenceToken) {
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
             Text(
-                text = "${token.platform} / ${token.id}",
+                text = listOfNotNull(token.platform, token.id).joinToString(" / "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
@@ -1624,6 +1629,7 @@ private fun AgentToolActivityDetailPage(
     onOpenVerification: (AgentNativeArtifact.VerificationRequiredRef) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    BackHandler(onBack = onDismiss)
     Box(
         modifier =
             Modifier
@@ -1634,6 +1640,7 @@ private fun AgentToolActivityDetailPage(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
                     .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -1750,16 +1757,23 @@ private fun AgentTimelineCard(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .agentCardChrome(shape)
-                .clickable(enabled = !item.deeplink.isNullOrBlank()) {
-                    val deeplink = item.deeplink ?: return@clickable
-                    Route.parse(deeplink)?.let(navigate) ?: uriHandler.openUri(deeplink)
-                },
+                .agentCardChrome(shape),
         index = 0,
         totalCount = 1,
         respectTimelineMode = true,
     ) {
-        StatusItem(item.toUiTimelinePost())
+        Box {
+            StatusItem(item.toUiTimelinePost())
+            Box(
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .clickable(enabled = !item.deeplink.isNullOrBlank()) {
+                            val deeplink = item.deeplink ?: return@clickable
+                            Route.parse(deeplink)?.let(navigate) ?: uriHandler.openUri(deeplink)
+                        },
+            )
+        }
     }
 }
 
@@ -2337,7 +2351,7 @@ private fun List<String>.platformSummary(): String =
 
 private data class AgentReferenceToken(
     val kind: String,
-    val platform: String,
+    val platform: String?,
     val id: String,
     val label: String?,
 )
@@ -2373,8 +2387,8 @@ private val agentMarkdownParser: Parser by lazy {
         )
         .build()
 }
-private val cardRegex = Regex("""\{\{(card):([^:|}]+):([^|}]+)\}\}""")
-private val linkRegex = Regex("""\{\{(link):([^:|}]+):([^|}]+)\|([^}]+)\}\}""")
+private val cardRegex = Regex("""\{\{(card):(?:([^:|}]+):)?([^|}]+)\}\}""")
+private val linkRegex = Regex("""\{\{(link):(?:([^:|}]+):)?([^|}]+)\|([^}]+)\}\}""")
 
 private fun String.toAgentMarkdownSegments(): List<AgentMarkdownSegment> {
     val visibleText = withoutTrailingPartialAgentToken()
@@ -2414,7 +2428,7 @@ private fun String.withoutTrailingPartialAgentToken(): String {
 private fun MatchResult.toReferenceToken(): AgentReferenceToken =
     AgentReferenceToken(
         kind = groupValues[1],
-        platform = groupValues[2],
+        platform = groupValues[2].takeIf { it.isNotBlank() },
         id = groupValues[3],
         label = groupValues.getOrNull(4)?.takeIf { it.isNotBlank() },
     )
@@ -2515,7 +2529,7 @@ private fun AgentInlineStyle.textDecoration(): TextDecoration? =
     }
 
 private fun List<AgentNativeArtifact>.resolveItem(
-    platform: String,
+    platform: String?,
     id: String,
 ): AgentTimelineItem? {
     val items =
@@ -2531,8 +2545,10 @@ private fun List<AgentNativeArtifact>.resolveItem(
             }
         }
         .toList()
-    return items.firstOrNull { it.matchesReference(platform, id) }
-        ?: items.firstOrNull { it.matchesReferenceId(id) }
+    return items.firstOrNull { it.matchesReferenceId(id) }
+        ?: platform?.let { requestedPlatform ->
+            items.firstOrNull { it.matchesReference(requestedPlatform, id) }
+        }
 }
 
 private fun AgentTimelineItem.matchesReference(

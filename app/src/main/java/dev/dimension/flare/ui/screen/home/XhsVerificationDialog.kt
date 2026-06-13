@@ -3,6 +3,7 @@ package dev.dimension.flare.ui.screen.home
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -20,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +48,9 @@ import dev.dimension.flare.ui.screen.serviceselect.sanitizedXhsCookieLog
 import dev.dimension.flare.ui.screen.serviceselect.xhsCookieAllowList
 import dev.dimension.flare.ui.screen.serviceselect.xhsDesktopNavigatorScript
 import dev.dimension.flare.ui.screen.serviceselect.xhsLoginHeaders
+import kotlinx.coroutines.launch
 import moe.tlaster.precompose.molecule.producePresenter
+import org.json.JSONObject
 
 @Composable
 internal fun XhsVerificationDialog(
@@ -66,6 +71,8 @@ internal fun XhsVerificationDialog(
     }
     var currentUrl by remember(exception.url) { mutableStateOf(exception.url) }
     var message by remember(exception.url) { mutableStateOf<String?>(null) }
+    var capturedCookies by remember(exception.url) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val scope = rememberCoroutineScope()
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -84,6 +91,7 @@ internal fun XhsVerificationDialog(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .statusBarsPadding()
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -97,11 +105,14 @@ internal fun XhsVerificationDialog(
                     }
                     TextButton(
                         onClick = {
-                            val cookies = currentXhsCookies(currentUrl)
+                            CookieManager.getInstance().flush()
+                            val cookies = currentXhsCookies(currentUrl) + capturedCookies
                             if (cookies.hasAuthenticatedXhsCookie()) {
                                 Log.i("XhsVerification", "cookies ready ${cookies.sanitizedXhsCookieLog()}")
-                                state.updateCookies(cookies)
-                                onVerified()
+                                scope.launch {
+                                    state.updateCookies(cookies).join()
+                                    onVerified()
+                                }
                             } else {
                                 message = "完成验证后再点完成"
                             }
@@ -145,10 +156,28 @@ internal fun XhsVerificationDialog(
                                 CookieManager.getInstance().setAcceptCookie(true)
                                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                                 writeXhsCookies(state.cookies)
+                                val webView = this
+                                addJavascriptInterface(
+                                    XhsLoginCaptureBridge { cookies ->
+                                        webView.post {
+                                            capturedCookies = capturedCookies + cookies
+                                            writeXhsCookies(capturedCookies)
+                                            if ((currentXhsCookies(currentUrl) + capturedCookies).hasAuthenticatedXhsCookie()) {
+                                                message = "已捕获登录信息，点完成后重试"
+                                            }
+                                        }
+                                    },
+                                    "FlareXhsVerificationBridge",
+                                )
                                 if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                                     WebViewCompat.addDocumentStartJavaScript(
                                         this,
                                         xhsDesktopNavigatorScript,
+                                        setOf("https://$xiaohongshuWebHost"),
+                                    )
+                                    WebViewCompat.addDocumentStartJavaScript(
+                                        this,
+                                        xhsLoginCaptureScript,
                                         setOf("https://$xiaohongshuWebHost"),
                                     )
                                 }
@@ -159,6 +188,7 @@ internal fun XhsVerificationDialog(
                                             url: String,
                                         ) {
                                             currentUrl = url
+                                            view.evaluateJavascript(xhsLoginCaptureScript, null)
                                         }
                                     }
                                 loadUrl(exception.url, xhsLoginHeaders)
@@ -259,3 +289,74 @@ private fun currentXhsCookies(currentUrl: String?): Map<String, String> {
         .filterKeys { it in xhsCookieAllowList }
         .filterValues { it.isNotBlank() }
 }
+
+private class XhsLoginCaptureBridge(
+    private val onCookies: (Map<String, String>) -> Unit,
+) {
+    @JavascriptInterface
+    fun onLoginActivate(body: String) {
+        val cookies = body.extractXhsLoginCookies()
+        if (cookies.isNotEmpty()) {
+            onCookies(cookies)
+        }
+    }
+}
+
+private fun String.extractXhsLoginCookies(): Map<String, String> =
+    runCatching {
+        val data = JSONObject(this).optJSONObject("data") ?: return@runCatching emptyMap()
+        buildMap {
+            data.optString("session")
+                .takeIf { it.isNotBlank() }
+                ?.let { put("web_session", it) }
+            data.optString("secure_session")
+                .takeIf { it.isNotBlank() }
+                ?.let { put("web_session_sec", it) }
+        }
+    }.getOrDefault(emptyMap())
+
+private val xhsLoginCaptureScript =
+    """
+    (() => {
+      if (window.__flareXhsVerificationCaptureInstalled) return;
+      window.__flareXhsVerificationCaptureInstalled = true;
+      const isActivateUrl = (url) => String(url || "").includes("/api/sns/web/v1/login/activate");
+      const notify = (url, text) => {
+        try {
+          if (isActivateUrl(url) && window.FlareXhsVerificationBridge) {
+            window.FlareXhsVerificationBridge.onLoginActivate(String(text || ""));
+          }
+        } catch (_) {}
+      };
+      const originalFetch = window.fetch;
+      if (originalFetch) {
+        window.fetch = function(input, init) {
+          const url = typeof input === "string" ? input : (input && input.url);
+          return originalFetch.apply(this, arguments).then((response) => {
+            try {
+              if (isActivateUrl(url || response.url)) {
+                response.clone().text().then((text) => notify(url || response.url, text)).catch(() => {});
+              }
+            } catch (_) {}
+            return response;
+          });
+        };
+      }
+      const originalOpen = XMLHttpRequest.prototype.open;
+      const originalSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        this.__flareXhsVerificationUrl = url;
+        return originalOpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function() {
+        this.addEventListener("load", function() {
+          try {
+            if (isActivateUrl(this.__flareXhsVerificationUrl)) {
+              notify(this.__flareXhsVerificationUrl, this.responseText);
+            }
+          } catch (_) {}
+        });
+        return originalSend.apply(this, arguments);
+      };
+    })();
+    """.trimIndent()

@@ -42,7 +42,7 @@ internal class FlareAgentTools(
     suspend fun specs(sourceContext: AgentSourceContext): List<AgentToolSpec> {
         val platformOptions = platformOptions(sourceContext)
         val platformDescription =
-            "Platform parameter choices for this conversation: ${platformOptions.joinToString()}. Use ALL unless the user selected or asked for a specific platform."
+            "Platform parameter choices for this conversation: ${platformOptions.joinToString()}. Choose exactly one concrete platform; ALL is not supported."
         val specs =
             listOf(
             AgentToolSpec(
@@ -50,7 +50,7 @@ internal class FlareAgentTools(
                 description = "Return the compact feed/status items that were visible or captured when the conversation started. $platformDescription",
                 parameters =
                     schema(
-                        required = listOf("description"),
+                        required = listOf("description", "platform"),
                         properties =
                             mapOf(
                                 "description" to stringSchema("User-visible reason for reading the current feed snapshot."),
@@ -64,7 +64,7 @@ internal class FlareAgentTools(
                 description = "Load home timeline/feed pages from connected accounts. Use this when the user asks what an account is currently showing. $platformDescription",
                 parameters =
                     schema(
-                        required = listOf("description"),
+                        required = listOf("description", "platform"),
                         properties =
                             mapOf(
                                 "description" to stringSchema("User-visible reason for loading the home timeline."),
@@ -82,7 +82,7 @@ internal class FlareAgentTools(
                 description = "Load posts from a specific user's profile timeline. $platformDescription",
                 parameters =
                     schema(
-                        required = listOf("user_id", "user_host", "description"),
+                        required = listOf("user_id", "user_host", "description", "platform"),
                         properties =
                             mapOf(
                                 "user_id" to stringSchema("The target profile key id returned by search_users or a profile item."),
@@ -102,7 +102,7 @@ internal class FlareAgentTools(
                 description = "Load status/feed items from each platform's discover/trending page. $platformDescription",
                 parameters =
                     schema(
-                        required = listOf("description"),
+                        required = listOf("description", "platform"),
                         properties =
                             mapOf(
                                 "description" to stringSchema("User-visible reason for loading discover statuses."),
@@ -118,7 +118,7 @@ internal class FlareAgentTools(
                 description = "Load recommended/trending users from each platform's discover page. $platformDescription",
                 parameters =
                     schema(
-                        required = listOf("description"),
+                        required = listOf("description", "platform"),
                         properties =
                             mapOf(
                                 "description" to stringSchema("User-visible reason for loading discover users."),
@@ -134,7 +134,7 @@ internal class FlareAgentTools(
                 description = "Load trending topics/hashtags from each platform's discover page. $platformDescription",
                 parameters =
                     schema(
-                        required = listOf("description"),
+                        required = listOf("description", "platform"),
                         properties =
                             mapOf(
                                 "description" to stringSchema("User-visible reason for loading discover hashtags."),
@@ -150,7 +150,7 @@ internal class FlareAgentTools(
                 description = "Search statuses/feed items across connected accounts. Weibo search_type supports comprehensive, realtime, video, and image only; following search is not exposed because its real API is not verified. $platformDescription",
                 parameters =
                     schema(
-                        required = listOf("query", "description"),
+                        required = listOf("query", "description", "platform"),
                         properties =
                             mapOf(
                                 "query" to stringSchema("Keyword search query. Use segmented keywords or short phrases, not the full natural-language question."),
@@ -168,7 +168,7 @@ internal class FlareAgentTools(
                 description = "Search users across connected social media accounts. $platformDescription",
                 parameters =
                     schema(
-                        required = listOf("query", "description"),
+                        required = listOf("query", "description", "platform"),
                         properties =
                             mapOf(
                                 "query" to stringSchema("User keyword, display name, or handle."),
@@ -187,7 +187,7 @@ internal class FlareAgentTools(
                 description = "Search posts from a specific user's profile timeline by locally filtering loaded profile pages. Useful for Weibo, X, Xiaohongshu, and other platforms with profile timelines. $platformDescription",
                 parameters =
                     schema(
-                        required = listOf("query", "user_id", "user_host", "description"),
+                        required = listOf("query", "user_id", "user_host", "description", "platform"),
                         properties =
                             mapOf(
                                 "query" to stringSchema("Keyword to find inside the user's profile posts."),
@@ -258,7 +258,7 @@ internal class FlareAgentTools(
     private suspend fun platformOptions(sourceContext: AgentSourceContext): List<String> {
         val allowed = sourceContext.normalizedAllowedPlatforms()
         if (allowed.isNotEmpty()) {
-            return listOf("ALL") + allowed
+            return allowed
         }
         val accountPlatforms =
             accountRepository
@@ -266,8 +266,7 @@ internal class FlareAgentTools(
                 .first()
                 .map { it.platformType.name.toAgentPlatformName() }
         val feedPlatforms = sourceContext.feedSnapshot.mapNotNull { it.platform?.toAgentPlatformName() }
-        return listOf("ALL")
-            .plus(accountPlatforms)
+        return accountPlatforms
             .plus(feedPlatforms)
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -395,7 +394,7 @@ internal class FlareAgentTools(
             text =
                 AgentSearchResponse(
                     query = query,
-                    platform = platform ?: "ALL",
+                    platform = platform,
                     items = items.toModelItems(),
                     warnings = loaded.warnings,
                 ).encodeJson(),
@@ -516,7 +515,7 @@ internal class FlareAgentTools(
             text =
                 AgentUserSearchResponse(
                     query = "",
-                    platform = platform ?: "ALL",
+                    platform = platform,
                     users = users,
                     warnings = loaded.warnings,
                 ).encodeJson(),
@@ -545,7 +544,7 @@ internal class FlareAgentTools(
         return AgentToolResult(
             text =
                 AgentHashtagResponse(
-                    platform = platform ?: "ALL",
+                    platform = platform,
                     hashtags = hashtags,
                     warnings = loaded.warnings,
                 ).encodeJson(),
@@ -600,7 +599,7 @@ internal class FlareAgentTools(
             text =
                 AgentUserSearchResponse(
                     query = query,
-                    platform = platform ?: "ALL",
+                    platform = platform,
                     users = users,
                     warnings = loaded.warnings,
                 ).encodeJson(),
@@ -651,7 +650,7 @@ internal class FlareAgentTools(
             text =
                 AgentSearchResponse(
                     query = query,
-                    platform = platform ?: "ALL",
+                    platform = platform,
                     items = items.toModelItems(),
                     warnings = loaded.warnings,
                 ).encodeJson(),
@@ -912,6 +911,14 @@ private suspend fun List<Pair<String, MicroblogDataSource>>.loadInParallel(
                         }
                     } ?: return@async AgentToolLoadResult(
                         warnings = listOf("$servicePlatform ${action}超时，已跳过该平台。"),
+                        artifacts =
+                            service
+                                .platformVerificationToolResult(
+                                    platform = servicePlatform,
+                                    action = action,
+                                    errorMessage = "请求超时",
+                                )?.artifacts
+                                .orEmpty(),
                     )
                 result.fold(
                     onSuccess = { rows ->
@@ -922,14 +929,15 @@ private suspend fun List<Pair<String, MicroblogDataSource>>.loadInParallel(
                     onFailure = {
                         val verification = it.toVerificationToolResult()
                         val fallbackVerification =
-                            if (verification == null && action == "搜索" && servicePlatform.matchesPlatformScope("微博", emptyList())) {
-                                service.weiboSearchVerificationToolResult(it)
-                            } else {
-                                null
-                            }
+                            verification
+                                ?: service.platformVerificationToolResult(
+                                    platform = servicePlatform,
+                                    action = action,
+                                    errorMessage = it.agentToolMessage(),
+                                )
                         AgentToolLoadResult(
                             warnings = listOf("$servicePlatform ${action}失败：${it.agentToolMessage()}"),
-                            artifacts = verification?.artifacts.orEmpty() + fallbackVerification?.artifacts.orEmpty(),
+                            artifacts = fallbackVerification?.artifacts.orEmpty(),
                         )
                     },
                 )
@@ -1081,11 +1089,18 @@ private fun List<AgentTimelineItem>.filterByPlatform(
 ): List<AgentTimelineItem> =
     filter { it.platform.orEmpty().matchesPlatformScope(platform, allowedPlatforms) }
 
-private fun JsonObject.platformOrNull(sourceContext: AgentSourceContext): String? {
-    val requested = stringOrNull("platform")?.takeUnless { it.equals("ALL", ignoreCase = true) }
+private fun JsonObject.platformOrNull(sourceContext: AgentSourceContext): String {
+    val requested =
+        stringOrNull("platform")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: error("Missing platform argument. Choose one concrete platform; ALL is not supported.")
+    if (requested.toAgentPlatformName() == "ALL") {
+        error("Platform ALL is no longer supported. Choose one concrete platform.")
+    }
     val allowed = sourceContext.normalizedAllowedPlatforms()
-    val platform = requested ?: allowed.singleOrNull()
-    if (platform != null && allowed.isNotEmpty() && allowed.none { it.equals(platform, ignoreCase = true) }) {
+    val platform = requested.toAgentPlatformName()
+    if (allowed.isNotEmpty() && allowed.none { it.equals(platform, ignoreCase = true) }) {
         error("Platform $platform is not allowed by the user. Allowed platforms: ${allowed.joinToString()}")
     }
     return platform
@@ -1196,24 +1211,34 @@ private fun Throwable.toVerificationToolResult(): AgentToolResult? =
         else -> null
     }
 
-private fun MicroblogDataSource.weiboSearchVerificationToolResult(error: Throwable): AgentToolResult? {
+private fun MicroblogDataSource.platformVerificationToolResult(
+    platform: String,
+    action: String,
+    errorMessage: String,
+): AgentToolResult? {
     val accountKey = (this as? AuthenticatedMicroblogDataSource)?.accountKey ?: return null
-    val url = "https://m.weibo.cn/search"
+    val normalizedPlatform = platform.toAgentPlatformName()
+    val url =
+        when (normalizedPlatform) {
+            "微博" -> "https://m.weibo.cn/captcha/show?backUrl=https%3A%2F%2Fm.weibo.cn%2F"
+            "小红书" -> "https://www.xiaohongshu.com/explore"
+            else -> return null
+        }
     return AgentToolResult(
         text =
             AgentVerificationResponse(
-                platform = "微博",
+                platform = normalizedPlatform,
                 url = url,
-                message = "微博搜索失败，可能需要在 WebView 中完成验证后重试：${error.agentToolMessage()}",
+                message = "$normalizedPlatform $action 失败，可能需要在 WebView 中完成验证后重试：$errorMessage",
             ).encodeJson(),
         artifacts =
             listOf(
                 AgentNativeArtifact.VerificationRequiredRef(
-                    id = "verify-weibo-search-${accountKey.host}-${accountKey.id}-${url.hashCode()}",
-                    platform = "微博",
+                    id = "verify-${normalizedPlatform}-${action}-${accountKey.host}-${accountKey.id}-${url.hashCode()}",
+                    platform = normalizedPlatform,
                     url = url,
                     accountKey = accountKey,
-                    message = "微博搜索失败，请在 WebView 中完成验证后重试。",
+                    message = "$normalizedPlatform $action 失败，请在 WebView 中完成验证后重试。",
                 ),
             ),
         isError = false,
@@ -1252,11 +1277,13 @@ private fun platformSchema(
     options: List<String>,
 ): JsonObject =
     JsonObject(
-        mapOf(
-            "type" to JsonPrimitive("string"),
-            "description" to JsonPrimitive(description),
-            "enum" to JsonArray(options.map { JsonPrimitive(it) }),
-        ),
+        buildMap {
+            put("type", JsonPrimitive("string"))
+            put("description", JsonPrimitive(description))
+            if (options.isNotEmpty()) {
+                put("enum", JsonArray(options.map { JsonPrimitive(it) }))
+            }
+        },
     )
 
 private fun integerSchema(description: String): JsonObject =
